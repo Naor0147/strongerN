@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,7 @@ interface SetRecord {
 interface ActiveExercise {
   name: string;
   sets: SetRecord[];
+  superSetGroupId?: string;
 }
 
 interface ActiveWorkoutModalProps {
@@ -54,6 +56,80 @@ function formatElapsed(startTime: Date): string {
   const sec = (totalSec % 60).toString().padStart(2, '0');
   return h > 0 ? `${h}:${min}:${sec}` : `${min}:${sec}`;
 }
+
+const SwipeableRow: React.FC<{
+  children: React.ReactNode;
+  onDelete: () => void;
+  borderRadius?: number;
+}> = ({ children, onDelete, borderRadius = radius.xs }) => {
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dy) < 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx < 0) {
+          translateX.setValue(gestureState.dx);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -100) {
+          Animated.timing(translateX, {
+            toValue: -500,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            onDelete();
+            translateX.setValue(0);
+          });
+        } else {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 8,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  const bgOpacity = translateX.interpolate({
+    inputRange: [-60, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={{ position: 'relative', overflow: 'hidden' }}>
+      <Animated.View style={{
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        right: 0,
+        left: 0,
+        backgroundColor: colors.error,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingRight: spacing.md,
+        borderRadius,
+        marginVertical: 2,
+        opacity: bgOpacity,
+      }}>
+        <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+      </Animated.View>
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+};
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
@@ -102,6 +178,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               reps:      ex.bestReps.toString(),
               completed: false,
             })),
+            superSetGroupId: (ex as any).superSetGroupId,
           };
         });
         setActiveExercises(initial);
@@ -114,12 +191,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Sync active exercises back to parent App state so they are stored
   useEffect(() => {
     if (onUpdateActiveExercises && activeExercises.length > 0) {
-      const mapped = activeExercises.map(ex => ({
-        name: ex.name,
-        sets: ex.sets.length,
-        bestWeight: Math.max(...ex.sets.map(s => parseFloat(s.weight) || 0), 0),
-        bestReps: Math.max(...ex.sets.map(s => parseInt(s.reps, 10) || 0), 0),
-      }));
+      const mapped = activeExercises.map(ex => {
+        const completedSets = ex.sets.filter(s => s.completed);
+        return {
+          name: ex.name,
+          sets: completedSets.length,
+          bestWeight: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseFloat(s.weight) || 0), 0) : 0,
+          bestReps: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseInt(s.reps, 10) || 0), 0) : 0,
+          superSetGroupId: ex.superSetGroupId,
+        };
+      });
       onUpdateActiveExercises(mapped);
     }
   }, [activeExercises]);
@@ -244,19 +325,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     if (totalSets === 0) {
       Alert.alert(
-        'Finish Workout?',
-        'You haven\'t completed any sets yet. Do you still want to finish this session?',
+        'Discard Workout?',
+        "You haven't completed any sets yet. Would you like to discard this workout instead?",
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Keep Tracking', style: 'cancel' },
           {
-            text: 'Finish',
+            text: 'Discard',
+            style: 'destructive',
             onPress: () => {
-              const durationSec = Math.floor((Date.now() - startTime.getTime()) / 1000);
-              onFinish({
-                totalVolume: 0,
-                totalSets:   0,
-                durationMin: Math.max(1, Math.round(durationSec / 60)),
-              });
+              setActiveExercises([]);
+              onDiscard();
             },
           },
         ]
@@ -278,7 +356,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       'Are you sure you want to discard this workout? All tracked sets will be permanently lost.',
       [
         { text: 'Keep Tracking', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: onDiscard },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setActiveExercises([]);
+            onDiscard();
+          },
+        },
       ]
     );
   };
@@ -329,7 +414,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         if (idx === activeExerciseMenuIndex) {
           return {
             name: exName,
-            sets: ex.sets.map(s => ({ ...s, completed: false }))
+            sets: ex.sets.map(s => ({ ...s, completed: false })),
+            superSetGroupId: ex.superSetGroupId,
           };
         }
         return ex;
@@ -462,116 +548,151 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </View>
               ) : (
                 <>
-                  {activeExercises.map((exercise, exIdx) => (
-                    <View key={exercise.name + '-' + exIdx} style={styles.exerciseCard}>
-                      <View style={styles.exerciseHeader}>
-                        <Text style={styles.exerciseName}>{exercise.name}</Text>
-                        <Pressable
-                          onPress={() => handleExerciseMenuPress(exIdx)}
-                          style={styles.exEllipsis}
-                          android_ripple={rippleTokens.borderless}
-                        >
-                          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
-                        </Pressable>
-                      </View>
-
-                      {/* Sets Column Headers */}
-                      <View style={styles.tableHeader}>
-                        <Text style={[styles.columnLabel, styles.colSet]}>SET</Text>
-                        <Text style={[styles.columnLabel, styles.colWeight]}>KG</Text>
-                        <Text style={[styles.columnLabel, styles.colReps]}>REPS</Text>
-                        <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>DONE</Text>
-                      </View>
-
-                      {/* Sets Row List */}
-                      {exercise.sets.map((set, setIdx) => (
-                        <View
-                          key={set.id}
-                          style={[
-                            styles.setRow,
-                            set.completed && styles.setRowCompleted,
-                          ]}
-                        >
-                          {/* Set Number */}
-                          <Pressable
-                            style={[styles.colSet, styles.setNumCol]}
-                            onLongPress={() => deleteSet(exIdx, setIdx)}
-                            accessibilityLabel={`Long press to delete set ${setIdx + 1}`}
-                          >
-                            <Text
-                              style={[
-                                  styles.setNumText,
-                                  set.completed && styles.textCompleted,
-                                ]}
-                              >
-                                {setIdx + 1}
-                              </Text>
-                            </Pressable>
-
-                            {/* Weight Input */}
-                            <View style={[styles.colWeight, styles.inputWrapper]}>
-                              <TextInput
-                                style={[
-                                  styles.input,
-                                  set.completed && styles.inputCompleted,
-                                ]}
-                                keyboardType="numeric"
-                                value={set.weight}
-                                onChangeText={val => updateSetField(exIdx, setIdx, 'weight', val)}
-                                placeholder="0"
-                                placeholderTextColor={colors.textMuted}
-                                editable={!set.completed}
-                                selectTextOnFocus
-                              />
+                  {activeExercises.map((exercise, exIdx) => {
+                    const isSuperSet = !!exercise.superSetGroupId;
+                    return (
+                      <SwipeableRow 
+                        key={exercise.name + '-' + exIdx} 
+                        borderRadius={radius.md}
+                        onDelete={() => {
+                          Alert.alert(
+                            'Remove Exercise',
+                            `Are you sure you want to remove "${exercise.name}"?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Remove',
+                                style: 'destructive',
+                                onPress: () => {
+                                  setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
+                                }
+                              }
+                            ]
+                          );
+                        }}
+                      >
+                        <View style={[
+                          styles.exerciseCard,
+                          isSuperSet && { borderLeftWidth: 4, borderLeftColor: colors.accent }
+                        ]}>
+                          <View style={styles.exerciseHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm }}>
+                              <Text style={styles.exerciseName}>{exercise.name}</Text>
+                              {isSuperSet && (
+                                <View style={styles.superSetBadge}>
+                                  <Text style={styles.superSetBadgeText}>SUPER SET</Text>
+                                </View>
+                              )}
                             </View>
-
-                            {/* Reps Input */}
-                            <View style={[styles.colReps, styles.inputWrapper]}>
-                              <TextInput
-                                style={[
-                                  styles.input,
-                                  set.completed && styles.inputCompleted,
-                                ]}
-                                keyboardType="numeric"
-                                value={set.reps}
-                                onChangeText={val => updateSetField(exIdx, setIdx, 'reps', val)}
-                                placeholder="0"
-                                placeholderTextColor={colors.textMuted}
-                                editable={!set.completed}
-                                selectTextOnFocus
-                              />
-                            </View>
-
-                            {/* Done Button */}
                             <Pressable
-                              style={[styles.colCheck, styles.checkButton]}
-                              onPress={() => toggleSetComplete(exIdx, setIdx)}
+                              onPress={() => handleExerciseMenuPress(exIdx)}
+                              style={styles.exEllipsis}
+                              android_ripple={rippleTokens.borderless}
                             >
-                              <View
-                                style={[
-                                  styles.checkCircle,
-                                  set.completed && styles.checkCircleCompleted,
-                                ]}
-                              >
-                                {set.completed && (
-                                  <Ionicons name="checkmark" size={14} color="#0D0F14" />
-                                )}
-                              </View>
+                              <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
                             </Pressable>
                           </View>
-                        ))}
 
-                      {/* Add Set Button */}
-                      <Pressable
-                        style={styles.addSetRow}
-                        onPress={() => addSet(exIdx)}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Ionicons name="add" size={16} color={colors.accent} />
-                        <Text style={styles.addSetText}>ADD SET</Text>
-                      </Pressable>
-                    </View>
-                  ))}
+                          {/* Sets Column Headers */}
+                          <View style={styles.tableHeader}>
+                            <Text style={[styles.columnLabel, styles.colSet]}>SET</Text>
+                            <Text style={[styles.columnLabel, styles.colWeight]}>KG</Text>
+                            <Text style={[styles.columnLabel, styles.colReps]}>REPS</Text>
+                            <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>DONE</Text>
+                          </View>
+
+                          {/* Sets Row List */}
+                          {exercise.sets.map((set, setIdx) => (
+                            <SwipeableRow key={set.id} onDelete={() => deleteSet(exIdx, setIdx)} borderRadius={radius.xs}>
+                              <View
+                                style={[
+                                  styles.setRow,
+                                  set.completed && styles.setRowCompleted,
+                                ]}
+                              >
+                                {/* Set Number */}
+                                <Pressable
+                                  style={[styles.colSet, styles.setNumCol]}
+                                  onLongPress={() => deleteSet(exIdx, setIdx)}
+                                  accessibilityLabel={`Long press to delete set ${setIdx + 1}`}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.setNumText,
+                                      set.completed && styles.textCompleted,
+                                    ]}
+                                  >
+                                    {setIdx + 1}
+                                  </Text>
+                                </Pressable>
+
+                                {/* Weight Input */}
+                                <View style={[styles.colWeight, styles.inputWrapper]}>
+                                  <TextInput
+                                    style={[
+                                      styles.input,
+                                      set.completed && styles.inputCompleted,
+                                    ]}
+                                    keyboardType="numeric"
+                                    value={set.weight}
+                                    onChangeText={val => updateSetField(exIdx, setIdx, 'weight', val)}
+                                    placeholder="0"
+                                    placeholderTextColor={colors.textMuted}
+                                    editable={!set.completed}
+                                    selectTextOnFocus
+                                  />
+                                </View>
+
+                                {/* Reps Input */}
+                                <View style={[styles.colReps, styles.inputWrapper]}>
+                                  <TextInput
+                                    style={[
+                                      styles.input,
+                                      set.completed && styles.inputCompleted,
+                                    ]}
+                                    keyboardType="numeric"
+                                    value={set.reps}
+                                    onChangeText={val => updateSetField(exIdx, setIdx, 'reps', val)}
+                                    placeholder="0"
+                                    placeholderTextColor={colors.textMuted}
+                                    editable={!set.completed}
+                                    selectTextOnFocus
+                                  />
+                                </View>
+
+                                {/* Done Button */}
+                                <Pressable
+                                  style={[styles.colCheck, styles.checkButton]}
+                                  onPress={() => toggleSetComplete(exIdx, setIdx)}
+                                >
+                                  <View
+                                    style={[
+                                      styles.checkCircle,
+                                      set.completed && styles.checkCircleCompleted,
+                                    ]}
+                                  >
+                                    {set.completed && (
+                                      <Ionicons name="checkmark" size={14} color="#0D0F14" />
+                                    )}
+                                  </View>
+                                </Pressable>
+                              </View>
+                            </SwipeableRow>
+                          ))}
+
+                          {/* Add Set Button */}
+                          <Pressable
+                            style={styles.addSetRow}
+                            onPress={() => addSet(exIdx)}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="add" size={16} color={colors.accent} />
+                            <Text style={styles.addSetText}>ADD SET</Text>
+                          </Pressable>
+                        </View>
+                      </SwipeableRow>
+                    );
+                  })}
 
                   {/* Add Exercise dynamically to active workout */}
                   <Pressable
@@ -708,6 +829,64 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
                     </Text>
                     
+                    {activeExercises[activeExerciseMenuIndex].superSetGroupId ? (
+                      <Pressable
+                        style={styles.sheetItem}
+                        onPress={() => {
+                          const targetGroupId = activeExercises[activeExerciseMenuIndex].superSetGroupId;
+                          setActiveExercises(prev => prev.map(ex => 
+                            ex.superSetGroupId === targetGroupId ? { ...ex, superSetGroupId: undefined } : ex
+                          ));
+                          setIsExMenuVisible(false);
+                        }}
+                        android_ripple={rippleTokens.surface}
+                      >
+                        <Ionicons name="link-outline" size={20} color={colors.accent} />
+                        <Text style={styles.sheetItemText}>Unlink Super Set</Text>
+                      </Pressable>
+                    ) : (
+                      <>
+                        {activeExerciseMenuIndex < activeExercises.length - 1 && (
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              const newGroupId = `ss-${Date.now()}`;
+                              setActiveExercises(prev => prev.map((ex, idx) => {
+                                if (idx === activeExerciseMenuIndex || idx === activeExerciseMenuIndex + 1) {
+                                  return { ...ex, superSetGroupId: newGroupId };
+                                }
+                                return ex;
+                              }));
+                              setIsExMenuVisible(false);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="link-outline" size={20} color={colors.accent} />
+                            <Text style={styles.sheetItemText}>Link with Next (Super Set)</Text>
+                          </Pressable>
+                        )}
+                        {activeExerciseMenuIndex > 0 && (
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              const newGroupId = `ss-${Date.now()}`;
+                              setActiveExercises(prev => prev.map((ex, idx) => {
+                                if (idx === activeExerciseMenuIndex || idx === activeExerciseMenuIndex - 1) {
+                                  return { ...ex, superSetGroupId: newGroupId };
+                                }
+                                return ex;
+                              }));
+                              setIsExMenuVisible(false);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="link-outline" size={20} color={colors.accent} />
+                            <Text style={styles.sheetItemText}>Link with Previous (Super Set)</Text>
+                          </Pressable>
+                        )}
+                      </>
+                    )}
+
                     <Pressable
                       style={styles.sheetItem}
                       onPress={handleOpenReplace}
@@ -880,6 +1059,19 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
   },
+  superSetBadge: {
+    backgroundColor: colors.accentGlow,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  superSetBadgeText: {
+    color: colors.accent,
+    fontSize: 9,
+    fontFamily: font.bold,
+  },
   exEllipsis: {
     padding: spacing.xs,
     marginRight: -4,
@@ -922,10 +1114,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius:    radius.xs,
     marginBottom:    4,
+    backgroundColor: colors.surface,
   },
   setRowCompleted: {
-    backgroundColor: 'rgba(34, 217, 122, 0.03)',
-    opacity: 0.5,
+    backgroundColor: '#172528', // Solid dark green-slate blend to keep it opaque
   },
   setNumCol: {
     height:         32,

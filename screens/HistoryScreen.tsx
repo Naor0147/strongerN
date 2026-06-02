@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -138,6 +139,27 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<number | null>(null);
+  // Calendar month/year navigation
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
+
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   // 1. Search filter
   const filteredSessions = useMemo(() => {
@@ -154,11 +176,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
       );
     }
 
-    // Calendar day filter
+    // Calendar day filter (uses navigated calendarMonth/calendarYear)
     if (selectedCalendarDate !== null) {
       result = result.filter(s => {
         const d = new Date(s.datetime);
-        return d.getDate() === selectedCalendarDate && d.getMonth() === new Date().getMonth();
+        return d.getDate() === selectedCalendarDate && d.getMonth() === calendarMonth && d.getFullYear() === calendarYear;
       });
     }
 
@@ -211,24 +233,48 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
   const handleToggleCalendar = () => {
     setIsCalendarVisible(!isCalendarVisible);
     setSelectedCalendarDate(null);
+    // Reset to current month when opening calendar
+    if (!isCalendarVisible) {
+      setCalendarYear(new Date().getFullYear());
+      setCalendarMonth(new Date().getMonth());
+    }
   };
 
-  // Generate Calendar Days for current month
-  const calendarDays = useMemo(() => {
+  const handlePrevMonth = () => {
+    setSelectedCalendarDate(null);
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear(prev => prev - 1);
+    } else {
+      setCalendarMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    setSelectedCalendarDate(null);
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    // Don't navigate past current month
+    if (calendarYear === now.getFullYear() && calendarMonth === now.getMonth()) return;
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear(prev => prev + 1);
+    } else {
+      setCalendarMonth(prev => prev + 1);
+    }
+  };
+
+  // Generate Calendar Days for navigated month
+  const calendarDays = useMemo(() => {
+    // First day of the navigated month
+    const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+    // Total days in navigated month
+    const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
     
-    // First day of month
-    const firstDay = new Date(year, month, 1).getDay();
-    // Total days in month
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    // Map of days where user had workouts
+    // Map of days where user had workouts in the navigated month
     const workoutDays = new Set<number>();
     sessions.forEach(s => {
       const d = new Date(s.datetime);
-      if (d.getMonth() === month && d.getFullYear() === year) {
+      if (d.getMonth() === calendarMonth && d.getFullYear() === calendarYear) {
         workoutDays.add(d.getDate());
       }
     });
@@ -247,11 +293,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
     }
 
     return daysList;
-  }, [sessions]);
+  }, [sessions, calendarMonth, calendarYear]);
 
   const monthName = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  }, []);
+    return new Date(calendarYear, calendarMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, [calendarMonth, calendarYear]);
+
+  const isCurrentMonth = useMemo(() => {
+    const now = new Date();
+    return calendarYear === now.getFullYear() && calendarMonth === now.getMonth();
+  }, [calendarYear, calendarMonth]);
 
   const headerActions = useMemo(() => [
     {
@@ -307,7 +358,19 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
       {isCalendarVisible && (
         <View style={styles.calendarContainer}>
           <View style={styles.calendarHeader}>
-            <Text style={styles.calendarTitle}>{monthName.toUpperCase()}</Text>
+            <View style={styles.monthNavRow}>
+              <Pressable onPress={handlePrevMonth} style={styles.monthNavBtn}>
+                <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
+              </Pressable>
+              <Text style={styles.calendarTitle}>{monthName.toUpperCase()}</Text>
+              <Pressable 
+                onPress={handleNextMonth} 
+                style={[styles.monthNavBtn, isCurrentMonth && styles.monthNavBtnDisabled]}
+                disabled={isCurrentMonth}
+              >
+                <Ionicons name="chevron-forward" size={18} color={isCurrentMonth ? colors.textMuted : colors.textPrimary} />
+              </Pressable>
+            </View>
             {selectedCalendarDate !== null && (
               <Pressable
                 onPress={() => setSelectedCalendarDate(null)}
@@ -334,15 +397,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
                   key={idx}
                   disabled={item.day === null}
                   onPress={() => setSelectedCalendarDate(item.day)}
-                  style={[
-                    styles.dayCell,
-                    item.day !== null && styles.dayCellActive,
-                    isSelected && styles.dayCellSelected,
-                    item.hasWorkout && styles.dayCellWorkout
-                  ]}
+                  style={styles.dayCell}
                 >
                   {item.day !== null && (
-                    <>
+                    <View style={[
+                      styles.dayInner,
+                      styles.dayInnerActive,
+                      isSelected && styles.dayInnerSelected,
+                      item.hasWorkout && styles.dayInnerWorkout
+                    ]}>
                       <Text style={[
                         styles.dayText,
                         isSelected && styles.dayTextSelected,
@@ -353,7 +416,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
                       {item.hasWorkout && !isSelected && (
                         <View style={styles.calDotGlow} />
                       )}
-                    </>
+                    </View>
                   )}
                 </Pressable>
               );
@@ -362,19 +425,21 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
         </View>
       )}
 
-      <SectionList
-        sections={sections}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        contentContainerStyle={styles.list}
-        stickySectionHeadersEnabled={false}
-        showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        removeClippedSubviews
-        maxToRenderPerBatch={6}
-        windowSize={10}
-      />
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>
+        <SectionList
+          sections={sections}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          removeClippedSubviews
+          maxToRenderPerBatch={6}
+          windowSize={10}
+        />
+      </Animated.View>
     </SafeAreaView>
   );
 };
@@ -594,6 +659,17 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     letterSpacing: 1,
   },
+  monthNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  monthNavBtn: {
+    padding: 4,
+    marginHorizontal: 8,
+  },
+  monthNavBtnDisabled: {
+    opacity: 0.3,
+  },
   calResetBtn: {
     borderColor: colors.borderStrong,
     borderWidth: 1,
@@ -609,36 +685,43 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    width: '100%',
     marginBottom: spacing.xs,
   },
   weekdayText: {
     color: colors.textMuted,
     fontSize: 10,
     fontFamily: font.bold,
-    width: 32,
+    width: '14.28%',
     textAlign: 'center',
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    width: '100%',
     rowGap: 8,
   },
   dayCell: {
+    width: '14.28%',
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayInner: {
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.xs,
+    borderRadius: radius.sm,
+    position: 'relative',
   },
-  dayCellActive: {
+  dayInnerActive: {
     backgroundColor: colors.surface2,
   },
-  dayCellSelected: {
+  dayInnerSelected: {
     backgroundColor: colors.accent,
   },
-  dayCellWorkout: {
+  dayInnerWorkout: {
     backgroundColor: colors.successGlow + '20',
     borderColor: colors.success,
     borderWidth: 1,

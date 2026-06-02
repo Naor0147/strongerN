@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import * as googleDrive from '../utils/googleDrive';
 import {
   User,
   ChartDataPoint,
@@ -44,10 +45,10 @@ interface ProfileScreenProps {
   isAutoTimerEnabled:    boolean;
   setIsAutoTimerEnabled: (val: boolean) => void;
   onMeasurePress:        () => void;
-  googleUser:            { email: string; name: string } | null;
-  onGoogleLogin:         (email: string, name: string) => boolean;
+  googleUser:            { email: string; name: string; avatarUri?: string; accessToken?: string; fileId?: string } | null;
+  onGoogleLogin:         (email: string, name: string, accessToken?: string, fileId?: string, avatarUri?: string) => Promise<boolean> | boolean;
   onGoogleLogout:        () => void;
-  onCloudSync:           () => boolean;
+  onCloudSync:           () => Promise<boolean> | boolean;
   onUpdateUser?:         (name: string) => void;
   onImportBackup?:       (backupStr: string) => boolean;
   onExportBackup?:       () => string;
@@ -55,7 +56,19 @@ interface ProfileScreenProps {
   animationSpeed:        number;
   setAnimationSpeed:     (val: number) => void;
   onWipeAllData?:        () => void;
+  lastSynced:            string | null;
+  weeklyMuscleSets?:     Record<string, number>;
 }
+
+const formatLastSynced = (isoString: string | null): string => {
+  if (!isoString) return 'Never backed up';
+  const date = new Date(isoString);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Last synced: Just now';
+  if (diffMins < 60) return `Last synced: ${diffMins}m ago`;
+  return `Last synced: ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+};
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -79,6 +92,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   animationSpeed,
   setAnimationSpeed,
   onWipeAllData,
+  lastSynced,
+  weeklyMuscleSets = {},
 }) => {
   // Modals state
   const [isRenameVisible, setIsRenameVisible] = useState(false);
@@ -93,6 +108,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [googleName, setGoogleName] = useState(user?.name || '');
   const [backupText, setBackupText] = useState('');
   const [pastedBackup, setPastedBackup] = useState('');
+
+  // Segmented control / developer token states
+  const [googleActiveTab, setGoogleActiveTab] = useState<'login' | 'token'>('login');
+  const [googleClientId, setGoogleClientId] = useState('806742513296-amc1kbf9u6k11qg50jrt1r4b3qg0k9n0.apps.googleusercontent.com');
+  const [googleAccessToken, setGoogleAccessToken] = useState('');
 
   // Load animations
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -120,7 +140,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const demoBackup = {
         user: {
           ...mockUser,
-          totalWorkouts: mockSessions.length,
+          totalWorkouts: mockUser.totalWorkouts,
         },
         sessionsList: mockSessions,
         templatesList: mockTemplates,
@@ -145,11 +165,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     () => (weeklyChartData || []).map(d => ({ label: d.weekLabel, value: d.count })),
     [weeklyChartData]
   );
-
-  const bestWeek   = useMemo(() => {
-    if (!weeklyChartData || weeklyChartData.length === 0) return 0;
-    return Math.max(...weeklyChartData.map(d => d.count));
-  }, [weeklyChartData]);
 
   const avgPerWeek = useMemo(() => {
     if (!weeklyChartData || weeklyChartData.length === 0) return 0;
@@ -180,6 +195,25 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     return { name: topExName, weight: topWeight, reps: topReps, date: topDate };
   }, [sessions]);
 
+  const topPrs = useMemo(() => {
+    const list: { name: string; weight: number; reps: number; date: string }[] = [];
+    (sessions || []).forEach(session => {
+      (session.exercises || []).forEach((ex: any) => {
+        const d = new Date(session.datetime);
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dateStr = `${monthNames[d.getMonth()]} ${d.getDate()}`;
+        list.push({ name: ex.name, weight: ex.bestWeight, reps: ex.bestReps, date: dateStr });
+      });
+    });
+    const unique = new Map<string, typeof list[number]>();
+    list.sort((a, b) => b.weight - a.weight).forEach(item => {
+      if (!unique.has(item.name)) {
+        unique.set(item.name, item);
+      }
+    });
+    return Array.from(unique.values()).slice(0, 5);
+  }, [sessions]);
+
   // Rename submit
   const handleRenameSubmit = () => {
     if (!tempName.trim()) {
@@ -193,44 +227,118 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     Alert.alert('Success', 'Profile name updated!');
   };
 
-  // Google Login submit
-  const handleGoogleSubmit = () => {
-    if (!googleEmail.trim()) {
-      Alert.alert('Error', 'Please enter an email.');
-      return;
-    }
+  // Real Google token authentication
+  const handleConnectWithToken = async (token: string) => {
     setIsSyncing(true);
-    setTimeout(() => {
+    try {
+      const profile = await googleDrive.fetchUserProfile(token);
+      const fileId = await googleDrive.findBackupFile(token);
+
+      const isRestored = await onGoogleLogin(
+        profile.email,
+        profile.name,
+        token,
+        fileId || undefined,
+        profile.avatarUri
+      );
+
       setIsSyncing(false);
       setIsGoogleModalVisible(false);
-      const isRestored = onGoogleLogin(googleEmail.trim().toLowerCase(), googleName.trim() || user?.name || '');
-      
+
       if (isRestored) {
         Alert.alert(
           'Google Cloud Recovery',
-          `Welcome back! We found an existing training backup for "${googleEmail.trim().toLowerCase()}" and successfully restored all workouts, custom templates, and exercises!`
+          `Welcome back, ${profile.name}! We successfully connected to your Google Drive, located your backup, and restored all workouts, routines, and measurements!`
         );
       } else {
+        // Run initial cloud sync to save current local state to their Drive!
+        await onCloudSync();
         Alert.alert(
           'Google Account Connected',
-          `Successfully connected to "${googleEmail.trim().toLowerCase()}". Auto-backup is now active! All completed sessions will sync instantly to your cloud.`
+          `Successfully connected as "${profile.email}". Auto-backup is now active! All completed sessions will sync instantly to your Google Drive.`
         );
       }
-    }, 1500);
+    } catch (err: any) {
+      setIsSyncing(false);
+      console.error('[Google Connect Error]', err);
+      Alert.alert('Connection Failed', `Failed to connect: ${err.message || err}`);
+    }
+  };
+
+  // Google Sign-In via OAuth popup
+  const handleGoogleWebAuth = () => {
+    if (!googleClientId.trim()) {
+      Alert.alert('Error', 'Please enter a Google Client ID.');
+      return;
+    }
+
+    const redirectUri = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:8081';
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(googleClientId.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email')}`;
+
+    const popup = typeof window !== 'undefined' ? window.open(authUrl, 'google-oauth', 'width=500,height=600') : null;
+
+    if (!popup) {
+      Alert.alert(
+        'Popup Blocked',
+        'Google Login popup was blocked by your browser. Please allow popups or use the Developer Token tab to connect instantly!'
+      );
+      return;
+    }
+
+    setIsSyncing(true);
+
+    const interval = setInterval(async () => {
+      try {
+        if (popup && popup.location && popup.location.hash) {
+          const hash = popup.location.hash;
+          if (hash.includes('access_token')) {
+            const params = new URLSearchParams(hash.substring(1));
+            const token = params.get('access_token');
+            popup.close();
+            clearInterval(interval);
+
+            if (token) {
+              await handleConnectWithToken(token);
+            } else {
+              setIsSyncing(false);
+              Alert.alert('Authentication Failed', 'Could not retrieve access token from Google.');
+            }
+          }
+        }
+      } catch (e) {
+        // Cross-origin boundaries throw errors while popup is on Google login page, which is expected
+      }
+
+      if (!popup || popup.closed) {
+        clearInterval(interval);
+        setIsSyncing(false);
+      }
+    }, 500);
+  };
+
+  const handleDeveloperTokenSubmit = () => {
+    if (!googleAccessToken.trim()) {
+      Alert.alert('Error', 'Please enter a Google Access Token.');
+      return;
+    }
+    handleConnectWithToken(googleAccessToken.trim());
   };
 
   // Manual cloud sync
-  const handleManualSyncPress = () => {
+  const handleManualSyncPress = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    try {
+      const ok = await onCloudSync();
       setIsSyncing(false);
-      const ok = onCloudSync();
       if (ok) {
         Alert.alert('Cloud Sync Successful', 'All workouts, custom exercises, circumferences, and templates are backed up successfully in your Google Drive cloud!');
       } else {
         Alert.alert('Error', 'Sync failed. Please connect a Google account first.');
       }
-    }, 1200);
+    } catch (e: any) {
+      setIsSyncing(false);
+      Alert.alert('Error', `Sync failed: ${e.message || e}`);
+    }
   };
 
   // Clipboard backups
@@ -358,16 +466,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           )}
 
           {/* ── User Hero Card ───────────────────────────────────── */}
-        <Card style={styles.heroCard} padding={0} testID="profile.user-card">
-          <Pressable
-            onPress={() => {
-              setTempName(user?.name || '');
-              setIsRenameVisible(true);
-            }}
-            style={styles.heroContent}
-            android_ripple={rippleTokens.surface}
-            accessibilityLabel="Edit Profile Name"
-          >
+        <Card style={[styles.heroCard, { backgroundColor: 'transparent' }]} padding={0} testID="profile.user-card">
+          <View style={styles.heroContent}>
             <View style={styles.avatarSection}>
               <Avatar
                 initials={getInitials(user?.name || 'Alex Morgan')}
@@ -384,38 +484,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Text style={styles.heroMetaText}>{user?.totalWorkouts ?? 0} workouts completed</Text>
               </View>
             </View>
-
-            <Ionicons name="create-outline" size={18} color={colors.textMuted} />
-          </Pressable>
+          </View>
         </Card>
-
-        {/* ── Stats Row ────────────────────────────────────────── */}
-        <View style={styles.statsRow}>
-          <StatCard
-            value={bestWeek}
-            label="Best week"
-            icon="flame-outline"
-            iconColor={colors.gold}
-            testID="profile.stat-best-week"
-          />
-          <View style={styles.statGap} />
-          <StatCard
-            value={avgPerWeek}
-            label="Avg / week"
-            decimals={1}
-            icon="trending-up-outline"
-            iconColor={colors.accent}
-            testID="profile.stat-avg-week"
-          />
-          <View style={styles.statGap} />
-          <StatCard
-            value={user?.totalWorkouts ?? 0}
-            label="All time"
-            icon="barbell-outline"
-            iconColor={colors.highlight}
-            testID="profile.stat-all-time"
-          />
-        </View>
 
         {/* ── Dashboard ────────────────────────────────────────── */}
         <SectionLabel
@@ -430,7 +500,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         />
 
         {/* ── Chart Card ───────────────────────────────────────── */}
-        <Card padding={spacing.lg} testID="profile.chart-card">
+        <Card padding={spacing.lg} style={{ backgroundColor: 'transparent' }} testID="profile.chart-card">
           <View style={styles.chartHeader}>
             <View>
               <Text style={styles.chartTitle}>Workouts per week</Text>
@@ -443,6 +513,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <BarChart data={chartData} chartHeight={200} />
         </Card>
 
+        {/* ── Stats Row (Moved Below Dashboard, Best Week Removed) ────────── */}
+        <View style={[styles.statsRow, { marginTop: spacing.md }]}>
+          <StatCard
+            value={avgPerWeek}
+            label="Avg / week"
+            decimals={1}
+            icon="trending-up-outline"
+            iconColor={colors.accent}
+            style={{ backgroundColor: 'transparent' }}
+            testID="profile.stat-avg-week"
+          />
+          <View style={styles.statGap} />
+          <StatCard
+            value={user?.totalWorkouts ?? 0}
+            label="All time"
+            icon="barbell-outline"
+            iconColor={colors.highlight}
+            style={{ backgroundColor: 'transparent' }}
+            testID="profile.stat-all-time"
+          />
+        </View>
+
         {/* ── Recent Activity Teaser ───────────────────────────── */}
         <SectionLabel
           title="Recent Highlights"
@@ -450,7 +542,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           style={[styles.sectionLabel, { marginTop: spacing.xl }]}
           testID="profile.highlights-section"
         />
-        <Card variant="highlight" padding={spacing.lg} testID="profile.pr-card">
+        <Card variant="highlight" padding={spacing.lg} style={{ backgroundColor: 'transparent' }} testID="profile.pr-card">
           <View style={styles.prRow}>
             <View style={[styles.prIcon, { backgroundColor: colors.accent + '22' }]}>
               <Ionicons name="trophy" size={20} color={colors.accent} />
@@ -471,52 +563,114 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
         </Card>
 
-        {/* ── Body & Measurements Section ───────────────────────── */}
+        {/* ── Measurements Section ────────────────────────────── */}
         <SectionLabel
-          title="Body & Measurements"
-          style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-          testID="profile.body-section"
-        />
-        <Card padding={0} testID="profile.measure-card">
-          <Pressable
-            style={styles.measureRow}
-            onPress={onMeasurePress}
-            android_ripple={rippleTokens.surface}
-            testID="profile.measure-btn"
-            accessibilityLabel="Open measurements"
-          >
-            <View style={[styles.measureIcon, { backgroundColor: colors.highlight + '22' }]}>
-              <Ionicons name="resize-outline" size={20} color={colors.highlight} />
-            </View>
-            <View style={styles.measureText}>
-              <Text style={styles.measureTitle}>Measurements</Text>
-              <Text style={styles.measureSub}>Body metrics & size tracking</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </Pressable>
-        </Card>
-
-        {/* ── Quick Access: Settings ────────────────────────────── */}
-        <SectionLabel
-          title="Settings & Backup"
+          title="Measurements"
+          subtitle="Track physical progress"
           style={[styles.sectionLabel, { marginTop: spacing.xl }]}
         />
         <Card padding={0}>
           <Pressable
             style={styles.settingsQuickRow}
-            onPress={() => setIsSettingsVisible(true)}
+            onPress={onMeasurePress}
             android_ripple={rippleTokens.surface}
-            accessibilityLabel="Open settings"
+            accessibilityLabel="Open measurements"
           >
-            <View style={[styles.settingsQuickIcon, { backgroundColor: colors.accent + '22' }]}>
-              <Ionicons name="settings-outline" size={20} color={colors.accent} />
+            <View style={[styles.settingsQuickIcon, { backgroundColor: colors.highlight + '22' }]}>
+              <Ionicons name="resize-outline" size={20} color={colors.highlight} />
             </View>
             <View style={styles.measureText}>
-              <Text style={styles.measureTitle}>App Settings</Text>
-              <Text style={styles.measureSub}>Timer · Cloud Sync · Import/Export · About</Text>
+              <Text style={styles.measureTitle}>Body & Measurements</Text>
+              <Text style={styles.measureSub}>Log size tracking & weight metrics</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </Pressable>
+        </Card>
+
+        {/* ── Personal Records ── */}
+        <SectionLabel
+          title="Personal Records"
+          subtitle="Your top lifts"
+          style={[styles.sectionLabel, { marginTop: spacing.xl }]}
+        />
+        {topPrs.length === 0 ? (
+          <Card padding={spacing.lg}>
+            <Text style={{ color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' }}>
+              Log workouts to track achievements.
+            </Text>
+          </Card>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}
+          >
+            {topPrs.map((pr, idx) => (
+              <Card 
+                key={idx} 
+                padding={spacing.md} 
+                style={{ width: 140, borderColor: colors.border, borderWidth: 1, backgroundColor: 'transparent' }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+                  <Ionicons name="trophy" size={14} color={colors.gold} />
+                  <Text style={{ color: colors.textMuted, fontSize: 9, fontFamily: font.bold }}>{pr.date}</Text>
+                </View>
+                <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.bold, marginBottom: 2 }} numberOfLines={1}>
+                  {pr.name}
+                </Text>
+                <Text style={{ color: colors.accent, fontSize: font.sizes.md, fontFamily: font.bold }}>
+                  {pr.weight} kg
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 10, fontFamily: font.medium }}>
+                  for {pr.reps} reps
+                </Text>
+              </Card>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* ── Volume Trends ── */}
+        <SectionLabel
+          title="Volume Trends"
+          subtitle="Muscle sets completed this week"
+          style={[styles.sectionLabel, { marginTop: spacing.xl }]}
+        />
+        <Card padding={spacing.lg}>
+          {Object.keys(weeklyMuscleSets || {}).length === 0 ? (
+            <Text style={{ color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' }}>
+              No sets logged this week.
+            </Text>
+          ) : (
+            <View style={{ gap: spacing.md }}>
+              {Object.keys(weeklyMuscleSets).map((muscle, idx) => {
+                const sets = weeklyMuscleSets[muscle] || 0;
+                const maxVal = Math.max(...Object.values(weeklyMuscleSets), 1);
+                const percentage = Math.round((sets / maxVal) * 100);
+                return (
+                  <View key={idx} style={{ gap: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.semibold }}>
+                        {muscle.toUpperCase()}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: font.sizes.xs, fontFamily: font.bold }}>
+                        {sets} sets
+                      </Text>
+                    </View>
+                    <View style={{ height: 6, backgroundColor: colors.surface2, borderRadius: radius.full, overflow: 'hidden' }}>
+                      <View 
+                        style={{ 
+                          height: '100%', 
+                          width: `${percentage}%`, 
+                          backgroundColor: colors.accent, 
+                          borderRadius: radius.full 
+                        }} 
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </Card>
 
         </Animated.View>
@@ -565,7 +719,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
       </Modal>
 
-      {/* Modal B: Google Connect Sheet */}
+      {/* Modal B: Google Connect Sheet (Redesigned with Web Sign-In & Developer Token) */}
       <Modal
         visible={isGoogleModalVisible}
         animationType="slide"
@@ -585,46 +739,108 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
 
             <View style={styles.modalForm}>
-              <View style={styles.googleBrandRow}>
-                <Ionicons name="logo-google" size={24} color={colors.accent} />
-                <Text style={styles.googleBrandText}>Sign In with Google</Text>
+              {/* Tab Selector */}
+              <View style={styles.tabBar}>
+                <Pressable
+                  style={[styles.tabItem, googleActiveTab === 'login' && styles.tabItemActive]}
+                  onPress={() => setGoogleActiveTab('login')}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[styles.tabText, googleActiveTab === 'login' && styles.tabTextActive]}>
+                    GOOGLE SIGN-IN
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.tabItem, googleActiveTab === 'token' && styles.tabItemActive]}
+                  onPress={() => setGoogleActiveTab('token')}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[styles.tabText, googleActiveTab === 'token' && styles.tabTextActive]}>
+                    DEV TOKEN
+                  </Text>
+                </Pressable>
               </View>
 
-              <Text style={styles.inputLabel}>GOOGLE EMAIL ADDRESS</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="account@gmail.com"
-                placeholderTextColor={colors.textMuted}
-                value={googleEmail}
-                onChangeText={setGoogleEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                keyboardAppearance="dark"
-              />
+              {googleActiveTab === 'login' ? (
+                <View style={{ flex: 1, rowGap: spacing.sm }}>
+                  <Text style={styles.instructionText}>
+                    Sign in dynamically using a secure Google popup. Requires a Client ID configured for this development origin.
+                  </Text>
 
-              <Text style={styles.inputLabel}>NAME FOR PROFILE</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Alex Morgan"
-                placeholderTextColor={colors.textMuted}
-                value={googleName}
-                onChangeText={setGoogleName}
-                keyboardAppearance="dark"
-              />
+                  <Text style={styles.inputLabel}>GOOGLE CLIENT ID</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter Google Client ID"
+                    placeholderTextColor={colors.textMuted}
+                    value={googleClientId}
+                    onChangeText={setGoogleClientId}
+                    keyboardAppearance="dark"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
 
-              {isSyncing ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                  <Text style={styles.loadingText}>Contacting Google server...</Text>
+                  <View style={styles.instructionsContainer}>
+                    <Text style={styles.instructionsTitle}>HOW TO GET A CLIENT ID:</Text>
+                    <Text style={styles.instructionsStep}>1. Open Google Cloud Console API Credentials page.</Text>
+                    <Text style={styles.instructionsStep}>2. Create an OAuth 2.0 Client ID for "Web Application".</Text>
+                    <Text style={styles.instructionsStep}>3. Add authorized JavaScript origin: {(typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:8081'}</Text>
+                  </View>
+
+                  {isSyncing ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={colors.accent} />
+                      <Text style={styles.loadingText}>Contacting Google server...</Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={styles.submitBtn}
+                      onPress={handleGoogleWebAuth}
+                      android_ripple={rippleTokens.accent}
+                    >
+                      <Text style={styles.submitBtnText}>SIGN IN WITH GOOGLE</Text>
+                    </Pressable>
+                  )}
                 </View>
               ) : (
-                <Pressable
-                  style={styles.submitBtn}
-                  onPress={handleGoogleSubmit}
-                  android_ripple={rippleTokens.accent}
-                >
-                  <Text style={styles.submitBtnText}>SIGN IN & RESTORE</Text>
-                </Pressable>
+                <View style={{ flex: 1, rowGap: spacing.sm }}>
+                  <Text style={styles.instructionText}>
+                    Directly connect using a temporary access token from Google's playground. Perfect for instant testing!
+                  </Text>
+
+                  <Text style={styles.inputLabel}>OAUTH ACCESS TOKEN</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Paste access token (starts with ya29...)"
+                    placeholderTextColor={colors.textMuted}
+                    value={googleAccessToken}
+                    onChangeText={setGoogleAccessToken}
+                    keyboardAppearance="dark"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  <View style={styles.instructionsContainer}>
+                    <Text style={styles.instructionsTitle}>INSTANT CONNECT STEPS:</Text>
+                    <Text style={styles.instructionsStep}>1. Open developers.google.com/oauthplayground</Text>
+                    <Text style={styles.instructionsStep}>2. Select Drive API v3 (drive.file scope) & userinfo profile/email scopes.</Text>
+                    <Text style={styles.instructionsStep}>3. Click Authorize, click Exchange, and paste the Access Token above!</Text>
+                  </View>
+
+                  {isSyncing ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={colors.accent} />
+                      <Text style={styles.loadingText}>Validating credentials...</Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={[styles.submitBtn, { backgroundColor: colors.highlight }]}
+                      onPress={handleDeveloperTokenSubmit}
+                      android_ripple={rippleTokens.accent}
+                    >
+                      <Text style={[styles.submitBtnText, { color: '#0D0F14' }]}>CONNECT WITH TOKEN</Text>
+                    </Pressable>
+                  )}
+                </View>
               )}
             </View>
           </View>
@@ -743,10 +959,37 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             contentContainerStyle={styles.settingsContent}
             showsVerticalScrollIndicator={false}
           >
+            {/* ── Account Management ──────────────────────────────── */}
+            <SectionLabel
+              title="Account Management"
+              style={styles.sectionLabel}
+            />
+            <Card padding={spacing.lg}>
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => {
+                  setTempName(user?.name || '');
+                  setIsRenameVisible(true);
+                }}
+                android_ripple={rippleTokens.surface}
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="person-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Edit Name</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Change your profile name
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            </Card>
+
             {/* ── Workout Preferences ─────────────────────────────── */}
             <SectionLabel
               title="Workout Preferences"
-              style={styles.sectionLabel}
+              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.lg}>
               <View style={styles.settingRow}>
@@ -790,26 +1033,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
                 </View>
 
-                {/* Stepped custom slider */}
+                {/* Premium Slider (Dots Removed) */}
                 <View style={styles.sliderContainer}>
                   <View style={styles.sliderTrack}>
                     <View style={[styles.sliderFill, { width: `${(animationSpeed / 2) * 100}%` }]} />
-                    {[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(val => {
-                      const isActive = animationSpeed === val;
-                      return (
-                        <Pressable
-                          key={val}
-                          style={[
-                            styles.sliderNotch,
-                            { left: `${(val / 2) * 100}%` },
-                            isActive && styles.sliderNotchActive
-                          ]}
-                          onPress={() => setAnimationSpeed(val)}
-                        >
-                          {isActive && <View style={styles.sliderNotchInner} />}
-                        </Pressable>
-                      );
-                    })}
+                    
+                    {/* Premium dynamic glowing thumb */}
+                    <View style={[styles.sliderThumb, { left: `${(animationSpeed / 2) * 100}%` }]}>
+                      <View style={styles.sliderThumbInner} />
+                    </View>
+
+                    {/* Transparent tactile touch hotspots */}
+                    {[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(val => (
+                      <Pressable
+                        key={val}
+                        style={[
+                          styles.sliderTapZone,
+                          { left: `${(val / 2) * 100}%` }
+                        ]}
+                        onPress={() => setAnimationSpeed(val)}
+                        hitSlop={8}
+                      />
+                    ))}
                   </View>
                   <View style={styles.sliderLabels}>
                     <Text style={styles.sliderLabelText}>0x (Instant)</Text>
@@ -821,6 +1066,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </View>
               </View>
             </Card>
+
 
             {/* ── Cloud Sync & Backup ─────────────────────────────── */}
             <SectionLabel
@@ -853,7 +1099,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       <Ionicons name="checkmark-circle" size={16} color={colors.success} />
                       <Text style={styles.syncStatusText}>Auto-Backup Active</Text>
                     </View>
-                    <Text style={styles.syncTimeLabel}>Last synced: Just Now</Text>
+                    <Text style={styles.syncTimeLabel}>{formatLastSynced(lastSynced)}</Text>
                   </View>
 
                   <Pressable
@@ -1310,12 +1556,13 @@ const styles = StyleSheet.create({
   // Recovery Panel
   recoveryGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    columnGap: spacing.sm,
+    rowGap: spacing.sm,
     paddingVertical: spacing.xs,
   },
   recoveryBtn: {
-    flex: 1,
+    width: '48%',
     alignItems: 'center',
     justifyContent: 'center',
     rowGap: 6,
@@ -1327,9 +1574,10 @@ const styles = StyleSheet.create({
   },
   recoveryBtnText: {
     color: colors.textSecondary,
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: font.bold,
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
   recoveryDivider: {
     height: 1,
@@ -1434,6 +1682,63 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: font.sizes.base,
     fontFamily: font.bold,
+  },
+
+  // Segmented Tabs for Google Modal
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 4,
+    marginBottom: spacing.sm,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabItemActive: {
+    backgroundColor: colors.surface,
+  },
+  tabText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs - 1,
+    fontFamily: font.semibold,
+  },
+  tabTextActive: {
+    color: colors.accent,
+    fontFamily: font.bold,
+  },
+  instructionText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontFamily: font.regular,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  instructionsContainer: {
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+  },
+  instructionsTitle: {
+    color: colors.textPrimary,
+    fontSize: 10,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  instructionsStep: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontFamily: font.medium,
+    lineHeight: 14,
+    marginBottom: 4,
   },
 
   loadingContainer: {
@@ -1594,11 +1899,39 @@ const styles = StyleSheet.create({
     borderRadius:    3,
     backgroundColor: '#0D0F14',
   },
+  sliderThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.accent,
+    borderColor: colors.textPrimary,
+    borderWidth: 1.5,
+    position: 'absolute',
+    marginLeft: -10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(shadow.accentGlow as object),
+    zIndex: 3,
+  },
+  sliderThumbInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0D0F14',
+  },
+  sliderTapZone: {
+    width: 32,
+    height: 32,
+    position: 'absolute',
+    marginLeft: -16,
+    zIndex: 4,
+    backgroundColor: 'transparent',
+  },
   sliderLabels: {
     flexDirection:  'row',
     justifyContent: 'space-between',
     alignItems:     'center',
-    marginTop:      spacing.xs,
+    marginTop:      spacing.sm,
   },
   sliderLabelText: {
     color:      colors.textSecondary,

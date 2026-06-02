@@ -6,16 +6,18 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#12181E",
+    "backgroundColor": "#0D0F14",
     "splash": {
-      "backgroundColor": "#12181E"
+      "backgroundColor": "#0D0F14"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.naor.strongern"
     },
     "android": {
+      "package": "com.naor.strongern",
       "adaptiveIcon": {
-        "backgroundColor": "#12181E",
+        "backgroundColor": "#0D0F14",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

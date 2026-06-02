@@ -9,7 +9,7 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, font, spacing, radius } from '../../theme';
+import { colors, font, spacing, radius, globalAnimation } from '../../theme';
 
 export interface BarDataPoint {
   label: string;
@@ -45,16 +45,25 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     if (hasAnimated.current || chartHeight === 0 || animValues.length === 0) return;
     hasAnimated.current = true;
 
+    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+      ? globalAnimation.speed
+      : 1;
+
+    if (speed === 0) {
+      animValues.forEach(anim => anim.setValue(1));
+      return;
+    }
+
     Animated.stagger(
-      60,
+      60 * speed,
       animValues.map((anim, i) =>
         Animated.spring(anim, {
           toValue:         1,
-          delay:           i * 30,
+          delay:           i * 30 * speed,
           useNativeDriver: false,
-          stiffness:       130,
+          stiffness:       130 / (speed || 1),
           damping:         15,
-          mass:            0.8,
+          mass:            0.8 * (speed || 1),
         })
       )
     ).start();
@@ -89,40 +98,52 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
           {/* Bars */}
           <View style={[styles.barsWrapper, { height: chartHeight }]}>
             {data.map((item, i) => {
-              const targetBarPx = trackHeight * (item.value / maxValue);
-              const animHeight = animValues[i].interpolate({
-                inputRange:  [0, 1],
-                outputRange: [0, targetBarPx],
-              });
-              const animOpacity = animValues[i].interpolate({
-                inputRange:  [0, 0.4, 1],
-                outputRange: [0, 1, 1],
-              });
+              const trackPadding = 3;
+              const blockGap = 3;
+              const totalGapsHeight = maxValue * blockGap;
+              const blockHeight = (trackHeight - 2 * trackPadding - totalGapsHeight) / maxValue;
 
               return (
                 <View key={item.label} style={styles.barCol}>
-                  <Animated.View style={{ opacity: animOpacity }}>
-                    <View style={[styles.barTrack, { height: trackHeight }]}>
-                      <Animated.View
-                        style={[
-                          styles.barOuter,
-                          {
-                            height:               animHeight,
-                            borderTopLeftRadius:  BAR_RADIUS,
-                            borderTopRightRadius: BAR_RADIUS,
-                            overflow:             'hidden',
-                          },
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={[colors.highlight, colors.accent]}
-                          style={StyleSheet.absoluteFill}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 0, y: 1 }}
-                        />
-                      </Animated.View>
-                    </View>
-                  </Animated.View>
+                  <View style={[styles.barTrack, { height: trackHeight }]}>
+                    {Array.from({ length: item.value }).map((_, j) => {
+                      // Stagger active blocks from bottom to top within the column
+                      const start = item.value > 1 ? (j * 0.4) / (item.value - 1) : 0;
+                      const end = start + 0.6;
+                      
+                      const animOpacity = animValues[i].interpolate({
+                        inputRange:  [0, Math.max(0, start), Math.min(1, end), 1],
+                        outputRange: [0, 0, 1, 1],
+                      });
+                      
+                      const animScale = animValues[i].interpolate({
+                        inputRange:  [0, Math.max(0, start), Math.min(1, end), 1],
+                        outputRange: [0.3, 0.3, 1, 1],
+                      });
+
+                      return (
+                        <Animated.View
+                          key={j}
+                          style={[
+                            styles.barBlockActive,
+                            {
+                              height: blockHeight,
+                              marginVertical: blockGap / 2,
+                              opacity: animOpacity,
+                              transform: [{ scale: animScale }],
+                            }
+                          ]}
+                        >
+                          <LinearGradient
+                            colors={[colors.highlight, colors.accent]}
+                            style={StyleSheet.absoluteFill}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 0, y: 1 }}
+                          />
+                        </Animated.View>
+                      );
+                    })}
+                  </View>
                   <Text style={styles.xLabel} numberOfLines={1}>{item.label}</Text>
                 </View>
               );
@@ -166,11 +187,20 @@ const styles = StyleSheet.create({
   },
   barTrack: {
     width:          '100%',
-    justifyContent: 'flex-end',
+    flexDirection:  'column-reverse',
+    padding:        3, // trackPadding
     marginBottom:   spacing.xs,
+    backgroundColor: 'rgba(255, 255, 255, 0.015)',
+    borderColor:     'rgba(255, 255, 255, 0.04)',
+    borderWidth:     1,
+    borderRadius:    BAR_RADIUS,
+    overflow:        'hidden',
   },
-  barOuter: {
-    width: '100%',
+  barBlockActive: {
+    width:          '100%',
+    borderRadius:   4,
+    overflow:       'hidden',
+    position:       'relative',
   },
   xLabel: {
     color:      colors.textMuted,

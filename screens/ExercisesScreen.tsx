@@ -11,9 +11,11 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Exercise } from '../data/mockData';
@@ -29,6 +31,8 @@ interface ExercisesScreenProps {
   exercises: Exercise[];
   onAddExercise?: (name: string, muscleGroup: string) => void;
   onDeleteExercise?: (id: string) => void;
+  onUpdateExerciseNotes?: (id: string, notes?: string) => void;
+  sessions?: any[];
 }
 
 interface AlphaSection {
@@ -55,8 +59,27 @@ const getMuscleColor = (muscleGroup: string): string => {
   return colors.muscle.default;
 };
 
-const ExerciseRow: React.FC<{ exercise: Exercise; onPress: (ex: Exercise) => void }> = React.memo(({ exercise, onPress }) => {
+const getSecondaryMuscles = (primary: string): string => {
+  const group = primary.toLowerCase();
+  if (group.includes('chest')) return 'Shoulders, Triceps';
+  if (group.includes('back')) return 'Biceps, Rear Delts';
+  if (group.includes('quad')) return 'Hamstrings, Glutes';
+  if (group.includes('hamstring')) return 'Glutes, Calves';
+  if (group.includes('shoulder')) return 'Triceps';
+  if (group.includes('bicep')) return 'Forearms';
+  if (group.includes('tricep')) return 'Shoulders';
+  if (group.includes('glute')) return 'Hamstrings';
+  if (group.includes('rear')) return 'Back';
+  return 'Core';
+};
+
+const ExerciseRow: React.FC<{
+  exercise: Exercise;
+  onPress: (ex: Exercise) => void;
+  onMenuPress: (ex: Exercise) => void;
+}> = React.memo(({ exercise, onPress, onMenuPress }) => {
   const muscleColor = getMuscleColor(exercise.muscleGroup);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <PressableRow
@@ -87,18 +110,43 @@ const ExerciseRow: React.FC<{ exercise: Exercise; onPress: (ex: Exercise) => voi
               {exercise.muscleGroup.toUpperCase()}
             </Text>
           </View>
+          {exercise.notes ? (
+            <Pressable onPress={() => setExpanded(!expanded)} style={{ marginTop: spacing.xs }}>
+              <Text style={styles.noteSubtitle} numberOfLines={expanded ? undefined : 2}>
+                {exercise.notes}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.rowRight}>
-          <Text style={styles.weeklySets}>{exercise.weeklySets}</Text>
-          <Text style={styles.setsLabel}>SETS/WK</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm }}>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.weeklySets}>{exercise.weeklySets}</Text>
+              <Text style={styles.setsLabel}>SETS/WK</Text>
+            </View>
+            <IconButton
+              name="ellipsis-horizontal"
+              size={18}
+              color={colors.textSecondary}
+              onPress={() => onMenuPress(exercise)}
+              accessibilityLabel="Exercise options"
+              style={{ padding: spacing.xs }}
+            />
+          </View>
         </View>
       </View>
     </PressableRow>
   );
 });
 
-const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExercise, onDeleteExercise }) => {
+const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ 
+  exercises, 
+  onAddExercise, 
+  onDeleteExercise, 
+  onUpdateExerciseNotes,
+  sessions = [] 
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<'alphabetical-asc' | 'alphabetical-desc' | 'sets'>('alphabetical-asc');
@@ -107,9 +155,74 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExerc
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Context Menu and Notes states
+  const [isContextMenuVisible, setIsContextMenuVisible] = useState(false);
+  const [contextMenuExercise, setContextMenuExercise] = useState<Exercise | null>(null);
+  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
+  const [noteEditExercise, setNoteEditExercise] = useState<Exercise | null>(null);
+  const [noteText, setNoteText] = useState('');
+
   // New Exercise Form States
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState('Chest');
+
+  // Exercise history and PRs memos
+  const exerciseHistory = useMemo(() => {
+    if (!selectedExercise) return [];
+    const history: { weight: number; reps: number; date: string; volume: number }[] = [];
+    (sessions || []).forEach(session => {
+      const performed = (session.exercises || []).find(
+        (ex: any) => ex.name.toLowerCase() === selectedExercise.name.toLowerCase()
+      );
+      if (performed) {
+        const d = new Date(session.datetime);
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dateStr = `${monthNames[d.getMonth()]} ${d.getDate()}`;
+        const setsCount = performed.sets || 3;
+        const weight = performed.bestWeight || 0;
+        const reps = performed.bestReps || 0;
+        history.push({
+          weight,
+          reps,
+          date: dateStr,
+          volume: weight * reps * setsCount
+        });
+      }
+    });
+    return history.reverse(); // Chronological order
+  }, [selectedExercise, sessions]);
+
+  const exercisePRs = useMemo(() => {
+    if (exerciseHistory.length === 0) return [];
+    // Sort descending by weight
+    const sorted = [...exerciseHistory].sort((a, b) => b.weight - a.weight);
+    // Keep top 3 unique by weight
+    const uniqueWeights = new Map<number, typeof sorted[number]>();
+    sorted.forEach(item => {
+      if (!uniqueWeights.has(item.weight)) {
+        uniqueWeights.set(item.weight, item);
+      }
+    });
+    return Array.from(uniqueWeights.values()).slice(0, 3);
+  }, [exerciseHistory]);
 
   // Toggle muscle filter
   const handleToggleMuscle = (muscle: string) => {
@@ -193,18 +306,20 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExerc
     setIsDetailsModalVisible(true);
   }, []);
 
-  const getItemLayout = useCallback(
-    (_: AlphaSection[] | null, index: number) => ({
-      length: ITEM_HEIGHT,
-      offset: ITEM_HEIGHT * index,
-      index,
-    }),
-    []
-  );
+  const handleMenuPress = useCallback((ex: Exercise) => {
+    setContextMenuExercise(ex);
+    setIsContextMenuVisible(true);
+  }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: Exercise }) => <ExerciseRow exercise={item} onPress={handleRowPress} />,
-    [handleRowPress]
+    ({ item }: { item: Exercise }) => (
+      <ExerciseRow 
+        exercise={item} 
+        onPress={handleRowPress} 
+        onMenuPress={handleMenuPress} 
+      />
+    ),
+    [handleRowPress, handleMenuPress]
   );
 
   const renderSectionHeader = useCallback(
@@ -354,22 +469,23 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExerc
       )}
 
       {/* Exercises Section List */}
-      <SectionList
-        sections={sections}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        getItemLayout={getItemLayout}
-        stickySectionHeadersEnabled
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-        overScrollMode="never"
-        removeClippedSubviews
-        maxToRenderPerBatch={12}
-        windowSize={15}
-        initialNumToRender={14}
-        testID="exercises.list"
-      />
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>
+        <SectionList
+          sections={sections}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+          overScrollMode="never"
+          removeClippedSubviews
+          maxToRenderPerBatch={12}
+          windowSize={15}
+          initialNumToRender={14}
+          testID="exercises.list"
+        />
+      </Animated.View>
 
       {/* Modal 1: Add Custom Exercise */}
       <Modal
@@ -443,7 +559,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExerc
       {selectedExercise && (
         <Modal
           visible={isDetailsModalVisible}
-          animationType="fade"
+          animationType="slide"
           transparent
           onRequestClose={() => setIsDetailsModalVisible(false)}
         >
@@ -459,55 +575,311 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ exercises, onAddExerc
                 />
               </View>
 
-              <View style={styles.detailsContent}>
-                <View style={[
-                  styles.detailsHeaderCircle,
-                  { backgroundColor: getMuscleColor(selectedExercise.muscleGroup) + '15' }
-                ]}>
-                  <Ionicons name="barbell" size={40} color={getMuscleColor(selectedExercise.muscleGroup)} />
-                </View>
-
-                <Text style={styles.detailsName}>{selectedExercise.name}</Text>
-                
-                <View style={[
-                  styles.detailsBadge,
-                  { backgroundColor: getMuscleColor(selectedExercise.muscleGroup) + '22' }
-                ]}>
-                  <Text style={[styles.detailsBadgeText, { color: getMuscleColor(selectedExercise.muscleGroup) }]}>
-                    {selectedExercise.muscleGroup.toUpperCase()}
-                  </Text>
-                </View>
-
-                <View style={styles.detailsStatsRow}>
-                  <View style={styles.detailsStatBox}>
-                    <Text style={styles.detailsStatValue}>{selectedExercise.weeklySets}</Text>
-                    <Text style={styles.detailsStatLabel}>WEEKLY SETS</Text>
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: spacing.lg }}
+              >
+                <View style={styles.detailsContent}>
+                  <View style={[
+                    styles.detailsHeaderCircle,
+                    { backgroundColor: getMuscleColor(selectedExercise.muscleGroup) + '15' }
+                  ]}>
+                    <Ionicons name="barbell" size={40} color={getMuscleColor(selectedExercise.muscleGroup)} />
                   </View>
-                  <View style={styles.detailsStatDivider} />
-                  <View style={styles.detailsStatBox}>
-                    <Text style={styles.detailsStatValue}>
-                      {selectedExercise.id.startsWith('ex-custom-') ? 'CUSTOM' : 'SYSTEM'}
-                    </Text>
-                    <Text style={styles.detailsStatLabel}>SOURCE</Text>
-                  </View>
-                </View>
 
-                {selectedExercise.id.startsWith('ex-custom-') ? (
-                  <Pressable
-                    style={styles.deleteExBtn}
-                    onPress={() => handleDeletePress(selectedExercise)}
-                    android_ripple={rippleTokens.borderless}
-                  >
-                    <Ionicons name="trash-outline" size={16} color={colors.error} />
-                    <Text style={styles.deleteExBtnText}>DELETE EXERCISE</Text>
-                  </Pressable>
-                ) : (
-                  <View style={styles.lockInfo}>
-                    <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} />
-                    <Text style={styles.lockInfoText}>Standard gym movement (locked)</Text>
+                  <Text style={styles.detailsName}>{selectedExercise.name}</Text>
+                  
+                  <View style={styles.badgesRow}>
+                    <View style={[
+                      styles.detailsBadge,
+                      { backgroundColor: getMuscleColor(selectedExercise.muscleGroup) + '22' }
+                    ]}>
+                      <Text style={[styles.detailsBadgeText, { color: getMuscleColor(selectedExercise.muscleGroup) }]}>
+                        {selectedExercise.muscleGroup.toUpperCase()} (PRIMARY)
+                      </Text>
+                    </View>
+                    
+                    <View style={[
+                      styles.detailsBadge,
+                      { backgroundColor: colors.highlight + '15' }
+                    ]}>
+                      <Text style={[styles.detailsBadgeText, { color: colors.highlight }]}>
+                        {getSecondaryMuscles(selectedExercise.muscleGroup).toUpperCase()} (SECONDARY)
+                      </Text>
+                    </View>
                   </View>
-                )}
+
+                  <View style={styles.detailsStatsRow}>
+                    <View style={styles.detailsStatBox}>
+                      <Text style={styles.detailsStatValue}>{selectedExercise.weeklySets}</Text>
+                      <Text style={styles.detailsStatLabel}>WEEKLY SETS</Text>
+                    </View>
+                    <View style={styles.detailsStatDivider} />
+                    <View style={styles.detailsStatBox}>
+                      <Text style={styles.detailsStatValue}>
+                        {selectedExercise.id.startsWith('ex-custom-') ? 'CUSTOM' : 'SYSTEM'}
+                      </Text>
+                      <Text style={styles.detailsStatLabel}>SOURCE</Text>
+                    </View>
+                  </View>
+
+                  {/* Custom Note Indicator inside Details */}
+                  <View style={styles.detailsNoteContainer}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.sectionTitle}>MY EXERCISE NOTES</Text>
+                      <Pressable 
+                        onPress={() => {
+                          setIsDetailsModalVisible(false);
+                          setNoteEditExercise(selectedExercise);
+                          setNoteText(selectedExercise.notes || '');
+                          setIsNoteModalVisible(true);
+                        }}
+                        style={styles.editNoteLink}
+                      >
+                        <Ionicons name="create-outline" size={14} color={colors.accent} />
+                        <Text style={styles.editNoteLinkText}>Edit</Text>
+                      </Pressable>
+                    </View>
+                    {selectedExercise.notes ? (
+                      <Text style={styles.detailsNoteText}>{selectedExercise.notes}</Text>
+                    ) : (
+                      <Text style={styles.detailsNoteEmptyText}>No custom cues or notes added. Tap Edit to add advice for seats, angles, or rest!</Text>
+                    )}
+                  </View>
+
+                  {/* Progression Trend Chart */}
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>PROGRESSION TREND</Text>
+                    {exerciseHistory.length > 0 ? (
+                      <View style={{ rowGap: spacing.sm, marginTop: spacing.sm, width: '100%' }}>
+                        {(() => {
+                          const last5 = exerciseHistory.slice(-5);
+                          const maxWeight = Math.max(...exerciseHistory.map(h => h.weight), 1);
+                          return last5.map((historyItem, idx) => {
+                            const percentage = maxWeight > 0 ? (historyItem.weight / maxWeight) * 100 : 0;
+                            return (
+                              <View key={idx} style={styles.trendRow}>
+                                <Text style={styles.trendDate}>{historyItem.date}</Text>
+                                <View style={styles.trendBarContainer}>
+                                  <View style={[styles.trendBar, { width: `${Math.max(15, percentage)}%` }]}>
+                                    <LinearGradient
+                                      colors={[colors.highlight, colors.accent]}
+                                      start={{ x: 0, y: 0 }}
+                                      end={{ x: 1, y: 0 }}
+                                      style={StyleSheet.absoluteFill}
+                                    />
+                                  </View>
+                                </View>
+                                <Text style={styles.trendWeight}>
+                                  {historyItem.weight} kg x {historyItem.reps}
+                                </Text>
+                              </View>
+                            );
+                          });
+                        })()}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptyText}>No workout sessions logged for this exercise yet.</Text>
+                    )}
+                  </View>
+
+                  {/* Top 3 PRs Table */}
+                  <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>PERSONAL RECORDS (TOP LIFTS)</Text>
+                    {exercisePRs.length > 0 ? (
+                      <View style={styles.prTable}>
+                        <View style={styles.prTableHeader}>
+                          <Text style={[styles.prTableHeaderText, { width: '15%' }]}>#</Text>
+                          <Text style={[styles.prTableHeaderText, { width: '35%' }]}>WEIGHT</Text>
+                          <Text style={[styles.prTableHeaderText, { width: '25%' }]}>REPS</Text>
+                          <Text style={[styles.prTableHeaderText, { width: '25%', textAlign: 'right' }]}>DATE</Text>
+                        </View>
+                        {exercisePRs.map((pr, idx) => (
+                          <View key={idx} style={styles.prTableRow}>
+                            <Text style={[styles.prTableText, styles.prRank, { width: '15%' }]}>
+                              {idx + 1}
+                            </Text>
+                            <Text style={[styles.prTableWeight, { width: '35%' }]}>
+                              {pr.weight} kg
+                            </Text>
+                            <Text style={[styles.prTableText, { width: '25%' }]}>
+                              {pr.reps} reps
+                            </Text>
+                            <Text style={[styles.prTableText, { width: '25%', textAlign: 'right' }]}>
+                              {pr.date}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptyText}>Perform this movement in a workout to capture PR records.</Text>
+                    )}
+                  </View>
+
+                  {selectedExercise.id.startsWith('ex-custom-') ? (
+                    <Pressable
+                      style={[styles.deleteExBtn, { marginTop: spacing.md }]}
+                      onPress={() => handleDeletePress(selectedExercise)}
+                      android_ripple={rippleTokens.borderless}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.error} />
+                      <Text style={styles.deleteExBtnText}>DELETE EXERCISE</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={[styles.lockInfo, { marginTop: spacing.md }]}>
+                      <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} />
+                      <Text style={styles.lockInfoText}>Standard gym movement (locked)</Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Modal: Exercise Row 3-Dot Options */}
+      {contextMenuExercise && (
+        <Modal
+          visible={isContextMenuVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setIsContextMenuVisible(false)}
+        >
+          <Pressable 
+            style={styles.modalBackdrop} 
+            onPress={() => setIsContextMenuVisible(false)}
+          >
+            <View style={[styles.modalCard, { paddingVertical: spacing.md }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle} numberOfLines={1}>{contextMenuExercise.name.toUpperCase()}</Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
+                  onPress={() => setIsContextMenuVisible(false)}
+                />
               </View>
+
+              <View style={{ rowGap: spacing.xs }}>
+                <Pressable
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setIsContextMenuVisible(false);
+                    setNoteEditExercise(contextMenuExercise);
+                    setNoteText(contextMenuExercise.notes || '');
+                    setIsNoteModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={20} color={colors.accent} />
+                  <Text style={styles.menuItemText}>
+                    {contextMenuExercise.notes ? 'Edit Note' : 'Add Note'}
+                  </Text>
+                </Pressable>
+
+                {contextMenuExercise.notes ? (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      Alert.alert(
+                        'Clear Note',
+                        'Are you sure you want to delete this note?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Clear Note',
+                            style: 'destructive',
+                            onPress: () => {
+                              if (onUpdateExerciseNotes) {
+                                onUpdateExerciseNotes(contextMenuExercise.id, undefined);
+                              }
+                              setIsContextMenuVisible(false);
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={colors.error} />
+                    <Text style={[styles.menuItemText, { color: colors.error }]}>Clear Note</Text>
+                  </Pressable>
+                ) : null}
+
+                {contextMenuExercise.id.startsWith('ex-custom-') ? (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      setIsContextMenuVisible(false);
+                      handleDeletePress(contextMenuExercise);
+                    }}
+                  >
+                    <Ionicons name="trash-bin-outline" size={20} color={colors.error} />
+                    <Text style={[styles.menuItemText, { color: colors.error }]}>Delete Custom Exercise</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Modal: Add/Edit Custom Note */}
+      {noteEditExercise && (
+        <Modal
+          visible={isNoteModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setIsNoteModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {noteEditExercise.notes ? 'EDIT NOTE' : 'ADD NOTE'}
+                </Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
+                  onPress={() => setIsNoteModalVisible(false)}
+                />
+              </View>
+
+              <ScrollView contentContainerStyle={styles.modalScroll}>
+                <Text style={styles.noteModalHeader}>{noteEditExercise.name}</Text>
+                <TextInput
+                  style={[styles.textInput, { minHeight: 100, textAlignVertical: 'top' }]}
+                  placeholder="Enter workout cue, seat height, or custom setting notes..."
+                  placeholderTextColor={colors.textMuted}
+                  value={noteText}
+                  onChangeText={setNoteText}
+                  multiline
+                  keyboardAppearance="dark"
+                  maxLength={150}
+                  autoFocus
+                />
+
+                <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md }}>
+                  <Pressable
+                    style={[styles.btnSecondary, { flex: 1 }]}
+                    onPress={() => setIsNoteModalVisible(false)}
+                  >
+                    <Text style={styles.btnSecondaryText}>CANCEL</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.btnPrimary, { flex: 1 }]}
+                    onPress={() => {
+                      if (onUpdateExerciseNotes) {
+                        onUpdateExerciseNotes(noteEditExercise.id, noteText.trim() || undefined);
+                      }
+                      setIsNoteModalVisible(false);
+                      Alert.alert('Success', 'Note updated!');
+                    }}
+                  >
+                    <Text style={styles.btnPrimaryText}>SAVE</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -576,7 +948,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor:   colors.bg,
-    height:            ITEM_HEIGHT,
+    minHeight:         ITEM_HEIGHT,
     justifyContent:    'center',
   },
   rowContent: {
@@ -774,7 +1146,7 @@ const styles = StyleSheet.create({
   },
   detailsContent: {
     alignItems: 'center',
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xs,
     rowGap: spacing.md,
   },
   detailsHeaderCircle: {
@@ -791,13 +1163,20 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     textAlign: 'center',
   },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   detailsBadge: {
     borderRadius: radius.full,
     paddingVertical: 4,
     paddingHorizontal: spacing.md,
   },
   detailsBadgeText: {
-    fontSize: font.sizes.xs,
+    fontSize: font.sizes.xs - 1,
     fontFamily: font.bold,
     letterSpacing: 0.8,
   },
@@ -809,7 +1188,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     paddingVertical: spacing.md,
-    marginVertical: spacing.md,
+    marginVertical: spacing.xs,
   },
   detailsStatBox: {
     alignItems: 'center',
@@ -858,6 +1237,189 @@ const styles = StyleSheet.create({
   lockInfoText: {
     color: colors.textMuted,
     fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+  },
+
+  // Expanded details styling
+  detailsNoteContainer: {
+    width: '100%',
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginVertical: spacing.xs,
+  },
+  detailsNoteText: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.sm,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+    fontFamily: font.medium,
+  },
+  detailsNoteEmptyText: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+    fontFamily: font.regular,
+  },
+  editNoteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: 4,
+  },
+  editNoteLinkText: {
+    color: colors.accent,
+    fontSize: font.sizes.xs,
+    fontFamily: font.semibold,
+  },
+  detailsSection: {
+    width: '100%',
+    marginVertical: spacing.xs,
+  },
+  sectionTitle: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+  },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.sm,
+    height: 24,
+  },
+  trendDate: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    width: 48,
+  },
+  trendBarContainer: {
+    flex: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  trendBar: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  trendWeight: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    width: 68,
+    textAlign: 'right',
+  },
+  prTable: {
+    width: '100%',
+    marginTop: spacing.xs,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  prTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface2,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  prTableHeaderText: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
+  },
+  prTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    alignItems: 'center',
+  },
+  prTableText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+  },
+  prRank: {
+    color: colors.highlight,
+    fontFamily: font.bold,
+  },
+  prTableWeight: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    columnGap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderBottomWidth: 1,
+  },
+  menuItemText: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.semibold,
+  },
+  btnPrimary: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPrimaryText: {
+    color: colors.textInverse,
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  btnSecondary: {
+    backgroundColor: 'transparent',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSecondaryText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  noteModalHeader: {
+    color: colors.accent,
+    fontSize: font.sizes.base,
+    fontFamily: font.bold,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  noteSubtitle: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontStyle: 'italic',
+    marginTop: 2,
     fontFamily: font.regular,
   },
 });

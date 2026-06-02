@@ -201,13 +201,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     return templates.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase().trim()));
   }, [templates, searchQuery]);
 
-  const pairs = useMemo(() => {
-    const result: [Template, Template | null][] = [];
-    for (let i = 0; i < filteredTemplates.length; i += 2) {
-      result.push([filteredTemplates[i], filteredTemplates[i + 1] ?? null]);
-    }
-    return result;
-  }, [filteredTemplates]);
+
 
   const lastUsed = useMemo(() => {
     if (templates.length === 0) return null;
@@ -290,23 +284,15 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     setIsCreateModalVisible(true);
   };
 
-  const renderPair = useCallback(
-    ({ item }: { item: [Template, Template | null] }) => (
-      <View style={styles.templateRow}>
-        <View style={styles.templateCol}>
-          <TemplateCard template={item[0]} onStart={onStartWorkout} onMenuPress={handleMenuPress} />
-        </View>
-        <View style={styles.templateColGap} />
-        <View style={styles.templateCol}>
-          {item[1] ? <TemplateCard template={item[1]} onStart={onStartWorkout} onMenuPress={handleMenuPress} /> : null}
-        </View>
-      </View>
+  const renderItem = useCallback(
+    ({ item }: { item: Template }) => (
+      <TemplateCard template={item} onStart={onStartWorkout} onMenuPress={handleMenuPress} />
     ),
     [onStartWorkout, handleMenuPress]
   );
 
   const keyExtractor = useCallback(
-    (item: [Template, Template | null]) => item[0].id,
+    (item: Template) => item.id,
     []
   );
 
@@ -353,14 +339,14 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       )}
 
       <FlatList
-        data={pairs}
+        data={filteredTemplates}
         keyExtractor={keyExtractor}
-        renderItem={renderPair}
+        renderItem={renderItem}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
         ListHeaderComponent={listHeader}
         removeClippedSubviews
-        maxToRenderPerBatch={4}
+        maxToRenderPerBatch={6}
         overScrollMode="never"
         ItemSeparatorComponent={() => <View style={styles.rowSep} />}
       />
@@ -602,17 +588,8 @@ const styles = StyleSheet.create({
   // Section
   sectionLabel: { marginBottom: spacing.sm },
 
-  // Template grid
-  templateRow: {
-    flexDirection: 'row',
-  },
-  templateCol: {
-    flex: 1,
-  },
-  templateColGap: {
-    width: spacing.sm,
-  },
-  rowSep: { height: spacing.sm },
+  // Template separators
+  rowSep: { height: spacing.md },
 
   // Template card
   tplCard: {

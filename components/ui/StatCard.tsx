@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, shadow, animation } from '../../theme';
+import { colors, font, spacing, radius, shadow, animation, globalAnimation } from '../../theme';
 
 interface StatCardProps {
   value:      number;
@@ -30,9 +30,17 @@ const StatCard: React.FC<StatCardProps> = ({
   const valRef = useRef(0);
 
   useEffect(() => {
+    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+      ? globalAnimation.speed
+      : 1;
+
+    if (speed === 0) {
+      anim.setValue(value);
+      return;
+    }
     Animated.timing(anim, {
       toValue:         value,
-      duration:        animation.slow,
+      duration:        animation.slow * speed,
       useNativeDriver: false,
     }).start();
   }, [value, anim]);

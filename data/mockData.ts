@@ -48,6 +48,7 @@ export interface Exercise {
   muscleGroup: string;
   imageUri?: string;
   weeklySets: number;
+  notes?: string;
 }
 
 export interface MeasureItem {

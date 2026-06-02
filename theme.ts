@@ -20,14 +20,14 @@ export const colors = {
   accentDim:      '#2B5FC9',   // darker variant for pressed states
   accentGlow:     '#4F8EF720', // transparent glow (20% opacity)
 
-  // Secondary accent — Electric Violet (PRs, highlights, badges)
-  highlight:      '#7C5CFC',
-  highlightDim:   '#4E36C2',
-  highlightGlow:  '#7C5CFC20',
+  // Secondary accent — Neon Sky Blue (replaced Electric Violet with Sky Blue)
+  highlight:      '#38BDF8',
+  highlightDim:   '#0284C7',
+  highlightGlow:  '#38BDF820',
 
   // Status
-  gold:           '#F5C842',
-  goldGlow:       '#F5C84220',
+  gold:           '#6366F1', // Sporty Indigo Blue (replaced Warm Gold)
+  goldGlow:       '#6366F120',
   error:          '#F0506E',
   success:        '#22D97A',
   successGlow:    '#22D97A20',
@@ -144,6 +144,11 @@ export const animation = {
     damping:   16,
     mass:      0.9,
   },
+};
+
+// Mutable global speed factor for dynamic scaling
+export const globalAnimation = {
+  speed: 1,
 };
 
 // ─────────────────────────────────────────────────────────────────

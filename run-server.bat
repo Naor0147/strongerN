@@ -12,7 +12,7 @@ echo ======================================================================
 echo.
 echo  [System Info]
 echo  - Project Path:  %cd%
-echo  - Expo Version:  SDK 56
+echo  - Expo Version:  SDK 54
 echo  - Action:        Starting Metro Bundler Server (expo start)
 echo.
 echo ======================================================================

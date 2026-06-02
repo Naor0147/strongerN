@@ -7,9 +7,10 @@ import { SafeAreaProvider }         from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { Ionicons }                 from '@expo/vector-icons';
+import * as googleDrive             from './utils/googleDrive';
 
 // Design tokens
-import { colors, spacing, radius, font, shadow, ripple as rippleTokens } from './theme';
+import { colors, spacing, radius, font, shadow, ripple as rippleTokens, globalAnimation } from './theme';
 
 // Layout components
 import BottomTabBar      from './components/layout/BottomTabBar';
@@ -56,8 +57,15 @@ export default function App() {
   const [primaryMetricsList, setPrimaryMetricsList] = React.useState(mockPrimaryMetrics);
   const [bodyPartMetricsList, setBodyPartMetricsList] = React.useState(mockBodyPartMetrics);
   const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(true);
-  const [googleUser, setGoogleUser] = React.useState<{ email: string; name: string } | null>(null);
+  const [googleUser, setGoogleUser] = React.useState<{
+    email: string;
+    name: string;
+    avatarUri?: string;
+    accessToken?: string;
+    fileId?: string;
+  } | null>(null);
   const [animationSpeed, setAnimationSpeed] = React.useState(1);
+  const [lastSynced, setLastSynced] = React.useState<string | null>(null);
 
   // Dynamically calculate weekly chart data based on sessionsList
   const dynamicWeeklyChartData = React.useMemo(() => {
@@ -73,7 +81,7 @@ export default function App() {
       weeks.push({
         start,
         end: new Date(start.getTime() + 7 * oneDay - 1),
-        label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: `${start.getMonth() + 1}/${start.getDate()}`,
         count: 0,
       });
     }
@@ -116,6 +124,7 @@ export default function App() {
           if (parsed.isAutoTimerEnabled !== undefined) setIsAutoTimerEnabled(parsed.isAutoTimerEnabled);
           if (parsed.googleUser !== undefined) setGoogleUser(parsed.googleUser);
           if (parsed.animationSpeed !== undefined) setAnimationSpeed(parsed.animationSpeed);
+          if (parsed.lastSynced !== undefined) setLastSynced(parsed.lastSynced);
         }
       }
     } catch (e) {
@@ -123,73 +132,15 @@ export default function App() {
     }
   }, []);
 
+  // Set document body background color on Web to match AMOLED pure black
+  React.useEffect(() => {
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.style.backgroundColor = '#0D0F14';
+    }
+  }, []);
+
   // Save to local storage on state changes
   React.useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const data = {
-          user: {
-            ...user,
-            totalWorkouts: sessionsList.length,
-          },
-          sessionsList,
-          templatesList,
-          exercisesList,
-          primaryMetricsList,
-          bodyPartMetricsList,
-          isAutoTimerEnabled,
-          googleUser,
-          animationSpeed,
-        };
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    } catch (e) {
-      console.warn('Error saving state to storage', e);
-    }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed]);
-
-  // Google Sync & Simulated Cloud Backup logic
-  const handleGoogleLogin = (email: string, name: string) => {
-    setGoogleUser({ email, name });
-    setUser(prev => ({ ...prev, name }));
-    
-    // Check if cloud backup exists and auto-restore it!
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const backupStr = window.localStorage.getItem(`${CLOUD_PREFIX}${email}`);
-        if (backupStr) {
-          const parsed = JSON.parse(backupStr);
-          if (parsed.user) setUser(parsed.user);
-          if (parsed.sessionsList) {
-            setSessionsList(parsed.sessionsList.map((s: any) => ({
-              ...s,
-              datetime: new Date(s.datetime)
-            })));
-          }
-          if (parsed.templatesList) {
-            setTemplatesList(parsed.templatesList.map((t: any) => ({
-              ...t,
-              lastUsed: new Date(t.lastUsed)
-            })));
-          }
-          if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
-          if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
-          if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
-          return true; // Data loaded
-        }
-      }
-    } catch (e) {
-      console.warn('Error auto-restoring backup', e);
-    }
-    return false;
-  };
-
-  const handleGoogleLogout = () => {
-    setGoogleUser(null);
-  };
-
-  const handleCloudSync = () => {
-    if (!googleUser) return false;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const data = {
@@ -200,15 +151,109 @@ export default function App() {
           primaryMetricsList,
           bodyPartMetricsList,
           isAutoTimerEnabled,
-          timestamp: new Date().toISOString(),
+          googleUser,
+          animationSpeed,
+          lastSynced,
         };
-        window.localStorage.setItem(`${CLOUD_PREFIX}${googleUser.email}`, JSON.stringify(data));
-        return true;
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
     } catch (e) {
-      console.warn('Error saving cloud backup', e);
+      console.warn('Error saving state to storage', e);
+    }
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced]);
+
+  // Synchronize dynamic global animation speed token
+  React.useEffect(() => {
+    globalAnimation.speed = animationSpeed;
+  }, [animationSpeed]);
+
+  // Google Sync & Real Cloud Backup logic using Google Drive API
+  const handleGoogleLogin = async (
+    email: string,
+    name: string,
+    accessToken?: string,
+    fileId?: string,
+    avatarUri?: string
+  ) => {
+    setGoogleUser({ email, name, accessToken, fileId, avatarUri });
+    setUser(prev => ({
+      ...prev,
+      name: name || prev.name,
+      avatarUri: avatarUri || prev.avatarUri,
+    }));
+    
+    // Check if real Google Drive backup exists and auto-restore it!
+    if (accessToken && fileId) {
+      try {
+        const backupData = await googleDrive.downloadBackupFile(accessToken, fileId);
+        if (backupData) {
+          if (backupData.user) setUser(backupData.user);
+          if (backupData.sessionsList) {
+            setSessionsList(backupData.sessionsList.map((s: any) => ({
+              ...s,
+              datetime: new Date(s.datetime)
+            })));
+          }
+          if (backupData.templatesList) {
+            setTemplatesList(backupData.templatesList.map((t: any) => ({
+              ...t,
+              lastUsed: new Date(t.lastUsed)
+            })));
+          }
+          if (backupData.exercisesList) setExercisesList(backupData.exercisesList);
+          if (backupData.primaryMetricsList) setPrimaryMetricsList(backupData.primaryMetricsList);
+          if (backupData.bodyPartMetricsList) setBodyPartMetricsList(backupData.bodyPartMetricsList);
+          if (backupData.lastSynced) setLastSynced(backupData.lastSynced);
+          return true; // Data loaded
+        }
+      } catch (e) {
+        console.warn('Error auto-restoring backup from Google Drive', e);
+      }
     }
     return false;
+  };
+
+  const handleGoogleLogout = () => {
+    setGoogleUser(null);
+  };
+
+  const handleCloudSync = async () => {
+    if (!googleUser || !googleUser.accessToken) return false;
+    try {
+      const nowStr = new Date().toISOString();
+      const backupData = {
+        user,
+        sessionsList,
+        templatesList,
+        exercisesList,
+        primaryMetricsList,
+        bodyPartMetricsList,
+        isAutoTimerEnabled,
+        timestamp: nowStr,
+        lastSynced: nowStr,
+      };
+
+      let fileId = googleUser.fileId;
+      if (!fileId) {
+        const foundId = await googleDrive.findBackupFile(googleUser.accessToken);
+        if (foundId) {
+          fileId = foundId;
+        }
+      }
+
+      if (fileId) {
+        await googleDrive.updateBackupFile(googleUser.accessToken, fileId, backupData);
+      } else {
+        const newFileId = await googleDrive.createBackupFile(googleUser.accessToken, backupData);
+        setGoogleUser(prev => prev ? { ...prev, fileId: newFileId } : null);
+      }
+
+      setLastSynced(nowStr);
+      return true;
+    } catch (e) {
+      console.error('[Google Sync Error]', e);
+      return false;
+    }
   };
 
   // Export/Import backups
@@ -222,6 +267,7 @@ export default function App() {
       bodyPartMetricsList,
       isAutoTimerEnabled,
       exportTimestamp: new Date().toISOString(),
+      lastSynced,
     };
     return JSON.stringify(data);
   };
@@ -245,6 +291,7 @@ export default function App() {
       if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
       if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
       if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+      if (parsed.lastSynced) setLastSynced(parsed.lastSynced);
       return true;
     } catch (e) {
       console.warn('Error importing backup', e);
@@ -278,6 +325,10 @@ export default function App() {
 
   const handleDeleteExercise = (id: string) => {
     setExercisesList(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleUpdateExerciseNotes = (id: string, notes?: string) => {
+    setExercisesList(prev => prev.map(e => e.id === id ? { ...e, notes } : e));
   };
 
   const handleAddTemplate = (name: string, exerciseNames: string[]) => {
@@ -329,6 +380,7 @@ export default function App() {
     setSessionsList([]);
     setTemplatesList([]);
     setGoogleUser(null);
+    setLastSynced(null);
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem(STORAGE_KEY);
@@ -374,10 +426,10 @@ export default function App() {
   }, [sessionsList, exercisesList]);
 
   // Active workout management states
-  const [isWorkoutActive, setIsWorkoutActive] = React.useState(true);
-  const [workoutName, setWorkoutName] = React.useState("Upper Body Power");
-  const [startTime, setStartTime] = React.useState(() => new Date(Date.now() - 23 * 60 * 1000));
-  const [workoutExercises, setWorkoutExercises] = React.useState<any[]>(() => mockSessions[0].exercises);
+  const [isWorkoutActive, setIsWorkoutActive] = React.useState(false);
+  const [workoutName, setWorkoutName] = React.useState("");
+  const [startTime, setStartTime] = React.useState(() => new Date());
+  const [workoutExercises, setWorkoutExercises] = React.useState<any[]>([]);
   const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(false);
   const [completionData, setCompletionData] = React.useState<{
     totalVolume: number;
@@ -424,18 +476,28 @@ export default function App() {
   };
 
   const handleFinishWorkout = (summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
+    const completedExercises = workoutExercises.filter(ex => ex.sets > 0);
+
     const newSession = {
       id: `session-new-${Date.now()}`,
       title: workoutName,
       datetime: new Date(),
       comment: 'Logged via live active tracker!',
-      exercises: workoutExercises,
+      exercises: completedExercises.length > 0 ? completedExercises : [
+        { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
+      ],
       durationMinutes: summary.durationMin,
       totalVolumeKg: summary.totalVolume,
       prs: summary.totalVolume > 0 ? 1 : 0,
     };
 
     setSessionsList(prev => [newSession, ...prev]);
+    
+    // Increment total workouts count
+    setUser(prev => ({
+      ...prev,
+      totalWorkouts: prev.totalWorkouts + 1,
+    }));
     
     // Show celebratory screen
     setCompletionData({
@@ -448,13 +510,14 @@ export default function App() {
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
 
-    // Auto backup if google connected
-    if (googleUser) {
-      setTimeout(() => {
+    // Auto backup if Google connected
+    if (googleUser && googleUser.accessToken) {
+      setTimeout(async () => {
+        const nowStr = new Date().toISOString();
         const backupData = {
           user: {
             ...user,
-            totalWorkouts: sessionsList.length + 1,
+            totalWorkouts: user.totalWorkouts + 1,
           },
           sessionsList: [newSession, ...sessionsList],
           templatesList,
@@ -462,14 +525,24 @@ export default function App() {
           primaryMetricsList,
           bodyPartMetricsList,
           isAutoTimerEnabled,
-          timestamp: new Date().toISOString(),
+          timestamp: nowStr,
+          lastSynced: nowStr,
         };
         try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem(`${CLOUD_PREFIX}${googleUser.email}`, JSON.stringify(backupData));
+          let fileId = googleUser.fileId;
+          if (!fileId) {
+            const foundId = await googleDrive.findBackupFile(googleUser.accessToken!);
+            if (foundId) fileId = foundId;
           }
+          if (fileId) {
+            await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
+          } else {
+            const newFileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
+            setGoogleUser(prev => prev ? { ...prev, fileId: newFileId } : null);
+          }
+          setLastSynced(nowStr);
         } catch (e) {
-          console.warn('Auto sync failed', e);
+          console.warn('[Google Auto Sync Error]', e);
         }
       }, 500);
     }
@@ -478,6 +551,8 @@ export default function App() {
   const handleDiscardWorkout = () => {
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
+    setWorkoutExercises([]);
+    setWorkoutName('Active Workout');
   };
 
   if (!fontsLoaded) {
@@ -512,10 +587,7 @@ export default function App() {
             <Tab.Screen name="Profile">
               {() => (
                 <ProfileScreen
-                  user={{
-                    ...user,
-                    totalWorkouts: sessionsList.length,
-                  }}
+                  user={user}
                   weeklyChartData={dynamicWeeklyChartData}
                   sessions={sessionsList}
                   isAutoTimerEnabled={isAutoTimerEnabled}
@@ -532,6 +604,8 @@ export default function App() {
                   animationSpeed={animationSpeed}
                   setAnimationSpeed={setAnimationSpeed}
                   onWipeAllData={handleWipeAllData}
+                  lastSynced={lastSynced}
+                  weeklyMuscleSets={weeklyMuscleSets}
                 />
               )}
             </Tab.Screen>
@@ -559,6 +633,8 @@ export default function App() {
                   exercises={exercisesList} 
                   onAddExercise={handleAddExercise}
                   onDeleteExercise={handleDeleteExercise}
+                  onUpdateExerciseNotes={handleUpdateExerciseNotes}
+                  sessions={sessionsList}
                 />
               )}
             </Tab.Screen>
@@ -567,6 +643,8 @@ export default function App() {
               {() => (
                 <MuscleMapScreen
                   weeklyMuscleSets={weeklyMuscleSets}
+                  sessions={sessionsList}
+                  exercisesList={exercisesList}
                 />
               )}
             </Tab.Screen>
