@@ -45,17 +45,308 @@ export default function App() {
     Inter_700Bold,
   });
 
+  const STORAGE_KEY = 'strongern_app_data_v1';
+  const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
+
+  // Dynamic States
+  const [user, setUser] = React.useState(mockUser);
+  const [sessionsList, setSessionsList] = React.useState(mockSessions);
+  const [templatesList, setTemplatesList] = React.useState(mockTemplates);
+  const [exercisesList, setExercisesList] = React.useState(mockExercises);
+  const [primaryMetricsList, setPrimaryMetricsList] = React.useState(mockPrimaryMetrics);
+  const [bodyPartMetricsList, setBodyPartMetricsList] = React.useState(mockBodyPartMetrics);
+  const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(true);
+  const [googleUser, setGoogleUser] = React.useState<{ email: string; name: string } | null>(null);
+  const [animationSpeed, setAnimationSpeed] = React.useState(1);
+
+  // Dynamically calculate weekly chart data based on sessionsList
+  const dynamicWeeklyChartData = React.useMemo(() => {
+    const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
+    const oneDay = 24 * 60 * 60 * 1000;
+    
+    for (let i = 7; i >= 0; i--) {
+      const start = new Date(Date.now() - i * 7 * oneDay);
+      const day = start.getDay();
+      start.setTime(start.getTime() - day * oneDay);
+      start.setHours(0, 0, 0, 0);
+      
+      weeks.push({
+        start,
+        end: new Date(start.getTime() + 7 * oneDay - 1),
+        label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        count: 0,
+      });
+    }
+    
+    sessionsList.forEach(session => {
+      const sessDate = new Date(session.datetime);
+      weeks.forEach(w => {
+        if (sessDate >= w.start && sessDate <= w.end) {
+          w.count++;
+        }
+      });
+    });
+    
+    return weeks.map(w => ({ weekLabel: w.label, count: w.count }));
+  }, [sessionsList]);
+
+  // Load from local storage on mount
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.user) setUser(parsed.user);
+          if (parsed.sessionsList) {
+            setSessionsList(parsed.sessionsList.map((s: any) => ({
+              ...s,
+              datetime: new Date(s.datetime)
+            })));
+          }
+          if (parsed.templatesList) {
+            setTemplatesList(parsed.templatesList.map((t: any) => ({
+              ...t,
+              lastUsed: new Date(t.lastUsed)
+            })));
+          }
+          if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
+          if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
+          if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+          if (parsed.isAutoTimerEnabled !== undefined) setIsAutoTimerEnabled(parsed.isAutoTimerEnabled);
+          if (parsed.googleUser !== undefined) setGoogleUser(parsed.googleUser);
+          if (parsed.animationSpeed !== undefined) setAnimationSpeed(parsed.animationSpeed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading persisted state', e);
+    }
+  }, []);
+
+  // Save to local storage on state changes
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const data = {
+          user: {
+            ...user,
+            totalWorkouts: sessionsList.length,
+          },
+          sessionsList,
+          templatesList,
+          exercisesList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+          isAutoTimerEnabled,
+          googleUser,
+          animationSpeed,
+        };
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    } catch (e) {
+      console.warn('Error saving state to storage', e);
+    }
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed]);
+
+  // Google Sync & Simulated Cloud Backup logic
+  const handleGoogleLogin = (email: string, name: string) => {
+    setGoogleUser({ email, name });
+    setUser(prev => ({ ...prev, name }));
+    
+    // Check if cloud backup exists and auto-restore it!
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const backupStr = window.localStorage.getItem(`${CLOUD_PREFIX}${email}`);
+        if (backupStr) {
+          const parsed = JSON.parse(backupStr);
+          if (parsed.user) setUser(parsed.user);
+          if (parsed.sessionsList) {
+            setSessionsList(parsed.sessionsList.map((s: any) => ({
+              ...s,
+              datetime: new Date(s.datetime)
+            })));
+          }
+          if (parsed.templatesList) {
+            setTemplatesList(parsed.templatesList.map((t: any) => ({
+              ...t,
+              lastUsed: new Date(t.lastUsed)
+            })));
+          }
+          if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
+          if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
+          if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+          return true; // Data loaded
+        }
+      }
+    } catch (e) {
+      console.warn('Error auto-restoring backup', e);
+    }
+    return false;
+  };
+
+  const handleGoogleLogout = () => {
+    setGoogleUser(null);
+  };
+
+  const handleCloudSync = () => {
+    if (!googleUser) return false;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const data = {
+          user,
+          sessionsList,
+          templatesList,
+          exercisesList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+          isAutoTimerEnabled,
+          timestamp: new Date().toISOString(),
+        };
+        window.localStorage.setItem(`${CLOUD_PREFIX}${googleUser.email}`, JSON.stringify(data));
+        return true;
+      }
+    } catch (e) {
+      console.warn('Error saving cloud backup', e);
+    }
+    return false;
+  };
+
+  // Export/Import backups
+  const handleExportBackup = (): string => {
+    const data = {
+      user,
+      sessionsList,
+      templatesList,
+      exercisesList,
+      primaryMetricsList,
+      bodyPartMetricsList,
+      isAutoTimerEnabled,
+      exportTimestamp: new Date().toISOString(),
+    };
+    return JSON.stringify(data);
+  };
+
+  const handleImportBackup = (backupStr: string): boolean => {
+    try {
+      const parsed = JSON.parse(backupStr);
+      if (parsed.user) setUser(parsed.user);
+      if (parsed.sessionsList) {
+        setSessionsList(parsed.sessionsList.map((s: any) => ({
+          ...s,
+          datetime: new Date(s.datetime)
+        })));
+      }
+      if (parsed.templatesList) {
+        setTemplatesList(parsed.templatesList.map((t: any) => ({
+          ...t,
+          lastUsed: new Date(t.lastUsed)
+        })));
+      }
+      if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
+      if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
+      if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+      return true;
+    } catch (e) {
+      console.warn('Error importing backup', e);
+      return false;
+    }
+  };
+
+  const handleExportCSV = (): string => {
+    let csv = 'Session ID,Date,Title,Duration (min),Volume (kg),PRs,Exercise Name,Sets,Best Weight (kg),Best Reps\n';
+    sessionsList.forEach(session => {
+      const dateStr = new Date(session.datetime).toISOString();
+      session.exercises.forEach(ex => {
+        const cleanTitle = session.title.replace(/"/g, '""');
+        const cleanExName = ex.name.replace(/"/g, '""');
+        csv += `"${session.id}","${dateStr}","${cleanTitle}",${session.durationMinutes},${session.totalVolumeKg},${session.prs},"${cleanExName}",${ex.sets},${ex.bestWeight},${ex.bestReps}\n`;
+      });
+    });
+    return csv;
+  };
+
+  // Dynamic state modifiers
+  const handleAddExercise = (name: string, muscleGroup: string) => {
+    const newEx = {
+      id: `ex-custom-${Date.now()}`,
+      name,
+      muscleGroup,
+      weeklySets: 0,
+    };
+    setExercisesList(prev => [newEx, ...prev]);
+  };
+
+  const handleDeleteExercise = (id: string) => {
+    setExercisesList(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleAddTemplate = (name: string, exerciseNames: string[]) => {
+    const newTpl = {
+      id: `tpl-custom-${Date.now()}`,
+      name,
+      exercises: exerciseNames,
+      lastUsed: new Date(),
+    };
+    setTemplatesList(prev => [newTpl, ...prev]);
+  };
+
+  const handleDeleteTemplate = (id: string) => {
+    setTemplatesList(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleUpdateTemplate = (id: string, name: string, exerciseNames: string[]) => {
+    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames } : t));
+  };
+
+  const handleRecordMetric = (id: string, newValue: string) => {
+    setPrimaryMetricsList(prev => prev.map(m => m.id === id ? { ...m, lastValue: newValue } : m));
+    setBodyPartMetricsList(prev => prev.map(m => m.id === id ? { ...m, lastValue: newValue } : m));
+  };
+
+  const handleAddMetric = (label: string, isPrimary: boolean) => {
+    const newMetric = {
+      id: `metric-custom-${Date.now()}`,
+      label,
+      lastValue: undefined,
+    };
+    if (isPrimary) {
+      setPrimaryMetricsList(prev => [...prev, newMetric]);
+    } else {
+      setBodyPartMetricsList(prev => [...prev, newMetric]);
+    }
+  };
+
+  const handleUpdateUser = (name: string) => {
+    setUser(prev => ({ ...prev, name }));
+  };
+
+  const handleWipeAllData = () => {
+    setUser({
+      name: 'Alex Morgan',
+      totalWorkouts: 0,
+      isPro: false,
+    });
+    setSessionsList([]);
+    setTemplatesList([]);
+    setGoogleUser(null);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
 
   // Compute weekly muscle sets from sessions in the last 7 days
   const weeklyMuscleSets = React.useMemo(() => {
-    // Exercise name -> muscle group mapping from mockExercises
     const exerciseMuscleMap: Record<string, string> = {};
-    mockExercises.forEach(ex => {
+    exercisesList.forEach(ex => {
       exerciseMuscleMap[ex.name.toLowerCase()] = ex.muscleGroup;
     });
-    // Simple heuristic for exercises not in the list
     const nameToMuscle = (name: string): string => {
       const n = name.toLowerCase();
       if (n.includes('squat') || n.includes('leg press') || n.includes('quad')) return 'Quads';
@@ -72,7 +363,7 @@ export default function App() {
     };
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const sets: Record<string, number> = {};
-    mockSessions.forEach(session => {
+    sessionsList.forEach(session => {
       if (new Date(session.datetime) < cutoff) return;
       session.exercises.forEach(ex => {
         const muscle = nameToMuscle(ex.name);
@@ -80,7 +371,7 @@ export default function App() {
       });
     });
     return sets;
-  }, []);
+  }, [sessionsList, exercisesList]);
 
   // Active workout management states
   const [isWorkoutActive, setIsWorkoutActive] = React.useState(true);
@@ -95,12 +386,6 @@ export default function App() {
     name: string;
   } | null>(null);
 
-  // History list state to dynamically include completed sessions!
-  const [sessionsList, setSessionsList] = React.useState(() => mockSessions);
-
-  // Global Rest Timer settings
-  const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(true);
-
   const handleStartWorkout = (name: string, exerciseNames: string[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
@@ -111,7 +396,7 @@ export default function App() {
       let bestReps = 10;
       let sets = 3;
 
-      const previousSession = mockSessions.find(s => 
+      const previousSession = sessionsList.find(s => 
         s.exercises.some(e => e.name.toLowerCase() === exName.toLowerCase())
       );
       if (previousSession) {
@@ -139,7 +424,6 @@ export default function App() {
   };
 
   const handleFinishWorkout = (summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
-    // Save to local sessions history state!
     const newSession = {
       id: `session-new-${Date.now()}`,
       title: workoutName,
@@ -163,6 +447,32 @@ export default function App() {
 
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
+
+    // Auto backup if google connected
+    if (googleUser) {
+      setTimeout(() => {
+        const backupData = {
+          user: {
+            ...user,
+            totalWorkouts: sessionsList.length + 1,
+          },
+          sessionsList: [newSession, ...sessionsList],
+          templatesList,
+          exercisesList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+          isAutoTimerEnabled,
+          timestamp: new Date().toISOString(),
+        };
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(`${CLOUD_PREFIX}${googleUser.email}`, JSON.stringify(backupData));
+          }
+        } catch (e) {
+          console.warn('Auto sync failed', e);
+        }
+      }, 500);
+    }
   };
 
   const handleDiscardWorkout = () => {
@@ -202,11 +512,26 @@ export default function App() {
             <Tab.Screen name="Profile">
               {() => (
                 <ProfileScreen
-                  user={mockUser}
-                  weeklyChartData={mockChartData}
+                  user={{
+                    ...user,
+                    totalWorkouts: sessionsList.length,
+                  }}
+                  weeklyChartData={dynamicWeeklyChartData}
+                  sessions={sessionsList}
                   isAutoTimerEnabled={isAutoTimerEnabled}
                   setIsAutoTimerEnabled={setIsAutoTimerEnabled}
                   onMeasurePress={() => setIsMeasureModalVisible(true)}
+                  googleUser={googleUser}
+                  onGoogleLogin={handleGoogleLogin}
+                  onGoogleLogout={handleGoogleLogout}
+                  onCloudSync={handleCloudSync}
+                  onUpdateUser={handleUpdateUser}
+                  onImportBackup={handleImportBackup}
+                  onExportBackup={handleExportBackup}
+                  onExportCSV={handleExportCSV}
+                  animationSpeed={animationSpeed}
+                  setAnimationSpeed={setAnimationSpeed}
+                  onWipeAllData={handleWipeAllData}
                 />
               )}
             </Tab.Screen>
@@ -218,14 +543,24 @@ export default function App() {
             <Tab.Screen name="Workout">
               {() => (
                 <WorkoutScreen 
-                  templates={mockTemplates} 
+                  templates={templatesList} 
                   onStartWorkout={handleStartWorkout}
+                  onAddTemplate={handleAddTemplate}
+                  onDeleteTemplate={handleDeleteTemplate}
+                  onUpdateTemplate={handleUpdateTemplate}
+                  exercises={exercisesList}
                 />
               )}
             </Tab.Screen>
 
             <Tab.Screen name="Exercises">
-              {() => <ExercisesScreen exercises={mockExercises} />}
+              {() => (
+                <ExercisesScreen 
+                  exercises={exercisesList} 
+                  onAddExercise={handleAddExercise}
+                  onDeleteExercise={handleDeleteExercise}
+                />
+              )}
             </Tab.Screen>
 
             <Tab.Screen name="Muscles">
@@ -247,6 +582,8 @@ export default function App() {
             onClose={() => setIsWorkoutModalVisible(false)}
             onFinish={handleFinishWorkout}
             onDiscard={handleDiscardWorkout}
+            exerciseLibrary={exercisesList}
+            onUpdateActiveExercises={setWorkoutExercises}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}
@@ -268,8 +605,10 @@ export default function App() {
                 </Pressable>
               </View>
               <MeasureScreen
-                primaryMetrics={mockPrimaryMetrics}
-                bodyPartMetrics={mockBodyPartMetrics}
+                primaryMetrics={primaryMetricsList}
+                bodyPartMetrics={bodyPartMetricsList}
+                onRecordMetric={handleRecordMetric}
+                onAddMetric={handleAddMetric}
               />
             </View>
           </Modal>

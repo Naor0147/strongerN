@@ -10,7 +10,7 @@ interface IconButtonProps {
   size?:              number;
   color?:             string;
   onPress?:           () => void;
-  accessibilityLabel: string;
+  accessibilityLabel?: string;
   style?:             ViewStyle;
   testID?:            string;
 }
@@ -28,7 +28,7 @@ const IconButton: React.FC<IconButtonProps> = ({
     onPress={onPress}
     ripple={rippleTokens.borderless}
     style={[styles.btn, style]}
-    accessibilityLabel={accessibilityLabel}
+    accessibilityLabel={accessibilityLabel || `${name} button`}
     testID={testID}
   >
     <Ionicons name={name} size={size} color={color} />

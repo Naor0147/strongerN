@@ -1,6 +1,6 @@
 // components/layout/ActiveWorkoutModal.tsx
 // Premium full-featured active workout tracking screen (Layout Optimized)
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,13 @@ import {
   Alert,
   Animated,
   Easing,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
+import IconButton from '../ui/IconButton';
 
 interface SetRecord {
   id:        string;
@@ -41,6 +43,8 @@ interface ActiveWorkoutModalProps {
   onClose:            () => void;
   onFinish:           (summary: { totalVolume: number; totalSets: number; durationMin: number }) => void;
   onDiscard:          () => void;
+  exerciseLibrary?:   any[];
+  onUpdateActiveExercises?: (exercises: any[]) => void;
 }
 
 function formatElapsed(startTime: Date): string {
@@ -60,6 +64,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onFinish,
   onDiscard,
+  exerciseLibrary = [],
+  onUpdateActiveExercises,
 }) => {
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
@@ -69,23 +75,54 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
 
-  // Sync props to state when modal becomes visible
+  // Exercise library selector modal states
+  const [isLibraryVisible, setIsLibraryVisible] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [activeExerciseMenuIndex, setActiveExerciseMenuIndex] = useState<number | null>(null);
+  const [isExMenuVisible, setIsExMenuVisible] = useState(false);
+  const [isReplaceMode, setIsReplaceMode] = useState(false);
+
+  const lastStartTimeRef = useRef<string | null>(null);
+
+  // Sync props to state when modal becomes visible or when a new workout session actually starts
   useEffect(() => {
     if (visible && exercises.length > 0) {
-      const initial = exercises.map((ex, exIdx) => ({
-        name: ex.name,
-        sets: Array.from({ length: ex.sets }).map((_, setIdx) => ({
-          id:        `set-${exIdx}-${setIdx}`,
-          weight:    ex.bestWeight.toString(),
-          reps:      ex.bestReps.toString(),
-          completed: false,
-        })),
-      }));
-      setActiveExercises(initial);
-      setWorkoutFinished(false);
-      setIsTimerActive(false); // Reset timer when modal starts
+      const startKey = startTime.toISOString();
+      const isNewWorkout = lastStartTimeRef.current !== startKey;
+
+      if (isNewWorkout || activeExercises.length === 0) {
+        lastStartTimeRef.current = startKey;
+        const initial = exercises.map((ex, exIdx) => {
+          const setsCount = typeof ex.sets === 'number' ? ex.sets : 3;
+          return {
+            name: ex.name,
+            sets: Array.from({ length: setsCount }).map((_, setIdx) => ({
+              id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
+              weight:    ex.bestWeight.toString(),
+              reps:      ex.bestReps.toString(),
+              completed: false,
+            })),
+          };
+        });
+        setActiveExercises(initial);
+        setWorkoutFinished(false);
+        setIsTimerActive(false);
+      }
     }
-  }, [visible, exercises]);
+  }, [visible, startTime]);
+
+  // Sync active exercises back to parent App state so they are stored
+  useEffect(() => {
+    if (onUpdateActiveExercises && activeExercises.length > 0) {
+      const mapped = activeExercises.map(ex => ({
+        name: ex.name,
+        sets: ex.sets.length,
+        bestWeight: Math.max(...ex.sets.map(s => parseFloat(s.weight) || 0), 0),
+        bestReps: Math.max(...ex.sets.map(s => parseInt(s.reps, 10) || 0), 0),
+      }));
+      onUpdateActiveExercises(mapped);
+    }
+  }, [activeExercises]);
 
   // Live timer interval
   useEffect(() => {
@@ -114,31 +151,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => clearInterval(timerId);
   }, [isTimerActive, restTimeRemaining]);
 
-  // Pulsing active green dot (reserved for header if ever needed, currently unused)
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!visible) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue:         0.2,
-          duration:        800,
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        }),
-        Animated.timing(pulseAnim, {
-          toValue:         1,
-          duration:        800,
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [visible, pulseAnim]);
-
-  // Pulsing timer icon when rest timer is active
   const timerPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!isTimerActive) return;
@@ -171,7 +183,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
       // Auto Timer Trigger: when checked active (not unchecked)
       if (targetSet.completed && isAutoTimerEnabled) {
-        setRestTimeRemaining(90); // 90 seconds (1m 30s) standard rest time
+        setRestTimeRemaining(90); // 90 seconds rest time
         setIsTimerActive(true);
       }
 
@@ -271,11 +283,84 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     );
   };
 
+  // Exercise menu press
+  const handleExerciseMenuPress = (exIdx: number) => {
+    setActiveExerciseMenuIndex(exIdx);
+    setIsExMenuVisible(true);
+  };
+
+  const handleRemoveExercise = () => {
+    if (activeExerciseMenuIndex !== null) {
+      Alert.alert(
+        'Remove Exercise',
+        `Are you sure you want to remove "${activeExercises[activeExerciseMenuIndex].name}" from your active session?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => {
+              setActiveExercises(prev => prev.filter((_, idx) => idx !== activeExerciseMenuIndex));
+              setIsExMenuVisible(false);
+              setActiveExerciseMenuIndex(null);
+            }
+          }
+        ]
+      );
+    }
+  };
+
+  const handleOpenReplace = () => {
+    setIsReplaceMode(true);
+    setLibrarySearch('');
+    setIsExMenuVisible(false);
+    setIsLibraryVisible(true);
+  };
+
+  const handleOpenAddExercise = () => {
+    setIsReplaceMode(false);
+    setLibrarySearch('');
+    setIsLibraryVisible(true);
+  };
+
+  const handleSelectLibraryExercise = (exName: string) => {
+    if (isReplaceMode && activeExerciseMenuIndex !== null) {
+      setActiveExercises(prev => prev.map((ex, idx) => {
+        if (idx === activeExerciseMenuIndex) {
+          return {
+            name: exName,
+            sets: ex.sets.map(s => ({ ...s, completed: false }))
+          };
+        }
+        return ex;
+      }));
+      setActiveExerciseMenuIndex(null);
+    } else {
+      // Add new exercise
+      const newActive = {
+        name: exName,
+        sets: [
+          { id: `set-${Date.now()}-0`, weight: '60', reps: '10', completed: false },
+          { id: `set-${Date.now()}-1`, weight: '60', reps: '10', completed: false },
+          { id: `set-${Date.now()}-2`, weight: '60', reps: '10', completed: false },
+        ]
+      };
+      setActiveExercises(prev => [...prev, newActive]);
+    }
+    setIsLibraryVisible(false);
+  };
+
+  // Search filtered library exercises
+  const filteredLibrary = useMemo(() => {
+    if (!librarySearch.trim()) return exerciseLibrary;
+    return exerciseLibrary.filter(ex => ex.name.toLowerCase().includes(librarySearch.toLowerCase().trim()));
+  }, [exerciseLibrary, librarySearch]);
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={false} // Pure full-screen
+      transparent={false}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
@@ -286,7 +371,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           <View style={styles.modalContainer}>
             {/* ── Header ────────────────────────────────────────── */}
             <View style={styles.header}>
-              {/* Left Section: Chevron + Stopwatch */}
               <View style={styles.headerLeft}>
                 <Pressable
                   onPress={onClose}
@@ -302,7 +386,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     if (isTimerActive) {
                       setIsTimerActive(false);
                     } else {
-                      setRestTimeRemaining(90); // default 90s
+                      setRestTimeRemaining(90);
                       setIsTimerActive(true);
                     }
                   }}
@@ -314,19 +398,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               </View>
 
-              {/* Center Section: Perfectly Centered Timer */}
-              <View style={styles.headerCenter}>
+              <View style={[styles.headerCenter, { pointerEvents: 'none' }]}>
                 <Text style={styles.headerTimerText}>{elapsed}</Text>
               </View>
 
-              {/* Right Section: Plain Text Uppercase FINISH Button */}
               <View style={styles.headerRight}>
                 <Pressable
                   onPress={handleFinishPress}
-                  style={styles.headerFinishTextBtn}
-                  android_ripple={rippleTokens.borderless}
+                  style={styles.headerFinishBtn}
+                  android_ripple={rippleTokens.accent}
+                  accessibilityLabel="Finish workout"
                 >
-                  <Text style={styles.headerFinishTextBtnText}>FINISH</Text>
+                  <Ionicons name="checkmark" size={14} color="#0D0F14" />
+                  <Text style={styles.headerFinishBtnText}>FINISH</Text>
                 </Pressable>
               </View>
             </View>
@@ -336,10 +420,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               style={styles.scroll}
               contentContainerStyle={[
                 styles.scrollContent,
-                isTimerActive ? { paddingBottom: spacing.xxxl * 2.5 } : { paddingBottom: spacing.xxl }
+                isTimerActive ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl }
               ]}
               showsVerticalScrollIndicator={false}
               overScrollMode="never"
+              keyboardShouldPersistTaps="handled"
             >
               {/* Workout Title Section */}
               <View style={styles.workoutTitleSection}>
@@ -378,10 +463,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               ) : (
                 <>
                   {activeExercises.map((exercise, exIdx) => (
-                    <View key={exercise.name} style={styles.exerciseCard}>
+                    <View key={exercise.name + '-' + exIdx} style={styles.exerciseCard}>
                       <View style={styles.exerciseHeader}>
                         <Text style={styles.exerciseName}>{exercise.name}</Text>
-                        <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                        <Pressable
+                          onPress={() => handleExerciseMenuPress(exIdx)}
+                          style={styles.exEllipsis}
+                          android_ripple={rippleTokens.borderless}
+                        >
+                          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                        </Pressable>
                       </View>
 
                       {/* Sets Column Headers */}
@@ -405,6 +496,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           <Pressable
                             style={[styles.colSet, styles.setNumCol]}
                             onLongPress={() => deleteSet(exIdx, setIdx)}
+                            accessibilityLabel={`Long press to delete set ${setIdx + 1}`}
                           >
                             <Text
                               style={[
@@ -481,7 +573,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     </View>
                   ))}
 
-                  {/* Discard Workout button at the bottom of the ScrollView */}
+                  {/* Add Exercise dynamically to active workout */}
+                  <Pressable
+                    style={styles.scrollAddExBtn}
+                    onPress={handleOpenAddExercise}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color={colors.accent} style={{ marginRight: spacing.xs }} />
+                    <Text style={styles.scrollAddExText}>ADD EXERCISE</Text>
+                  </Pressable>
+
+                  {/* Discard Workout button */}
                   <Pressable
                     style={styles.scrollDiscardBtn}
                     onPress={handleDiscardPress}
@@ -512,6 +614,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <View style={styles.timerWidgetRight}>
                   <Pressable
                     style={styles.timerWidgetBtn}
+                    onPress={() => setRestTimeRemaining(prev => Math.max(0, prev - 30))}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={styles.timerWidgetBtnText}>-30s</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.timerWidgetBtn}
                     onPress={() => setRestTimeRemaining(prev => prev + 30)}
                     android_ripple={rippleTokens.surface}
                   >
@@ -527,6 +637,105 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   </Pressable>
                 </View>
               </View>
+            )}
+
+            {/* Modal A: Exercise Library Picker */}
+            <Modal
+              visible={isLibraryVisible}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setIsLibraryVisible(false)}
+            >
+              <View style={styles.backdrop}>
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>
+                      {isReplaceMode ? 'REPLACE EXERCISE' : 'ADD EXERCISE'}
+                    </Text>
+                    <IconButton
+                      name="close"
+                      size={22}
+                      color={colors.textSecondary}
+                      onPress={() => setIsLibraryVisible(false)}
+                    />
+                  </View>
+
+                  <View style={styles.searchBarContainer}>
+                    <Ionicons name="search" size={16} color={colors.textSecondary} />
+                    <TextInput
+                      style={styles.librarySearchInput}
+                      placeholder="Search movements..."
+                      placeholderTextColor={colors.textMuted}
+                      value={librarySearch}
+                      onChangeText={setLibrarySearch}
+                      keyboardAppearance="dark"
+                    />
+                  </View>
+
+                  <FlatList
+                    data={filteredLibrary}
+                    keyExtractor={item => item.id}
+                    style={styles.libraryList}
+                    renderItem={({ item }) => (
+                      <Pressable
+                        onPress={() => handleSelectLibraryExercise(item.name)}
+                        style={styles.libraryItem}
+                        android_ripple={rippleTokens.surface}
+                      >
+                        <Text style={styles.libraryItemText}>{item.name}</Text>
+                        <Text style={styles.libraryMuscleText}>{item.muscleGroup.toUpperCase()}</Text>
+                      </Pressable>
+                    )}
+                  />
+                </View>
+              </View>
+            </Modal>
+
+            {/* Modal B: Ellipsis Actions Context Sheet for Active Exercise */}
+            {isExMenuVisible && activeExerciseMenuIndex !== null && (
+              <Modal
+                visible={isExMenuVisible}
+                animationType="fade"
+                transparent
+                onRequestClose={() => setIsExMenuVisible(false)}
+              >
+                <Pressable
+                  style={styles.sheetBackdrop}
+                  onPress={() => setIsExMenuVisible(false)}
+                >
+                  <View style={styles.sheetCard}>
+                    <Text style={styles.sheetTitle}>
+                      {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
+                    </Text>
+                    
+                    <Pressable
+                      style={styles.sheetItem}
+                      onPress={handleOpenReplace}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={20} color={colors.accent} />
+                      <Text style={styles.sheetItemText}>Replace Exercise</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.sheetItem}
+                      onPress={handleRemoveExercise}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
+                      <Text style={[styles.sheetItemText, { color: colors.error }]}>Remove Exercise</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.sheetItem, styles.sheetCancel]}
+                      onPress={() => setIsExMenuVisible(false)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={styles.sheetCancelText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              </Modal>
             )}
           </View>
         </SafeAreaView>
@@ -547,7 +756,6 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex:            1,
     backgroundColor: colors.bg,
-    overflow:        'hidden',
   },
 
   // Header
@@ -598,15 +806,21 @@ const styles = StyleSheet.create({
   headerRight: {
     alignItems: 'flex-end',
   },
-  headerFinishTextBtn: {
-    paddingVertical:   spacing.xs,
-    paddingHorizontal: spacing.xs,
+  headerFinishBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    columnGap:         6,
+    backgroundColor:   colors.accent,
+    borderRadius:      radius.full,
+    paddingVertical:   7,
+    paddingHorizontal: spacing.md,
+    ...( shadow.accentGlow as object),
   },
-  headerFinishTextBtnText: {
-    color:         colors.accent,
-    fontSize:      font.sizes.md,
+  headerFinishBtnText: {
+    color:         '#0D0F14',
+    fontSize:      font.sizes.sm,
     fontFamily:    font.bold,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
 
   // Main Scroll View Workout Title Section
@@ -666,6 +880,10 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
   },
+  exEllipsis: {
+    padding: spacing.xs,
+    marginRight: -4,
+  },
 
   // Table Headers
   tableHeader: {
@@ -706,7 +924,8 @@ const styles = StyleSheet.create({
     marginBottom:    4,
   },
   setRowCompleted: {
-    backgroundColor: colors.successGlow + '0F', // very subtle green overlay
+    backgroundColor: 'rgba(34, 217, 122, 0.03)',
+    opacity: 0.5,
   },
   setNumCol: {
     height:         32,
@@ -734,12 +953,14 @@ const styles = StyleSheet.create({
     padding:         0,
   },
   inputCompleted: {
-    backgroundColor: 'transparent',
-    borderColor:     'transparent',
-    color:           colors.success,
+    backgroundColor: 'rgba(22, 27, 36, 0.3)',
+    borderColor:     colors.border,
+    color:           colors.textMuted,
+    textDecorationLine: 'line-through',
   },
   textCompleted: {
-    color: colors.success,
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
   },
 
   // Check Button
@@ -780,6 +1001,27 @@ const styles = StyleSheet.create({
     fontFamily: font.semibold,
   },
 
+  // Add Exercise Button
+  scrollAddExBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    backgroundColor: colors.bg,
+    borderColor:     colors.accent + '60',
+    borderWidth:     1,
+    borderStyle:     'dashed',
+    borderRadius:    radius.md,
+    paddingVertical: spacing.md,
+    marginTop:       spacing.sm,
+    marginBottom:    spacing.sm,
+  },
+  scrollAddExText: {
+    color:         colors.accent,
+    fontSize:      font.sizes.sm,
+    fontFamily:    font.bold,
+    letterSpacing: 0.8,
+  },
+
   // Scroll Discard Button
   scrollDiscardBtn: {
     flexDirection:   'row',
@@ -790,7 +1032,6 @@ const styles = StyleSheet.create({
     borderWidth:     1,
     borderRadius:    radius.md,
     paddingVertical: spacing.md,
-    marginTop:       spacing.sm,
     marginBottom:    spacing.xl,
   },
   scrollDiscardText: {
@@ -803,7 +1044,7 @@ const styles = StyleSheet.create({
   // Rest Timer Widget
   timerWidget: {
     position:        'absolute',
-    bottom:          24, // Floating beautifully near the bottom of the device screen
+    bottom:          24,
     left:            spacing.lg,
     right:           spacing.lg,
     backgroundColor: colors.surfaceHigh,
@@ -851,6 +1092,129 @@ const styles = StyleSheet.create({
     color:      colors.accent,
     fontSize:   font.sizes.xs,
     fontFamily: font.bold,
+  },
+
+  // Exercise library picker
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 7, 10, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: 20,
+    maxHeight: '80%',
+    ...(shadow.lg as object),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: spacing.md,
+    marginBottom: spacing.md,
+  },
+  cardTitle: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    height: 40,
+    paddingHorizontal: spacing.md,
+    columnGap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  librarySearchInput: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.medium,
+    height: '100%',
+    padding: 0,
+  },
+  libraryList: {
+    flex: 1,
+  },
+  libraryItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  libraryItemText: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.medium,
+  },
+  libraryMuscleText: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontFamily: font.bold,
+  },
+
+  // Ellipsis sheet
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 7, 10, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderTopWidth: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: 24,
+    rowGap: spacing.md,
+  },
+  sheetTitle: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  sheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  sheetItemText: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.semibold,
+  },
+  sheetCancel: {
+    marginTop: spacing.sm,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingTop: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCancelText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.base,
+    fontFamily: font.semibold,
   },
 });
 

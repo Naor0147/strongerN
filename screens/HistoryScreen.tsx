@@ -1,19 +1,24 @@
 // screens/HistoryScreen.tsx
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   View,
   Text,
   SectionList,
   StyleSheet,
+  TextInput,
+  Modal,
+  Pressable,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, font, spacing, radius } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { WorkoutSession, ExerciseSet } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card         from '../components/ui/Card';
+import IconButton   from '../components/ui/IconButton';
 
 interface HistoryScreenProps {
   sessions: WorkoutSession[];
@@ -129,9 +134,41 @@ const SessionCard: React.FC<{ session: WorkoutSession }> = React.memo(({ session
 
 // ─── Screen ────────────────────────────────────────────────────────
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<number | null>(null);
+
+  // 1. Search filter
+  const filteredSessions = useMemo(() => {
+    let result = sessions;
+
+    // Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        s =>
+          s.title.toLowerCase().includes(q) ||
+          (s.comment && s.comment.toLowerCase().includes(q)) ||
+          s.exercises.some(ex => ex.name.toLowerCase().includes(q))
+      );
+    }
+
+    // Calendar day filter
+    if (selectedCalendarDate !== null) {
+      result = result.filter(s => {
+        const d = new Date(s.datetime);
+        return d.getDate() === selectedCalendarDate && d.getMonth() === new Date().getMonth();
+      });
+    }
+
+    return result;
+  }, [sessions, searchQuery, selectedCalendarDate]);
+
+  // 2. Sections grouping
   const sections: SectionData[] = useMemo(() => {
     const map    = new Map<string, WorkoutSession[]>();
-    const sorted = [...sessions].sort((a, b) => b.datetime.getTime() - a.datetime.getTime());
+    const sorted = [...filteredSessions].sort((a, b) => b.datetime.getTime() - a.datetime.getTime());
     for (const s of sorted) {
       const key = formatMonthKey(s.datetime);
       if (!map.has(key)) map.set(key, []);
@@ -142,7 +179,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
       count: data.length,
       data,
     }));
-  }, [sessions]);
+  }, [filteredSessions]);
 
   const renderItem = useCallback(
     ({ item }: { item: WorkoutSession }) => <SessionCard session={item} />,
@@ -164,16 +201,167 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
 
   const keyExtractor = useCallback((item: WorkoutSession) => item.id, []);
 
+  const handleToggleSearch = () => {
+    setIsSearching(!isSearching);
+    if (isSearching) {
+      setSearchQuery('');
+    }
+  };
+
+  const handleToggleCalendar = () => {
+    setIsCalendarVisible(!isCalendarVisible);
+    setSelectedCalendarDate(null);
+  };
+
+  // Generate Calendar Days for current month
+  const calendarDays = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    // First day of month
+    const firstDay = new Date(year, month, 1).getDay();
+    // Total days in month
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    // Map of days where user had workouts
+    const workoutDays = new Set<number>();
+    sessions.forEach(s => {
+      const d = new Date(s.datetime);
+      if (d.getMonth() === month && d.getFullYear() === year) {
+        workoutDays.add(d.getDate());
+      }
+    });
+
+    const daysList = [];
+    // Padding for empty days at start of week (Sunday is 0)
+    for (let i = 0; i < firstDay; i++) {
+      daysList.push({ day: null, hasWorkout: false });
+    }
+    // Days of the month
+    for (let i = 1; i <= totalDays; i++) {
+      daysList.push({
+        day: i,
+        hasWorkout: workoutDays.has(i)
+      });
+    }
+
+    return daysList;
+  }, [sessions]);
+
+  const monthName = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }, []);
+
+  const headerActions = useMemo(() => [
+    {
+      icon: isCalendarVisible ? 'calendar' as const : 'calendar-outline' as const,
+      label: 'Calendar view',
+      onPress: handleToggleCalendar,
+      color: isCalendarVisible ? colors.highlight : colors.textPrimary
+    },
+    {
+      icon: isSearching ? 'close-outline' as const : 'search-outline' as const,
+      label: 'Search history',
+      onPress: handleToggleSearch,
+      color: isSearching ? colors.accent : colors.textPrimary
+    },
+  ], [isSearching, isCalendarVisible]);
+
+  const subtitle = useMemo(() => {
+    const isFiltered = searchQuery.trim() || selectedCalendarDate !== null;
+    return isFiltered
+      ? `Found ${filteredSessions.length} results`
+      : `${sessions.length} total sessions`;
+  }, [sessions.length, filteredSessions.length, searchQuery, selectedCalendarDate]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScreenHeader
         title="History"
-        actions={[
-          { icon: 'calendar-outline', label: 'Calendar view', testID: 'history.calendar' },
-          { icon: 'search-outline',   label: 'Search history', testID: 'history.search' },
-        ]}
+        subtitle={subtitle}
+        actions={headerActions}
         testID="history.header"
       />
+
+      {/* Modern inline search */}
+      {isSearching && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search routine, exercise, or comments..."
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardAppearance="dark"
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Premium custom inline calendar grid */}
+      {isCalendarVisible && (
+        <View style={styles.calendarContainer}>
+          <View style={styles.calendarHeader}>
+            <Text style={styles.calendarTitle}>{monthName.toUpperCase()}</Text>
+            {selectedCalendarDate !== null && (
+              <Pressable
+                onPress={() => setSelectedCalendarDate(null)}
+                style={styles.calResetBtn}
+              >
+                <Text style={styles.calResetBtnText}>Show All</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Weekday Labels */}
+          <View style={styles.weekdayRow}>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <Text key={i} style={styles.weekdayText}>{d}</Text>
+            ))}
+          </View>
+
+          {/* Calendar Grid */}
+          <View style={styles.daysGrid}>
+            {calendarDays.map((item, idx) => {
+              const isSelected = selectedCalendarDate === item.day;
+              return (
+                <Pressable
+                  key={idx}
+                  disabled={item.day === null}
+                  onPress={() => setSelectedCalendarDate(item.day)}
+                  style={[
+                    styles.dayCell,
+                    item.day !== null && styles.dayCellActive,
+                    isSelected && styles.dayCellSelected,
+                    item.hasWorkout && styles.dayCellWorkout
+                  ]}
+                >
+                  {item.day !== null && (
+                    <>
+                      <Text style={[
+                        styles.dayText,
+                        isSelected && styles.dayTextSelected,
+                        item.hasWorkout && styles.dayTextWorkout
+                      ]}>
+                        {item.day}
+                      </Text>
+                      {item.hasWorkout && !isSelected && (
+                        <View style={styles.calDotGlow} />
+                      )}
+                    </>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       <SectionList
         sections={sections}
         keyExtractor={keyExtractor}
@@ -199,6 +387,31 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.lg,
     paddingBottom:     spacing.xxxl,
+  },
+  searchContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom:     spacing.md,
+  },
+  searchBar: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    backgroundColor:   colors.surface,
+    borderRadius:      radius.md,
+    borderWidth:       1,
+    borderColor:       colors.border,
+    height:            44,
+    paddingHorizontal: spacing.md,
+  },
+  searchIcon: {
+    marginRight: spacing.sm,
+  },
+  searchInput: {
+    flex:        1,
+    color:       colors.textPrimary,
+    fontSize:    font.sizes.md,
+    fontFamily:  font.medium,
+    height:      '100%',
+    paddingVertical: 0,
   },
 
   // Month header
@@ -356,6 +569,100 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize:   font.sizes.xs,
     fontFamily: font.medium,
+  },
+
+  // Premium Calendar
+  calendarContainer: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    ...(shadow.card as object),
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  calendarTitle: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  calResetBtn: {
+    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderRadius: radius.xs,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surface2,
+  },
+  calResetBtnText: {
+    color: colors.accent,
+    fontSize: font.sizes.xs,
+    fontFamily: font.semibold,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: spacing.xs,
+  },
+  weekdayText: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontFamily: font.bold,
+    width: 32,
+    textAlign: 'center',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    rowGap: 8,
+  },
+  dayCell: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.xs,
+  },
+  dayCellActive: {
+    backgroundColor: colors.surface2,
+  },
+  dayCellSelected: {
+    backgroundColor: colors.accent,
+  },
+  dayCellWorkout: {
+    backgroundColor: colors.successGlow + '20',
+    borderColor: colors.success,
+    borderWidth: 1,
+  },
+  dayText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.medium,
+  },
+  dayTextSelected: {
+    color: colors.textInverse,
+    fontFamily: font.bold,
+  },
+  dayTextWorkout: {
+    color: colors.success,
+    fontFamily: font.bold,
+  },
+  calDotGlow: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.success,
+    position: 'absolute',
+    bottom: 2,
   },
 });
 

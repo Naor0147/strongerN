@@ -25,7 +25,7 @@ const Card: React.FC<CardProps> = ({
     switch (variant) {
       case 'active':    return { borderColor: colors.accent, borderWidth: 1.5 };
       case 'accent':    return { borderLeftColor: colors.accent, borderLeftWidth: 3 };
-      case 'highlight': return { borderLeftColor: colors.highlight, borderLeftWidth: 3 };
+      case 'highlight': return { borderLeftColor: colors.accent, borderLeftWidth: 3 };
       default:          return {};
     }
   })();

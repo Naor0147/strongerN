@@ -34,11 +34,15 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     [data]
   );
 
-  const animValues = useRef(data.map(() => new Animated.Value(0))).current;
+  const animValuesRef = useRef<Animated.Value[]>([]);
+  if (animValuesRef.current.length !== data.length) {
+    animValuesRef.current = data.map((_, i) => animValuesRef.current[i] ?? new Animated.Value(0));
+  }
+  const animValues = animValuesRef.current;
   const hasAnimated = useRef(false);
 
   const startAnimation = useCallback(() => {
-    if (hasAnimated.current || chartHeight === 0) return;
+    if (hasAnimated.current || chartHeight === 0 || animValues.length === 0) return;
     hasAnimated.current = true;
 
     Animated.stagger(
@@ -56,7 +60,10 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     ).start();
   }, [chartHeight, animValues]);
 
-  useEffect(() => { startAnimation(); }, [startAnimation]);
+  useEffect(() => {
+    hasAnimated.current = false;
+    startAnimation();
+  }, [data, startAnimation]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;

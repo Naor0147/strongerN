@@ -20,8 +20,8 @@ const Avatar: React.FC<AvatarProps> = ({
   style,
   testID,
 }) => {
-  const ringWidth = isPro ? 2.5 : 1.5;
-  const ringColor = isPro ? colors.gold : colors.border;
+  const ringWidth = 1.5;
+  const ringColor = colors.border;
   const ringSize  = size + ringWidth * 4;
 
   return (
@@ -34,9 +34,6 @@ const Avatar: React.FC<AvatarProps> = ({
           borderRadius: ringSize / 2,
           borderWidth:  ringWidth,
           borderColor:  ringColor,
-          ...(isPro
-            ? { shadowColor: colors.gold, shadowOpacity: 0.5, shadowRadius: 8, shadowOffset: { width: 0, height: 0 }, elevation: 8 }
-            : {}),
         },
         style,
       ]}

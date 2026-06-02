@@ -44,16 +44,16 @@ export const colors = {
 
   // Muscle group color coding (used in Exercises screen)
   muscle: {
-    chest:      '#F5504A',
-    back:       '#4F8EF7',
-    quads:      '#22D97A',
-    hamstrings: '#F5C842',
-    shoulders:  '#C35CFC',
-    biceps:     '#FC7C5C',
-    triceps:    '#5CFCE0',
-    glutes:     '#FC5CB8',
-    rearDelts:  '#5CB8FC',
-    default:    '#8B95A5',
+    chest:      '#4F8EF7', // Electric Blue (colors.accent)
+    back:       '#4F8EF7', // Electric Blue
+    shoulders:  '#4F8EF7', // Electric Blue
+    biceps:     '#4F8EF7', // Electric Blue
+    triceps:    '#4F8EF7', // Electric Blue
+    rearDelts:  '#4F8EF7', // Electric Blue
+    quads:      '#4F8EF7', // Electric Blue
+    hamstrings: '#4F8EF7', // Electric Blue
+    glutes:     '#4F8EF7', // Electric Blue
+    default:    '#3A4454', // Sleek dark slate
   },
 };
 
