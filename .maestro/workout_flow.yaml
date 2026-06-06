@@ -1,0 +1,50 @@
+appId: com.naor.strongern
+---
+# Reset app to a clean baseline state before starting test
+- clearState
+- launchApp
+
+# 1. Verify that the Main Workout tab loads correctly
+- assertVisible: "Start an empty workout"
+- assertVisible: "Templates"
+
+# 2. Check profile tab and sync simulated Google Account
+- tapOn: "Profile"
+- assertVisible: "Sync with Google Drive"
+- tapOn: "Sync with Google Drive"
+- assertVisible: "Cloud Backup"
+- assertVisible: "WIPE ALL DATA"
+
+# 3. Navigate back to Workout tab and trigger an empty workout session
+- tapOn: "Workout"
+- tapOn: "Start an empty workout"
+- assertVisible: "ACTIVE WORKOUT"
+- assertVisible: "Empty Workout"
+
+# 4. Add Bench Press to active workout
+- tapOn: "ADD EXERCISE"
+- assertVisible: "Select Exercises"
+- tapOn: "Bench Press"
+- tapOn: "ADD SELECTED"
+- assertVisible: "Bench Press"
+
+# 5. Type weight, reps and check first set to trigger Rest Timer
+- tapOn: "100" # Focus Weight Input
+- inputText: "100"
+- tapOn: "5"   # Focus Reps Input
+- inputText: "5"
+- tapOn: "active-workout.check-set-0-0" # Ticks off set checkbox
+- assertVisible: "Rest Timer"           # Verify floating timer simulator appears
+
+# 6. Finish workout and check congratulations overlay and sharing modal
+- tapOn: "FINISH WORKOUT"
+- assertVisible: "CONGRATS!"
+- assertVisible: "SHARE WORKOUT SUMMARY"
+- tapOn: "SHARE WORKOUT SUMMARY"
+- assertVisible: "QR CODE MATRIX"
+- tapOn: "CLOSE"
+
+# 7. Check that History screen is updated with the completed workout session
+- tapOn: "History"
+- assertVisible: "Push Day A" # or session card
+- assertVisible: "History"

@@ -49,8 +49,9 @@ Our color scheme balances ultimate battery efficiency with high-energy accents. 
 | **`surface2`** | `#1E2633` | `⬜` (Slate Gray) | Hover, pressed states, or active item highlights. |
 | **`surfaceHigh`** | `#242E3E` | `⬜` (Light Slate) | Floating modals, elevated dropdowns, or key pill containers. |
 | **`accent`** | `#4F8EF7` | `🟦` (Electric Blue) | Core CTAs, active indicators, progress bars, highlights. |
-| **`highlight`** | `#7C5CFC` | `🟪` (Electric Violet)| Personal Records (PRs), achievements, special highlights. |
-| **`gold`** | `#F5C842` | `🟨` (Warm Gold) | Gym streaks, trophy awards, high-level badges. |
+| **`highlight`** | `#38BDF8` | `🟦` (Neon Sky Blue) | Replaced Electric Violet. Personal Records (PRs), achievements. |
+| **`violet`** | `#7C5CFC` | `🟪` (Electric Violet) | Achievements, PR markers, special highlights. |
+| **`gold`** | `#6366F1` | `🟪` (Sporty Indigo) | Replaced Warm Gold. Streaks, trophy awards, milestones. |
 | **`success`** | `#22D97A` | `🟩` (Emerald Green) | Safe completion states, successfully saved indicators. |
 | **`error`** | `#F0506E` | `🟥` (Neon Red) | Deletion states, critical errors, resets, danger actions. |
 
@@ -145,11 +146,11 @@ The `components/` directory holds modular blocks developed to enforce reusable s
 ```
 
 ### Key UI Primitives:
-1.  **[Card.tsx](file:///f:/Antigravity/strongerN/components/ui/Card.tsx):** Standard card wrapper using elevation `shadow.card`. Available in `active` variant (adds full blue accent border) and `accent` variant (adds custom left accent line).
-2.  **[StatCard.tsx](file:///f:/Antigravity/strongerN/components/ui/StatCard.tsx):** Premium quantitative display. Incorporates dynamic haptic-feeling **Animated count-ups** for numbers, and a translucent icon wrapper (`colors.accent + '20'`) to create ambient color zones.
-3.  **[BarChart.tsx](file:///f:/Antigravity/strongerN/components/ui/BarChart.tsx):** A custom SVG layout compiling weekly activities. Renders beautiful vertical columns, customizable highlight states, and animated height rendering.
-4.  **[Badge.tsx](file:///f:/Antigravity/strongerN/components/ui/Badge.tsx):** Renders status pills (e.g. "PR Achieved" or "PRO User") with custom colored backgrounds and high contrast text ratios.
-5.  **[PressableRow.tsx](file:///f:/Antigravity/strongerN/components/ui/PressableRow.tsx):** Multi-purpose interactive list items with tailored Android feedback ripples (`ripple.surface`) and iOS opacity scaling.
+1.  **[Card.tsx](file:///C:/Antigravity/strongerN/components/ui/Card.tsx):** Standard card wrapper using elevation `shadow.card`. Available in `active` variant (adds full blue accent border) and `accent` variant (adds custom left accent line).
+2.  **[StatCard.tsx](file:///C:/Antigravity/strongerN/components/ui/StatCard.tsx):** Premium quantitative display. Incorporates dynamic haptic-feeling **Animated count-ups** for numbers, and a translucent icon wrapper (`colors.accent + '20'`) to create ambient color zones.
+3.  **[BarChart.tsx](file:///C:/Antigravity/strongerN/components/ui/BarChart.tsx):** A custom SVG layout compiling weekly activities. Renders beautiful vertical columns, customizable highlight states, and animated height rendering.
+4.  **[Badge.tsx](file:///C:/Antigravity/strongerN/components/ui/Badge.tsx):** Renders status pills (e.g. "PR Achieved" or "PRO User") with custom colored backgrounds and high contrast text ratios.
+5.  **[PressableRow.tsx](file:///C:/Antigravity/strongerN/components/ui/PressableRow.tsx):** Multi-purpose interactive list items with tailored Android feedback ripples (`ripple.surface`) and iOS opacity scaling.
 
 ---
 
@@ -158,7 +159,7 @@ The `components/` directory holds modular blocks developed to enforce reusable s
 `strongerN` goes beyond static design to deliver an interactive experience:
 
 *   **Spring-Modals:** Modals use standard reanimated-like spring damping mechanics (`stiffness: 140, damping: 16`) for bouncing and sliding overlays, reducing UI rigidness.
-*   **Sticky Interactive Session Widget ([ActiveWorkoutBar.tsx](file:///f:/Antigravity/strongerN/components/layout/ActiveWorkoutBar.tsx)):** Floating above the tab bar, this animated component provides direct access to the live session in progress. Includes a pulsating live icon and counting elapsed time.
+*   **Sticky Interactive Session Widget ([ActiveWorkoutBar.tsx](file:///C:/Antigravity/strongerN/components/layout/ActiveWorkoutBar.tsx)):** Floating above the tab bar, this animated component provides direct access to the live session in progress. Includes a pulsating live icon and counting elapsed time.
 *   **Android Tap Ripple Effects:** Configured individually using our ripple factories in `theme.ts` to matches container shapes, keeping boundaries clean and natural.
 
 ---
@@ -175,6 +176,9 @@ Every new component and screen added to `strongerN` must pass this UI/UX review 
 - [ ] **Touch Target Size:** Interactive elements must have a minimum touch target area of **44dp x 44dp** to ensure easy activation while lifting weights.
 - [ ] **Safe-Area Padding:** Utilize standard headers and safe-area wrappers to avoid clipping behind phone cameras, notches, or home bars.
 - [ ] **Smooth Transitions:** State changes, toggles, or screen changes must use standard durations (`150ms` for hover, `250ms` for scale/switches).
+- [ ] **Offline Sound Resiliency:** Ensure all notification/UI audio assets are bundled locally in `assets/sounds/` and triggered offline (no HTTP streaming).
+- [ ] **Redirect Link Verification:** Google Authentication must support deep link callback events (`strongern://oauth-callback`) alongside standard web popups.
+- [ ] **Simulated Sandbox Labels:** Any non-native UI representation of system-level services (like HealthKit and smartwatch watch faces) must be clearly labeled as `(Simulated)`.
 
 ---
 

@@ -18,29 +18,29 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#F97316` | `--color-primary` |
-| On Primary | `#0F172A` | `--color-on-primary` |
-| Secondary | `#FB923C` | `--color-secondary` |
-| Accent/CTA | `#22C55E` | `--color-accent` |
-| Background | `#1F2937` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Muted | `#37414F` | `--color-muted` |
-| Border | `#374151` | `--color-border` |
-| Destructive | `#EF4444` | `--color-destructive` |
-| Ring | `#F97316` | `--color-ring` |
+| Primary | `#4F8EF7` | `--color-primary` |
+| On Primary | `#0D0F14` | `--color-on-primary` |
+| Secondary | `#38BDF8` | `--color-secondary` |
+| Accent/CTA | `#4F8EF7` | `--color-accent` |
+| Background | `#0D0F14` | `--color-background` |
+| Foreground | `#EEF1F6` | `--color-foreground` |
+| Muted | `#161B24` | `--color-muted` |
+| Border | `#252D3A` | `--color-border` |
+| Destructive | `#F0506E` | `--color-destructive` |
+| Ring | `#4F8EF7` | `--color-ring` |
 
-**Color Notes:** Energy orange + success green
+**Color Notes:** AMOLED Black + Electric Blue + Neon Sky Blue / Violet accents
 
 ### Typography
 
-- **Heading Font:** Barlow Condensed
-- **Body Font:** Barlow
-- **Mood:** sports, fitness, athletic, energetic, condensed, action
-- **Google Fonts:** [Barlow Condensed + Barlow](https://fonts.google.com/share?selection.family=Barlow+Condensed:wght@400;500;600;700|Barlow:wght@300;400;500;600;700)
+- **Heading Font:** Inter
+- **Body Font:** Inter
+- **Mood:** premium, modern, geometric, high-contrast, clean
+- **Google Fonts:** [Inter](https://fonts.google.com/specimen/Inter)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
