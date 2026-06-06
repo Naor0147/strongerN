@@ -16,7 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { MeasureItem } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
@@ -88,6 +88,24 @@ const SwipeableHistoryItem: React.FC<{
   onDelete: () => void;
 }> = ({ entry, unit, onDelete }) => {
   const swipeX = React.useRef(new Animated.Value(0)).current;
+
+  const animateTranslation = (toVal: number, callback?: () => void) => {
+    if (globalAnimation.speed === 0) {
+      Animated.timing(swipeX, {
+        toValue: toVal,
+        duration: 0,
+        useNativeDriver: true,
+      }).start(callback);
+    } else {
+      Animated.spring(swipeX, {
+        toValue: toVal,
+        useNativeDriver: true,
+        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
+        damping: 16 / globalAnimation.speed,
+        mass: 0.9,
+      }).start(callback);
+    }
+  };
   
   const panResponder = React.useRef(
     PanResponder.create({
@@ -101,19 +119,9 @@ const SwipeableHistoryItem: React.FC<{
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dx < -60) {
-          Animated.spring(swipeX, {
-            toValue: -80,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 5,
-          }).start();
+          animateTranslation(-80);
         } else {
-          Animated.spring(swipeX, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 5,
-          }).start();
+          animateTranslation(0);
         }
       },
     })
@@ -127,7 +135,7 @@ const SwipeableHistoryItem: React.FC<{
           onDelete();
           Animated.timing(swipeX, {
             toValue: 0,
-            duration: 100,
+            duration: getScaledDuration(100),
             useNativeDriver: true,
           }).start();
         }}

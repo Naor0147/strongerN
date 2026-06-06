@@ -10,7 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, ripple as rippleTokens, radius } from '../../theme';
+import { colors, font, spacing, ripple as rippleTokens, radius, globalAnimation, getScaledDuration } from '../../theme';
 
 interface ActiveWorkoutBarProps {
   workoutName: string;
@@ -44,23 +44,29 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   }, [startTime]);
 
   useEffect(() => {
-    Animated.loop(
+    if (globalAnimation.speed === 0) {
+      pulseAnim.setValue(1);
+      return;
+    }
+    const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue:         0.2,
-          duration:        700,
+          duration:        getScaledDuration(700),
           useNativeDriver: true,
           easing:          Easing.inOut(Easing.ease),
         }),
         Animated.timing(pulseAnim, {
           toValue:         1,
-          duration:        700,
+          duration:        getScaledDuration(700),
           useNativeDriver: true,
           easing:          Easing.inOut(Easing.ease),
         }),
       ])
-    ).start();
-  }, [pulseAnim]);
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim, globalAnimation.speed]);
 
   const label = `Active workout: ${workoutName}. Elapsed ${elapsed}`;
 
@@ -137,8 +143,8 @@ const styles = StyleSheet.create({
     width:           10,
     height:          10,
     borderRadius:    5,
-    backgroundColor: colors.success,
-    shadowColor:     colors.success,
+    backgroundColor: colors.accent,
+    shadowColor:     colors.accent,
     shadowOpacity:   0.8,
     shadowRadius:    6,
     shadowOffset:    { width: 0, height: 0 },

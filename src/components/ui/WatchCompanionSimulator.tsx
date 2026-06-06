@@ -8,7 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, shadow } from '../../theme';
+import { colors, font, spacing, radius, shadow, globalAnimation, getScaledDuration } from '../../theme';
 
 interface WatchCompanionSimulatorProps {
   workoutName: string;
@@ -54,10 +54,14 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
       });
 
       // trigger heartbeat scale animation
-      Animated.sequence([
-        Animated.timing(pulseScale, { toValue: 1.25, duration: 150, useNativeDriver: true }),
-        Animated.timing(pulseScale, { toValue: 1, duration: 150, useNativeDriver: true }),
-      ]).start();
+      if (globalAnimation.speed === 0) {
+        pulseScale.setValue(1);
+      } else {
+        Animated.sequence([
+          Animated.timing(pulseScale, { toValue: 1.25, duration: getScaledDuration(150), useNativeDriver: true }),
+          Animated.timing(pulseScale, { toValue: 1, duration: getScaledDuration(150), useNativeDriver: true }),
+        ]).start();
+      }
     }, 1200);
 
     return () => clearInterval(id);

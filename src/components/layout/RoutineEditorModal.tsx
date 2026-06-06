@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { Exercise } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
@@ -50,6 +50,7 @@ export interface RoutineEditorModalProps {
   onSave:                (name: string, exerciseNames: string[], folder?: string) => void;
   onClose:               () => void;
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string) => any;
+  sessions?:             any[];
 }
 
 // ─── SwipeableRow (same pattern as ActiveWorkoutModal) ────────────────────────
@@ -61,6 +62,24 @@ const SwipeableRow: React.FC<{
 }> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
+
+  const animateTranslation = (toVal: number, callback?: () => void) => {
+    if (globalAnimation.speed === 0) {
+      Animated.timing(translateX, {
+        toValue: toVal,
+        duration: 0,
+        useNativeDriver: true,
+      }).start(callback);
+    } else {
+      Animated.spring(translateX, {
+        toValue: toVal,
+        useNativeDriver: true,
+        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
+        damping: 16 / globalAnimation.speed,
+        mass: 0.9,
+      }).start(callback);
+    }
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -78,21 +97,11 @@ const SwipeableRow: React.FC<{
       onPanResponderRelease: (_, gs) => {
         const threshold = isOpen.current ? -30 : -45;
         if (gs.dx < threshold) {
-          Animated.spring(translateX, {
-            toValue: -70,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 7,
-          }).start(() => {
+          animateTranslation(-70, () => {
             isOpen.current = true;
           });
         } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 7,
-          }).start(() => {
+          animateTranslation(0, () => {
             isOpen.current = false;
           });
         }
@@ -104,7 +113,7 @@ const SwipeableRow: React.FC<{
     if (Platform.OS !== 'web') Vibration.vibrate(15);
     Animated.timing(translateX, {
       toValue: -500,
-      duration: 150,
+      duration: getScaledDuration(150),
       useNativeDriver: true,
     }).start(() => {
       onDelete();
@@ -115,12 +124,7 @@ const SwipeableRow: React.FC<{
 
   const handleOverlayPress = () => {
     if (isOpen.current) {
-      Animated.spring(translateX, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 40,
-        friction: 7,
-      }).start(() => {
+      animateTranslation(0, () => {
         isOpen.current = false;
       });
     }
@@ -169,6 +173,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   onSave,
   onClose,
   onAddCustomExercise,
+  sessions = [],
 }) => {
   const insets = useSafeAreaInsets();
   const [routineName,  setRoutineName]  = useState(initialName);
@@ -181,6 +186,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     exIdx: number;
     setIdx: number;
     fieldName: 'weight' | 'reps';
+    focusTime?: number;
   } | null>(null);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
@@ -258,7 +264,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
     if (fieldName === 'weight') {
       const nextKey = `${exIdx}-${setIdx}-reps`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'reps' });
+      setActiveInput({ exIdx, setIdx, fieldName: 'reps', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -268,7 +274,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     const currentEx = editorExercises[exIdx];
     if (currentEx && setIdx < currentEx.sets.length - 1) {
       const nextKey = `${exIdx}-${setIdx + 1}-weight`;
-      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight' });
+      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -277,7 +283,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
     if (exIdx < editorExercises.length - 1) {
       const nextKey = `${exIdx + 1}-0-weight`;
-      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight' });
+      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -356,7 +362,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // ── Add exercises callback ────────────────────────────────────────────────────
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps') => {
-    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field });
+    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
   }, []);
 
   const handleConfirmExercises = (names: string[]) => {
@@ -647,7 +653,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 onRequestClose={() => setIsExMenuVisible(false)}
               >
                 <Pressable style={edStyles.sheetBackdrop} onPress={() => setIsExMenuVisible(false)}>
-                  <View style={edStyles.sheetCard}>
+                  <Pressable style={edStyles.sheetCard} onPress={(e) => e.stopPropagation()}>
                     <Text style={edStyles.sheetTitle}>
                       {editorExercises[exMenuIdx]?.name.toUpperCase()}
                     </Text>
@@ -692,15 +698,15 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       style={edStyles.sheetItem}
                       onPress={() => {
                         Alert.alert(
-                          'Remove Exercise',
-                          `Remove "${editorExercises[exMenuIdx]?.name}" from this routine?`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Remove', style: 'destructive', onPress: () => {
-                              setEditorExercises(prev => prev.filter((_, i) => i !== exMenuIdx));
-                              setIsExMenuVisible(false);
-                            }},
-                          ]
+                           'Remove Exercise',
+                           `Remove "${editorExercises[exMenuIdx]?.name}" from this routine?`,
+                           [
+                             { text: 'Cancel', style: 'cancel' },
+                             { text: 'Remove', style: 'destructive', onPress: () => {
+                               setEditorExercises(prev => prev.filter((_, i) => i !== exMenuIdx));
+                               setIsExMenuVisible(false);
+                             }},
+                           ]
                         );
                       }}
                       android_ripple={rippleTokens.surface}
@@ -716,12 +722,13 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     >
                       <Text style={edStyles.sheetCancelText}>Cancel</Text>
                     </Pressable>
-                  </View>
+                  </Pressable>
                 </Pressable>
               </Modal>
             )}
             <CustomWorkoutKeyboard
               visible={activeInput !== null}
+              inputKey={activeInput ? `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}` : ''}
               value={
                 activeInput
                   ? editorExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.[activeInput.fieldName] || ''
@@ -749,6 +756,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         onClose={() => setIsAddExerciseVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
         title="ADD EXERCISES"
+        sessions={sessions}
       />
     </>
   );
@@ -758,7 +766,7 @@ interface RoutineSetRowItemProps {
   set: SetRecord;
   setIdx: number;
   exIdx: number;
-  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' } | null;
+  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps'; focusTime?: number } | null;
   onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps') => void;
   updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps', value: string) => void;
   deleteSet: (exIdx: number, setIdx: number) => void;

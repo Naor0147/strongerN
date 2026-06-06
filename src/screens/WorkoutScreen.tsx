@@ -44,6 +44,7 @@ interface WorkoutScreenProps {
   isProgramsEnabled?: boolean;
   enableRoutineFolders?: boolean;
   onAddCustomExercise?: (name: string, muscle: string, equipment: string) => any;
+  sessions?:         any[];
 }
 
 
@@ -163,6 +164,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   isProgramsEnabled = false,
   enableRoutineFolders = false,
   onAddCustomExercise,
+  sessions = [],
 }) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'routines' | 'programs'>('routines');
@@ -933,6 +935,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         editingId={routineEditorInitial.editingId}
         exercises={exercises}
         folders={folders}
+        sessions={sessions}
         onSave={handleSaveRoutineFromEditor}
         onClose={() => setIsRoutineEditorVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
@@ -1001,7 +1004,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             style={styles.sheetBackdrop}
             onPress={() => setIsActionSheetVisible(false)}
           >
-            <View style={styles.sheetCard}>
+            <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
               <Text style={styles.sheetTitle}>{selectedTemplate.name.toUpperCase()}</Text>
               
               <Pressable
@@ -1041,7 +1044,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               >
                 <Text style={styles.sheetCancelText}>Cancel</Text>
               </Pressable>
-            </View>
+            </Pressable>
           </Pressable>
         </Modal>
       )}

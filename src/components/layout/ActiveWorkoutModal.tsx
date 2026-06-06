@@ -17,10 +17,16 @@ import {
   FlatList,
   PanResponder,
   Vibration,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
@@ -60,6 +66,10 @@ interface ActiveWorkoutModalProps {
   isPlateCalculatorEnabled?: boolean;
   defaultRestDuration?: number;
   onRenameWorkout?: (name: string) => void;
+  sessions?:          any[];
+  isProgressiveOverloadEnabled?: boolean;
+  isAutoFinishSetEnabled?: boolean;
+  isKeyboardDismissOnNextEnabled?: boolean;
 }
 
 function formatElapsed(startTime: Date): string {
@@ -79,6 +89,24 @@ const SwipeableRow: React.FC<{
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
 
+  const animateTranslation = (toVal: number, callback?: () => void) => {
+    if (globalAnimation.speed === 0) {
+      Animated.timing(translateX, {
+        toValue: toVal,
+        duration: 0,
+        useNativeDriver: true,
+      }).start(callback);
+    } else {
+      Animated.spring(translateX, {
+        toValue: toVal,
+        useNativeDriver: true,
+        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
+        damping: 16 / globalAnimation.speed,
+        mass: 0.9,
+      }).start(callback);
+    }
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -96,21 +124,11 @@ const SwipeableRow: React.FC<{
       onPanResponderRelease: (_, gestureState) => {
         const threshold = isOpen.current ? -30 : -45;
         if (gestureState.dx < threshold) {
-          Animated.spring(translateX, {
-            toValue: -70,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 7,
-          }).start(() => {
+          animateTranslation(-70, () => {
             isOpen.current = true;
           });
         } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 40,
-            friction: 7,
-          }).start(() => {
+          animateTranslation(0, () => {
             isOpen.current = false;
           });
         }
@@ -122,7 +140,7 @@ const SwipeableRow: React.FC<{
     if (Platform.OS !== 'web') Vibration.vibrate(15);
     Animated.timing(translateX, {
       toValue: -500,
-      duration: 150,
+      duration: getScaledDuration(150),
       useNativeDriver: true,
     }).start(() => {
       onDelete();
@@ -133,12 +151,7 @@ const SwipeableRow: React.FC<{
 
   const handleOverlayPress = () => {
     if (isOpen.current) {
-      Animated.spring(translateX, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 40,
-        friction: 7,
-      }).start(() => {
+      animateTranslation(0, () => {
         isOpen.current = false;
       });
     }
@@ -175,6 +188,34 @@ const SwipeableRow: React.FC<{
   );
 };
 
+const getProgressiveOverloadSuggestions = (exName: string, sessions: any[]) => {
+  const previousSession = sessions?.find((s: any) =>
+    s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
+  );
+  if (previousSession) {
+    const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+    if (found) {
+      const lastWeight = found.bestWeight || 0;
+      const lastReps = found.bestReps || 0;
+      const lastSets = typeof found.sets === 'number' ? found.sets : (found.setsDetails?.length || found.sets?.length || 3);
+      if (lastWeight > 0) {
+        return {
+          weight: (lastWeight + 2.5).toString(),
+          reps: lastReps.toString(),
+          sets: lastSets,
+        };
+      } else {
+        return {
+          weight: '0',
+          reps: (lastReps + 1).toString(),
+          sets: lastSets,
+        };
+      }
+    }
+  }
+  return null;
+};
+
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
   workoutName,
@@ -192,6 +233,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isPlateCalculatorEnabled = true,
   defaultRestDuration = 90,
   onRenameWorkout,
+  sessions = [],
+  isProgressiveOverloadEnabled = false,
+  isAutoFinishSetEnabled = true,
+  isKeyboardDismissOnNextEnabled = true,
 }) => {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
@@ -204,6 +249,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     exIdx: number;
     setIdx: number;
     fieldName: 'weight' | 'reps';
+    focusTime?: number;
   } | null>(null);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
@@ -250,6 +296,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const exHoverIdx    = useRef(-1);
   const [exActiveKey, setExActiveKey] = useState<string | null>(null);
   const exItemLayouts = useRef<{ [key: string]: { y: number; height: number } }>({});
+
+  // Static refs for tracking target exercise details
+  const exSlotYRef    = useRef<number[]>([]);
+  const exInitialYRef = useRef<number>(0);
+  const exIndicesRef  = useRef<{ [id: string]: number }>({});
+  const exPanRespondersRef = useRef<{ [id: string]: any }>({});
+
+  const activeExercisesRef = useRef(activeExercises);
+  useEffect(() => {
+    activeExercisesRef.current = activeExercises;
+  }, [activeExercises]);
 
   // Plate calculator states
   const [isPlateCalcVisible, setIsPlateCalcVisible] = useState(false);
@@ -340,14 +397,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             return {
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
-              sets: ex.sets.map((s: any, sIdx: number) => ({
-                id:        s.id || `set-${exIdx}-${sIdx}-${Date.now()}`,
-                weight:    s.weight ? s.weight.toString() : '60',
-                reps:      s.reps ? s.reps.toString() : '10',
-                completed: s.completed || false,
-                rpe:       s.rpe ? s.rpe.toString() : '',
-                category:  s.category || 'S',
-              })),
+              sets: ex.sets.map((s: any, sIdx: number) => {
+                let weightVal = s.weight ? s.weight.toString() : '60';
+                let repsVal = s.reps ? s.reps.toString() : '10';
+                if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+                  const suggestion = getProgressiveOverloadSuggestions(ex.name, sessions);
+                  if (suggestion) {
+                    weightVal = suggestion.weight;
+                    repsVal = suggestion.reps;
+                  }
+                }
+                return {
+                  id:        s.id || `set-${exIdx}-${sIdx}-${Date.now()}`,
+                  weight:    weightVal,
+                  reps:      repsVal,
+                  completed: s.completed || false,
+                  rpe:       s.rpe ? s.rpe.toString() : '',
+                  category:  s.category || 'S',
+                };
+              }),
               superSetGroupId: (ex as any).superSetGroupId,
             };
           }
@@ -355,14 +423,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           return {
             id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
             name: ex.name,
-            sets: Array.from({ length: setsCount }).map((_, setIdx) => ({
-              id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
-              weight:    ex.bestWeight.toString(),
-              reps:      ex.bestReps.toString(),
-              completed: false,
-              rpe:       '',
-              category:  'S',
-            })),
+            sets: Array.from({ length: setsCount }).map((_, setIdx) => {
+              let weightVal = ex.bestWeight ? ex.bestWeight.toString() : '60';
+              let repsVal = ex.bestReps ? ex.bestReps.toString() : '10';
+              if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+                const suggestion = getProgressiveOverloadSuggestions(ex.name, sessions);
+                if (suggestion) {
+                  weightVal = suggestion.weight;
+                  repsVal = suggestion.reps;
+                }
+              }
+              return {
+                id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
+                weight:    weightVal,
+                reps:      repsVal,
+                completed: false,
+                rpe:       '',
+                category:  'S',
+              };
+            }),
             superSetGroupId: (ex as any).superSetGroupId,
           };
         });
@@ -428,17 +507,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const timerPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!isTimerActive) return;
+    if (globalAnimation.speed === 0) {
+      timerPulseAnim.setValue(1);
+      return;
+    }
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(timerPulseAnim, {
           toValue:         0.4,
-          duration:        500,
+          duration:        getScaledDuration(500),
           useNativeDriver: true,
           easing:          Easing.inOut(Easing.ease),
         }),
         Animated.timing(timerPulseAnim, {
           toValue:         1,
-          duration:        500,
+          duration:        getScaledDuration(500),
           useNativeDriver: true,
           easing:          Easing.inOut(Easing.ease),
         }),
@@ -446,7 +529,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     );
     anim.start();
     return () => anim.stop();
-  }, [isTimerActive, timerPulseAnim]);
+  }, [isTimerActive, timerPulseAnim, globalAnimation.speed]);
 
   // Set completeness toggler
   const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
@@ -462,6 +545,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
     }
 
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -494,11 +578,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Stable input focus handler (must NOT be inside .map())
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps') => {
-    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field });
+    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
   }, []);
 
   // Add a set
   const addSet = useCallback((exIdx: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -522,6 +607,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Delete a set
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -538,40 +624,71 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!activeInput) return;
     const { exIdx, setIdx, fieldName } = activeInput;
 
-    // 1. If currently weight, move to reps in the same set
+    // 1. Auto-Finish Set: When pressing "Next" inside Reps box
+    if (fieldName === 'reps' && isAutoFinishSetEnabled) {
+      const targetSet = activeExercises[exIdx]?.sets[setIdx];
+      if (targetSet && !targetSet.completed) {
+        playSetCheckedSound();
+        if (isAutoTimerEnabled) {
+          setRestTimeRemaining(defaultRestDuration);
+          setIsTimerActive(true);
+        }
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setActiveExercises(prev => {
+          return prev.map((ex, eIdx) => {
+            if (eIdx !== exIdx) return ex;
+            return {
+              ...ex,
+              sets: ex.sets.map((set, sIdx) => {
+                if (sIdx !== setIdx) return set;
+                return { ...set, completed: true };
+              })
+            };
+          });
+        });
+      }
+    }
+
+    // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box
+    if (fieldName === 'reps' && isKeyboardDismissOnNextEnabled) {
+      setActiveInput(null);
+      return;
+    }
+
+    // 3. Default Jumps: If currently weight, move to reps in the same set
     if (fieldName === 'weight') {
       const nextKey = `${exIdx}-${setIdx}-reps`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'reps' });
+      setActiveInput({ exIdx, setIdx, fieldName: 'reps', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
       return;
     }
 
-    // 2. If reps, check if there's a next set in the same exercise
+    // 4. Default Jumps: If reps, check if there's a next set in the same exercise
     const currentEx = activeExercises[exIdx];
     if (currentEx && setIdx < currentEx.sets.length - 1) {
       const nextKey = `${exIdx}-${setIdx + 1}-weight`;
-      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight' });
+      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
       return;
     }
 
-    // 3. If last set of this exercise, check if there is a next exercise
+    // 5. Default Jumps: If last set of this exercise, check if there is a next exercise
     if (exIdx < activeExercises.length - 1) {
       const nextKey = `${exIdx + 1}-0-weight`;
-      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight' });
+      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
       return;
     }
 
-    // 4. Otherwise, close/blur
+    // 6. Otherwise, close/blur
     setActiveInput(null);
-  }, [activeInput, activeExercises]);
+  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isAutoTimerEnabled, defaultRestDuration]);
 
   // Calculate volume & sets for summary
   const handleFinishPress = () => {
@@ -664,6 +781,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             text: 'Remove',
             style: 'destructive',
             onPress: () => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               setActiveExercises(prev => prev.filter((_, idx) => idx !== activeExerciseMenuIndex));
               setIsExMenuVisible(false);
               setActiveExerciseMenuIndex(null);
@@ -691,12 +809,47 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const handleConfirmExercisesFromPicker = useCallback((names: string[]) => {
     if (isReplaceMode && activeExerciseMenuIndex !== null && names.length > 0) {
       // Replace mode: replace the targeted exercise
+      const exName = names[0];
+      let weightVal = '60';
+      let repsVal = '10';
+
+      if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+        const suggestion = getProgressiveOverloadSuggestions(exName, sessions);
+        if (suggestion) {
+          weightVal = suggestion.weight;
+          repsVal = suggestion.reps;
+        } else {
+          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+          if (libEx) {
+            weightVal = (libEx.bestWeight || 60).toString();
+            repsVal = (libEx.bestReps || 10).toString();
+          }
+        }
+      } else {
+        const previousSession = sessions?.find((s: any) =>
+          s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
+        );
+        if (previousSession) {
+          const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+          if (found) {
+            weightVal = (found.bestWeight || 60).toString();
+            repsVal = (found.bestReps || 10).toString();
+          }
+        } else {
+          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+          if (libEx) {
+            weightVal = (libEx.bestWeight || 60).toString();
+            repsVal = (libEx.bestReps || 10).toString();
+          }
+        }
+      }
+
       setActiveExercises(prev => prev.map((ex, idx) => {
         if (idx === activeExerciseMenuIndex) {
           return {
             id: ex.id,
-            name: names[0],
-            sets: ex.sets.map(s => ({ ...s, completed: false })),
+            name: exName,
+            sets: ex.sets.map(s => ({ ...s, weight: weightVal, reps: repsVal, completed: false })),
             superSetGroupId: ex.superSetGroupId,
           };
         }
@@ -705,19 +858,61 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setActiveExerciseMenuIndex(null);
     } else {
       // Add mode: append all selected exercises
-      const newOnes = names.map((exName, idx) => ({
-        id: `ex-new-${idx}-${Date.now()}-${Math.random()}`,
-        name: exName,
-        sets: [
-          { id: `set-${Date.now()}-${idx}-0`, weight: '60', reps: '10', completed: false, category: 'S' as const },
-          { id: `set-${Date.now()}-${idx}-1`, weight: '60', reps: '10', completed: false, category: 'S' as const },
-          { id: `set-${Date.now()}-${idx}-2`, weight: '60', reps: '10', completed: false, category: 'S' as const },
-        ],
-      }));
+      const newOnes = names.map((exName, idx) => {
+        let weightVal = '60';
+        let repsVal = '10';
+        let setsCount = 3;
+
+        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+          const suggestion = getProgressiveOverloadSuggestions(exName, sessions);
+          if (suggestion) {
+            weightVal = suggestion.weight;
+            repsVal = suggestion.reps;
+            setsCount = suggestion.sets || 3;
+          } else {
+            const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+            if (libEx) {
+              weightVal = (libEx.bestWeight || 60).toString();
+              repsVal = (libEx.bestReps || 10).toString();
+            }
+          }
+        } else {
+          const previousSession = sessions?.find((s: any) =>
+            s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
+          );
+          if (previousSession) {
+            const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+            if (found) {
+              weightVal = (found.bestWeight || 60).toString();
+              repsVal = (found.bestReps || 10).toString();
+              setsCount = typeof found.sets === 'number' ? found.sets : (found.sets?.length || 3);
+            }
+          } else {
+            const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+            if (libEx) {
+              weightVal = (libEx.bestWeight || 60).toString();
+              repsVal = (libEx.bestReps || 10).toString();
+            }
+          }
+        }
+
+        return {
+          id: `ex-new-${idx}-${Date.now()}-${Math.random()}`,
+          name: exName,
+          sets: Array.from({ length: setsCount }).map((_, sIdx) => ({
+            id: `set-${Date.now()}-${idx}-${sIdx}`,
+            weight: weightVal,
+            reps: repsVal,
+            completed: false,
+            category: 'S' as const,
+          })),
+        };
+      });
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setActiveExercises(prev => [...prev, ...newOnes]);
     }
     setIsLibraryVisible(false);
-  }, [isReplaceMode, activeExerciseMenuIndex]);
+  }, [isReplaceMode, activeExerciseMenuIndex, isProgressiveOverloadEnabled, sessions, exerciseLibrary]);
 
   // Legacy single-select compat (used internally)
   const handleSelectLibraryExercise = (exName: string) => {
@@ -742,6 +937,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
       if (targetIndex !== exHoverIdx.current) {
         exHoverIdx.current = targetIndex;
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         const reordered = [...current];
         const [moved] = reordered.splice(exDragIdx.current, 1);
         reordered.splice(targetIndex, 0, moved);
@@ -753,35 +949,61 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   }, [exActiveKey]);
 
-  const getExerciseDragHandlers = useCallback((itemKey: string, index: number) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: () => {
-        setExActiveKey(itemKey);
-        exDragIdx.current  = index;
-        exHoverIdx.current = index;
-        exDragY.setValue(0);
-        if (Platform.OS !== 'web') Vibration.vibrate(20);
-      },
-      onPanResponderMove: (_, gs) => {
-        exDragY.setValue(gs.dy);
-        handleExerciseDragMove(gs.dy);
-      },
-      onPanResponderRelease: () => {
-        setExActiveKey(null);
-        exDragIdx.current  = -1;
-        exHoverIdx.current = -1;
-        exDragY.setValue(0);
-      },
-      onPanResponderTerminate: () => {
-        setExActiveKey(null);
-        exDragIdx.current  = -1;
-        exHoverIdx.current = -1;
-        exDragY.setValue(0);
-      },
-    }).panHandlers;
-  }, [handleExerciseDragMove, exDragY]);
+  // Ref to hold the latest drag move callback to avoid stale closure in PanResponder
+  const handleExerciseDragMoveRef = useRef(handleExerciseDragMove);
+  useEffect(() => {
+    handleExerciseDragMoveRef.current = handleExerciseDragMove;
+  }, [handleExerciseDragMove]);
+
+  // Static PanResponder map for reordering exercises (cached per item ID)
+  const getExerciseDragHandlers = useCallback((itemKey: string) => {
+    if (!exPanRespondersRef.current[itemKey]) {
+      exPanRespondersRef.current[itemKey] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          const currentIndex = exIndicesRef.current[itemKey];
+          if (currentIndex !== undefined && currentIndex !== -1) {
+            // Capture initial slot layout positions
+            const initialSlots: number[] = [];
+            activeExercisesRef.current.forEach((ex) => {
+              const layout = exItemLayouts.current[ex.id];
+              initialSlots.push(layout ? layout.y : 0);
+            });
+            exSlotYRef.current = initialSlots;
+            exInitialYRef.current = exItemLayouts.current[itemKey]?.y || 0;
+
+            setExActiveKey(itemKey);
+            exDragIdx.current  = currentIndex;
+            exHoverIdx.current = currentIndex;
+            exDragY.setValue(0);
+            if (Platform.OS !== 'web') Vibration.vibrate(20);
+          }
+        },
+        onPanResponderMove: (_, gs) => {
+          const yInitial = exInitialYRef.current;
+          const currentIdx = exDragIdx.current;
+          const yCurrent = exSlotYRef.current[currentIdx] !== undefined ? exSlotYRef.current[currentIdx] : yInitial;
+          const translation = gs.dy + (yInitial - yCurrent);
+          exDragY.setValue(translation);
+          handleExerciseDragMoveRef.current(gs.dy);
+        },
+        onPanResponderRelease: () => {
+          setExActiveKey(null);
+          exDragIdx.current  = -1;
+          exHoverIdx.current = -1;
+          exDragY.setValue(0);
+        },
+        onPanResponderTerminate: () => {
+          setExActiveKey(null);
+          exDragIdx.current  = -1;
+          exHoverIdx.current = -1;
+          exDragY.setValue(0);
+        },
+      }).panHandlers;
+    }
+    return exPanRespondersRef.current[itemKey];
+  }, []);
 
   const handleSaveCustomExercise = () => {
     if (!customExerciseName.trim()) {
@@ -804,6 +1026,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             { id: `set-${Date.now()}-2`, weight: '60', reps: '10', completed: false },
           ]
         };
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActiveExercises(prev => [...prev, newActive]);
         setIsLibraryVisible(false);
         setIsCreatingCustom(false);
@@ -850,15 +1073,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     if (isTimerActive) {
                       setIsTimerActive(false);
                     } else {
-                      setRestTimeRemaining(90);
+                      setRestTimeRemaining(defaultRestDuration);
                       setIsTimerActive(true);
                     }
                   }}
-                  style={styles.headerStopwatchBtn}
+                  style={[styles.headerStopwatchBtn, isTimerActive && styles.headerTimerBtnActive]}
                   android_ripple={rippleTokens.surface}
                   accessibilityLabel="Toggle rest timer"
                 >
-                  <Ionicons name="stopwatch-outline" size={18} color={colors.textPrimary} />
+                  <Ionicons 
+                    name={isTimerActive ? "stopwatch" : "stopwatch-outline"} 
+                    size={18} 
+                    color={isTimerActive ? colors.accent : colors.textPrimary} 
+                  />
+                  {isTimerActive && (
+                    <Text style={styles.headerRestTimerText}>{restTimeRemaining}s</Text>
+                  )}
                 </Pressable>
 
                 {isPlateCalculatorEnabled && (
@@ -898,6 +1128,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
             <ScrollView
+              scrollEnabled={exActiveKey === null}
               style={styles.scroll}
               contentContainerStyle={[
                 styles.scrollContent,
@@ -957,13 +1188,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </View>
               ) : (
                 activeExercises.map((exercise, exIdx) => {
+                  exIndicesRef.current[exercise.id] = exIdx;
                   const isSuperSet = !!exercise.superSetGroupId;
                   const nextIsSameSuperSet = isSuperSet && exIdx < activeExercises.length - 1 && activeExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
                   const prevIsSameSuperSet = isSuperSet && exIdx > 0 && activeExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
                   const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
                   const exItemKey = exercise.id;
                   const isExActive = exActiveKey === exItemKey;
-                  const dragHandlers = getExerciseDragHandlers(exItemKey, exIdx);
 
                   return (
                     <Animated.View
@@ -1002,6 +1233,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               text: 'Remove',
                               style: 'destructive',
                               onPress: () => {
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                                 setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
                               }
                             }
@@ -1044,14 +1276,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
                             </Pressable>
                             {/* Drag handle — press-and-hold to reorder */}
-                            <Pressable
-                              {...dragHandlers}
+                            <View
+                              {...getExerciseDragHandlers(exItemKey)}
                               style={styles.dragHandle}
-                              android_ripple={rippleTokens.borderless}
                               accessibilityLabel="Drag to reorder exercise"
                             >
                               <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                            </Pressable>
+                            </View>
                           </View>
                         </View>
 
@@ -1059,9 +1290,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exercise.name.toLowerCase());
                           if (libEx?.notes) {
                             return (
-                              <Text style={styles.exerciseNotesText} numberOfLines={1}>
-                                💡 Cue: {libEx.notes}
-                              </Text>
+                              <View style={styles.notesContainer}>
+                                <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
+                                <Text style={styles.notesText} numberOfLines={2}>
+                                  {libEx.notes}
+                                </Text>
+                              </View>
                             );
                           }
                           return null;
@@ -1076,20 +1310,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         </View>
 
                         {/* Sets Row List */}
-                        {exercise.sets.map((set, setIdx) => (
-                          <ActiveSetRowItem
-                            key={set.id}
-                            set={set}
-                            setIdx={setIdx}
-                            exIdx={exIdx}
-                            activeInput={activeInput}
-                            onFocus={handleSetFocus}
-                            updateSetField={updateSetField}
-                            deleteSet={deleteSet}
-                            toggleSetComplete={toggleSetComplete}
-                            inputRefs={inputRefs}
-                          />
-                        ))}
+                        {exercise.sets.map((set, setIdx) => {
+                          const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
+                          const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
+                          return (
+                            <ActiveSetRowItem
+                              key={set.id}
+                              set={set}
+                              setIdx={setIdx}
+                              exIdx={exIdx}
+                              activeInput={activeInput}
+                              onFocus={handleSetFocus}
+                              updateSetField={updateSetField}
+                              deleteSet={deleteSet}
+                              toggleSetComplete={toggleSetComplete}
+                              inputRefs={inputRefs}
+                              isPrevCompleted={isPrevCompleted}
+                              isNextCompleted={isNextCompleted}
+                            />
+                          );
+                        })}
 
                         {/* Add Set Button */}
                         <Pressable
@@ -1128,56 +1368,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Pressable>
             </ScrollView>
 
-            {/* ── Floating Rest Timer Widget (Sleek floating pill) ── */}
-            {isTimerActive && (
-              <View style={styles.timerPillWidget}>
-                <View style={styles.timerPillContent}>
-                  {/* Left: Hourglass Icon & Time countdown */}
-                  <View style={styles.timerPillLeft}>
-                    <Animated.View style={{ opacity: timerPulseAnim, marginRight: spacing.xs }}>
-                      <Ionicons name="hourglass" size={15} color={colors.gold} />
-                    </Animated.View>
-                    <Text style={styles.timerPillTime}>
-                      {Math.floor(restTimeRemaining / 60)}:{(restTimeRemaining % 60).toString().padStart(2, '0')}
-                    </Text>
-                  </View>
 
-                  {/* Divider */}
-                  <View style={styles.timerPillDivider} />
-
-                  {/* Middle: Quick adjustments (+30s / -30s) */}
-                  <View style={styles.timerPillAdjustments}>
-                    <Pressable
-                      style={styles.timerPillAdjBtn}
-                      onPress={() => setRestTimeRemaining(prev => Math.max(0, prev - 30))}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerPillAdjText}>-30s</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.timerPillAdjBtn}
-                      onPress={() => setRestTimeRemaining(prev => prev + 30)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerPillAdjText}>+30s</Text>
-                    </Pressable>
-                  </View>
-
-                  {/* Divider */}
-                  <View style={styles.timerPillDivider} />
-
-                  {/* Right: Skip/Close button */}
-                  <Pressable
-                    style={styles.timerPillSkipBtn}
-                    onPress={() => setIsTimerActive(false)}
-                    android_ripple={rippleTokens.surface}
-                    accessibilityLabel="Skip rest timer"
-                  >
-                    <Ionicons name="close" size={15} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-              </View>
-            )}
 
             {/* ── Global Exercise Picker (replaces old transparent Modal A) ── */}
 
@@ -1193,7 +1384,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   style={styles.sheetBackdrop}
                   onPress={() => setIsExMenuVisible(false)}
                 >
-                  <View style={styles.sheetCard}>
+                  <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
                     <Text style={styles.sheetTitle}>
                       {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
                     </Text>
@@ -1298,7 +1489,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     >
                       <Text style={styles.sheetCancelText}>Cancel</Text>
                     </Pressable>
-                  </View>
+                  </Pressable>
                 </Pressable>
               </Modal>
             )}
@@ -1514,6 +1705,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             )}
             <CustomWorkoutKeyboard
               visible={activeInput !== null}
+              inputKey={activeInput ? `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}` : ''}
               value={
                 activeInput
                   ? activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.[activeInput.fieldName] || ''
@@ -1560,12 +1752,14 @@ interface ActiveSetRowItemProps {
   set: SetRecord;
   setIdx: number;
   exIdx: number;
-  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' } | null;
+  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps'; focusTime?: number } | null;
   onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps') => void;
   updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'rpe' | 'category', value: string) => void;
   deleteSet: (exIdx: number, setIdx: number) => void;
   toggleSetComplete: (exIdx: number, setIdx: number) => void;
   inputRefs: React.MutableRefObject<{ [key: string]: any }>;
+  isPrevCompleted: boolean;
+  isNextCompleted: boolean;
 }
 
 const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
@@ -1578,16 +1772,37 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   deleteSet,
   toggleSetComplete,
   inputRefs,
+  isPrevCompleted,
+  isNextCompleted,
 }) => {
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
 
+  const isCompleted = set.completed;
+  const showPrevConnected = isCompleted && isPrevCompleted;
+  const showNextConnected = isCompleted && isNextCompleted;
+
+  const rowStyle = {
+    borderTopLeftRadius: showPrevConnected ? 0 : radius.xs,
+    borderTopRightRadius: showPrevConnected ? 0 : radius.xs,
+    borderBottomLeftRadius: showNextConnected ? 0 : radius.xs,
+    borderBottomRightRadius: showNextConnected ? 0 : radius.xs,
+  };
+
   return (
-    <SwipeableRow onDelete={() => deleteSet(exIdx, setIdx)} borderRadius={radius.xs} style={{ marginBottom: 4 }}>
+    <SwipeableRow
+      onDelete={() => deleteSet(exIdx, setIdx)}
+      borderRadius={radius.xs}
+      style={{
+        marginBottom: showNextConnected ? 0 : 4,
+        ...rowStyle,
+      }}
+    >
       <View
         style={[
           styles.setRow,
           set.completed && styles.setRowCompleted,
+          rowStyle,
         ]}
       >
         {/* Set Number / Category Cycle */}
@@ -1733,7 +1948,7 @@ const styles = StyleSheet.create({
     columnGap:     spacing.sm,
   },
   headerStopwatchBtn: {
-    width:           36,
+    minWidth:        36,
     height:          36,
     borderRadius:    radius.xs,
     backgroundColor: colors.surface2,
@@ -1741,6 +1956,17 @@ const styles = StyleSheet.create({
     justifyContent:  'center',
     borderWidth:     1,
     borderColor:     colors.border,
+    paddingHorizontal: 6,
+    flexDirection:   'row',
+    gap:             4,
+  },
+  headerTimerBtnActive: {
+    borderColor:     colors.accent,
+  },
+  headerRestTimerText: {
+    color:           colors.accent,
+    fontSize:        font.sizes.xs,
+    fontFamily:      font.bold,
   },
   minimizeBtn: {
     padding: spacing.xs,
@@ -1864,7 +2090,11 @@ const styles = StyleSheet.create({
     marginRight: -4,
   },
   dragHandle: {
-    padding: spacing.xs,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: -10,
   },
 
   // Table Headers
@@ -1905,7 +2135,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   setRowCompleted: {
-    backgroundColor: '#172528', // Solid dark green-slate blend to keep it opaque
+    backgroundColor: '#111A2E',
   },
   setNumCol: {
     height:         32,
@@ -1959,8 +2189,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   checkCircleCompleted: {
-    borderColor:     colors.success,
-    backgroundColor: colors.success,
+    borderColor:     colors.accent,
+    backgroundColor: colors.accent,
   },
 
   // Add Set Row
@@ -2414,6 +2644,25 @@ const styles = StyleSheet.create({
     fontFamily: font.medium,
     marginTop: 4,
     paddingHorizontal: spacing.xs,
+  },
+  notesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+    gap: 6,
+  },
+  notesText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    flex: 1,
   },
 
   // Fallback and Custom Exercise Form Styles

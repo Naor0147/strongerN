@@ -180,6 +180,12 @@ export default function App() {
   const [enableRoutineFolders, setEnableRoutineFolders] = React.useState(false);
   const [isDeveloperModeEnabled, setIsDeveloperModeEnabled] = React.useState(false);
 
+  const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
+  const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
+  const [isKeyboardDismissOnNextEnabled, setIsKeyboardDismissOnNextEnabled] = React.useState(true);
+  const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
+
+
   const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('chime');
   const [soundWorkoutFinished, setSoundWorkoutFinished] = React.useState<string>('fanfare');
   const [soundTimerCompleted, setSoundTimerCompleted] = React.useState<string>('beep');
@@ -283,6 +289,9 @@ export default function App() {
             if (parsed.isMusclesEnabled !== undefined) setIsMusclesEnabled(parsed.isMusclesEnabled);
             if (parsed.enableRoutineFolders !== undefined) setEnableRoutineFolders(parsed.enableRoutineFolders);
             if (parsed.isDeveloperModeEnabled !== undefined) setIsDeveloperModeEnabled(parsed.isDeveloperModeEnabled);
+            if (parsed.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(parsed.isProgressiveOverloadEnabled);
+            if (parsed.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(parsed.isAutoFinishSetEnabled);
+            if (parsed.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(parsed.isKeyboardDismissOnNextEnabled);
             if (parsed.soundSetCompleted !== undefined) setSoundSetCompleted(parsed.soundSetCompleted);
             if (parsed.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(parsed.soundWorkoutFinished);
             if (parsed.soundTimerCompleted !== undefined) setSoundTimerCompleted(parsed.soundTimerCompleted);
@@ -350,12 +359,15 @@ export default function App() {
         showHighlights,
         enableRoutineFolders,
         isDeveloperModeEnabled,
+        isProgressiveOverloadEnabled,
+        isAutoFinishSetEnabled,
+        isKeyboardDismissOnNextEnabled,
       };
       saveToDb(STORAGE_KEY, data);
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled]);
 
   // Synchronize audio preferences to soundConfig helper
   React.useEffect(() => {
@@ -516,6 +528,9 @@ export default function App() {
       showWorkoutsChart,
       showHighlights,
       animationSpeed,
+      isProgressiveOverloadEnabled,
+      isAutoFinishSetEnabled,
+      isKeyboardDismissOnNextEnabled,
     };
     const backupData = buildBackupData({
       username: user.name,
@@ -595,6 +610,9 @@ export default function App() {
       if (s.showWorkoutsChart !== undefined) setShowWorkoutsChart(s.showWorkoutsChart);
       if (s.showHighlights !== undefined) setShowHighlights(s.showHighlights);
       if (s.animationSpeed !== undefined) setAnimationSpeed(s.animationSpeed);
+      if (s.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(s.isProgressiveOverloadEnabled);
+      if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
+      if (s.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(s.isKeyboardDismissOnNextEnabled);
       return true;
     } catch (e) {
       console.warn('Error applying backup data', e);
@@ -831,9 +849,12 @@ export default function App() {
   const weeklyMuscleSets = React.useMemo(() => {
     const exerciseMuscleMap: Record<string, string> = {};
     exercisesList.forEach(ex => {
-      exerciseMuscleMap[ex.name.toLowerCase()] = ex.muscleGroup;
+      if (ex && ex.name) {
+        exerciseMuscleMap[ex.name.toLowerCase()] = ex.muscleGroup;
+      }
     });
     const nameToMuscle = (name: string): string => {
+      if (!name) return 'Other';
       const n = name.toLowerCase();
       if (n.includes('squat') || n.includes('leg press') || n.includes('quad')) return 'Quads';
       if (n.includes('deadlift') || n.includes('row') || n.includes('pull') || n.includes('lat')) return 'Back';
@@ -846,16 +867,25 @@ export default function App() {
       if (n.includes('lateral raise') || n.includes('rear delt') || n.includes('face pull')) return 'Rear Delts';
       if (n.includes('calf')) return 'Calves';
       if (n.includes('forearm') || n.includes('wrist') || n.includes('roller')) return 'Forearms';
-      return exerciseMuscleMap[n] ?? 'Other';
+      if (n.includes('ab ') || n.includes('crunch') || n.includes('plank') || n.includes('sit up') || n.includes('twist') || n.includes('leg raise')) return 'Abs';
+      
+      const mapped = exerciseMuscleMap[n];
+      if (mapped === 'Core') return 'Abs';
+      return mapped ?? 'Other';
     };
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const sets: Record<string, number> = {};
     sessionsList.forEach((session: any) => {
+      if (!session || !session.datetime) return;
       if (new Date(session.datetime) < cutoff) return;
-      session.exercises.forEach((ex: any) => {
-        const muscle = nameToMuscle(ex.name);
-        sets[muscle] = (sets[muscle] ?? 0) + ex.sets;
-      });
+      if (session.exercises && Array.isArray(session.exercises)) {
+        session.exercises.forEach((ex: any) => {
+          if (ex && ex.name) {
+            const muscle = nameToMuscle(ex.name);
+            sets[muscle] = (sets[muscle] ?? 0) + (ex.sets || 0);
+          }
+        });
+      }
     });
     return sets;
   }, [sessionsList, exercisesList]);
@@ -959,6 +989,35 @@ export default function App() {
     setIsWorkoutModalVisible(true);
   };
 
+  const handleResumeWorkout = (session: any) => {
+    if (isWorkoutActive) {
+      Alert.alert(
+        "Workout Active",
+        "You already have an active workout session running. Please finish or discard it first before resuming/editing another workout."
+      );
+      return;
+    }
+
+    setEditingSessionId(session.id);
+    setWorkoutName(session.title);
+    setStartTime(new Date(session.datetime));
+
+    // Map session exercises back to active workout exercises structure
+    const mapped = session.exercises.map((ex: any) => {
+      return {
+        name: ex.name,
+        sets: ex.setsDetails?.length || ex.sets || 3,
+        bestWeight: ex.bestWeight,
+        bestReps: ex.bestReps,
+        setsDetails: ex.setsDetails || [],
+      };
+    });
+
+    setWorkoutExercises(mapped);
+    setIsWorkoutActive(true);
+    setIsWorkoutModalVisible(true);
+  };
+
   const handleFinishWorkout = (summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
     const completedExercises = workoutExercises
       .filter(ex => {
@@ -993,26 +1052,45 @@ export default function App() {
         };
       });
 
-    const newSession = {
-      id: `session-new-${Date.now()}`,
-      title: workoutName,
-      datetime: new Date(),
-      comment: 'Logged via live active tracker!',
-      exercises: completedExercises.length > 0 ? completedExercises : [
-        { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
-      ],
-      durationMinutes: summary.durationMin,
-      totalVolumeKg: summary.totalVolume,
-      prs: summary.totalVolume > 0 ? 1 : 0,
-    };
+    let updatedSessions = [...sessionsList];
+    let nextUser = { ...user };
 
-    setSessionsList(prev => [newSession, ...prev]);
-    
-    // Increment total workouts count
-    setUser(prev => ({
-      ...prev,
-      totalWorkouts: prev.totalWorkouts + 1,
-    }));
+    if (editingSessionId) {
+      updatedSessions = sessionsList.map((s: any) => {
+        if (s.id === editingSessionId) {
+          return {
+            ...s,
+            title: workoutName,
+            exercises: completedExercises.length > 0 ? completedExercises : [
+              { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
+            ],
+            durationMinutes: summary.durationMin,
+            totalVolumeKg: summary.totalVolume,
+            prs: summary.totalVolume > 0 ? 1 : 0,
+          };
+        }
+        return s;
+      });
+      setEditingSessionId(null);
+    } else {
+      const newSession = {
+        id: `session-new-${Date.now()}`,
+        title: workoutName,
+        datetime: new Date(),
+        comment: 'Logged via live active tracker!',
+        exercises: completedExercises.length > 0 ? completedExercises : [
+          { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
+        ],
+        durationMinutes: summary.durationMin,
+        totalVolumeKg: summary.totalVolume,
+        prs: summary.totalVolume > 0 ? 1 : 0,
+      };
+      updatedSessions = [newSession, ...sessionsList];
+      nextUser.totalWorkouts += 1;
+    }
+
+    setSessionsList(updatedSessions);
+    setUser(nextUser);
     
     // Show celebratory screen
     setCompletionData({
@@ -1030,11 +1108,8 @@ export default function App() {
       setTimeout(async () => {
         const nowStr = new Date().toISOString();
         const backupData = {
-          user: {
-            ...user,
-            totalWorkouts: user.totalWorkouts + 1,
-          },
-          sessionsList: [newSession, ...sessionsList],
+          user: nextUser,
+          sessionsList: updatedSessions,
           templatesList,
           exercisesList,
           primaryMetricsList,
@@ -1068,6 +1143,7 @@ export default function App() {
     setIsWorkoutModalVisible(false);
     setWorkoutExercises([]);
     setWorkoutName('Active Workout');
+    setEditingSessionId(null);
   };
 
   // Persist active workout state on changes
@@ -1243,13 +1319,19 @@ export default function App() {
                   setIsDeveloperModeEnabled={setIsDeveloperModeEnabled}
                   authMode={authState.authMode}
                   onAppLogout={handleAppLogout}
+                  isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
+                  setIsProgressiveOverloadEnabled={setIsProgressiveOverloadEnabled}
+                  isAutoFinishSetEnabled={isAutoFinishSetEnabled}
+                  setIsAutoFinishSetEnabled={setIsAutoFinishSetEnabled}
+                  isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+                  setIsKeyboardDismissOnNextEnabled={setIsKeyboardDismissOnNextEnabled}
                 />
               )}
             </Tab.Screen>
 
             {isHistoryEnabled && (
               <Tab.Screen name="History">
-                {() => <HistoryScreen sessions={sessionsList} />}
+                {() => <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} />}
               </Tab.Screen>
             )}
 
@@ -1272,6 +1354,7 @@ export default function App() {
                   isProgramsEnabled={isProgramsEnabled}
                   enableRoutineFolders={enableRoutineFolders}
                   onAddCustomExercise={handleAddExercise}
+                  sessions={sessionsList}
                 />
               )}
             </Tab.Screen>
@@ -1331,6 +1414,10 @@ export default function App() {
             isPlateCalculatorEnabled={isPlateCalculatorEnabled}
             defaultRestDuration={defaultRestDuration}
             onRenameWorkout={setWorkoutName}
+            sessions={sessionsList}
+            isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
+            isAutoFinishSetEnabled={isAutoFinishSetEnabled}
+            isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}

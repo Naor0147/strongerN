@@ -23,6 +23,7 @@ interface CustomWorkoutKeyboardProps {
   placeholder?: string;
   title?: string;
   fieldName?: 'weight' | 'reps';
+  inputKey?: string;
 }
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
@@ -37,8 +38,20 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   onClose,
   title = '',
   fieldName = 'weight',
+  inputKey,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
+  const [lastInputKey, setLastInputKey] = useState<string | undefined>(undefined);
+  const [lastVisible, setLastVisible] = useState<boolean>(false);
+  const [isFirstKey, setIsFirstKey] = useState(true);
+
+  if (inputKey !== lastInputKey || visible !== lastVisible) {
+    setLastInputKey(inputKey);
+    setLastVisible(visible);
+    if (visible) {
+      setIsFirstKey(true);
+    }
+  }
 
   if (!visible) return null;
 
@@ -50,6 +63,19 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
 
   const handleKeyPress = (key: string) => {
     playFeedback('tap');
+
+    if (isFirstKey) {
+      setIsFirstKey(false);
+      if (key === '⌫') {
+        onChange('');
+      } else if (key === '.') {
+        onChange('0.');
+      } else {
+        onChange(key);
+      }
+      return;
+    }
+
     if (key === '⌫') {
       if (value.length > 0) {
         onChange(value.slice(0, -1));

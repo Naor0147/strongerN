@@ -11,7 +11,7 @@ import {
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, ripple as rippleTokens, animation } from '../../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, animation, globalAnimation } from '../../theme';
 
 interface TabConfig {
   route:      string;
@@ -40,14 +40,18 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, in
   const scale = useRef(new Animated.Value(isActive ? 1 : 0.88)).current;
 
   useEffect(() => {
+    if (globalAnimation.speed === 0) {
+      scale.setValue(isActive ? 1 : 0.88);
+      return;
+    }
     Animated.spring(scale, {
       toValue:         isActive ? 1 : 0.88,
       useNativeDriver: true,
-      stiffness:       animation.spring.stiffness,
-      damping:         animation.spring.damping,
+      stiffness:       animation.spring.stiffness / (globalAnimation.speed * globalAnimation.speed),
+      damping:         animation.spring.damping / globalAnimation.speed,
       mass:            animation.spring.mass,
     }).start();
-  }, [isActive, scale]);
+  }, [isActive, scale, globalAnimation.speed]);
 
   const iconColor = isActive ? colors.accent      : colors.iconInactive;
   const iconName  = isActive ? tab.iconActive     : tab.icon;

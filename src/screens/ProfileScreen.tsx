@@ -20,6 +20,7 @@ import {
   Easing,
   Platform,
   Linking,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +28,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { pickAndReadBackupFile } from '../utils/backupManager';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation } from '../theme';
 import * as googleDrive from '../utils/googleDrive';
 import { getNextWorkout } from '../utils/workout';
 import {
@@ -60,6 +61,12 @@ interface ProfileScreenProps {
   setIsAutoTimerEnabled: (val: boolean) => void;
   onMeasurePress:        () => void;
   googleUser:            { email: string; name: string; avatarUri?: string; accessToken?: string; fileId?: string } | null;
+  isProgressiveOverloadEnabled?: boolean;
+  setIsProgressiveOverloadEnabled?: (val: boolean) => void;
+  isAutoFinishSetEnabled?: boolean;
+  setIsAutoFinishSetEnabled?: (val: boolean) => void;
+  isKeyboardDismissOnNextEnabled?: boolean;
+  setIsKeyboardDismissOnNextEnabled?: (val: boolean) => void;
   onGoogleLogin:         (email: string, name: string, accessToken?: string, fileId?: string, avatarUri?: string) => Promise<boolean> | boolean;
   onGoogleLogout:        () => void;
   onCloudSync:           () => Promise<boolean> | boolean;
@@ -184,6 +191,162 @@ const getWeeklyStreak = (sessionsList: any[]): number => {
   return streak;
 };
 
+interface VolumeSliderProps {
+  soundVolume: number;
+  setSoundVolume: (val: number) => void;
+  soundSetCompleted: string;
+}
+
+const VolumeSlider: React.FC<VolumeSliderProps> = ({
+  soundVolume,
+  setSoundVolume,
+  soundSetCompleted,
+}) => {
+  const [sliderWidth, setSliderWidth] = useState(200);
+  const [localVolume, setLocalVolume] = useState(soundVolume);
+
+  React.useEffect(() => {
+    setLocalVolume(soundVolume);
+  }, [soundVolume]);
+
+  const startVolumeRef = useRef(0);
+  const localVolumeRef = useRef(localVolume);
+  localVolumeRef.current = localVolume;
+
+  const setSoundVolumeRef = useRef(setSoundVolume);
+  setSoundVolumeRef.current = setSoundVolume;
+
+  const soundSetCompletedRef = useRef(soundSetCompleted);
+  soundSetCompletedRef.current = soundSetCompleted;
+
+  const sliderWidthRef = useRef(sliderWidth);
+  sliderWidthRef.current = sliderWidth;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        const initialTouchX = evt.nativeEvent.locationX;
+        const width = sliderWidthRef.current || 200;
+        let newVolume = Math.max(0, Math.min(1, initialTouchX / width));
+        newVolume = Math.round(newVolume * 20) / 20;
+        setLocalVolume(newVolume);
+        startVolumeRef.current = newVolume;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const width = sliderWidthRef.current || 200;
+        const deltaVol = gestureState.dx / width;
+        let newVolume = Math.max(0, Math.min(1, startVolumeRef.current + deltaVol));
+        newVolume = Math.round(newVolume * 20) / 20;
+        setLocalVolume(newVolume);
+      },
+      onPanResponderRelease: () => {
+        const finalVol = localVolumeRef.current;
+        if (setSoundVolumeRef.current) {
+          setSoundVolumeRef.current(finalVol);
+        }
+        import('../utils/soundPlayer').then((m) =>
+          m.playSoundByKey(soundSetCompletedRef.current)
+        );
+      },
+    })
+  ).current;
+
+  return (
+    <View style={styles.volumeSliderContainer}>
+      <View style={styles.volumeSliderHeader}>
+        <Ionicons name="volume-medium-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+        <Text style={styles.settingTitle}>Sound Volume</Text>
+        <Text style={styles.volumePercentage}>{Math.round(localVolume * 100)}%</Text>
+      </View>
+      <View
+        style={styles.volSliderTrack}
+        onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+        {...panResponder.panHandlers}
+      >
+        <View pointerEvents="none" style={[styles.volSliderFill, { width: `${localVolume * 100}%` }]} />
+        <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${localVolume * 100}%` }]} />
+      </View>
+    </View>
+  );
+};
+
+interface AnimationSpeedSliderProps {
+  animationSpeed: number;
+  setAnimationSpeed: (val: number) => void;
+}
+
+const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
+  animationSpeed,
+  setAnimationSpeed,
+}) => {
+  const [sliderWidth, setSliderWidth] = useState(200);
+  const [localSpeed, setLocalSpeed] = useState(animationSpeed);
+
+  React.useEffect(() => {
+    setLocalSpeed(animationSpeed);
+  }, [animationSpeed]);
+
+  const startSpeedRef = useRef(0);
+  const localSpeedRef = useRef(localSpeed);
+  localSpeedRef.current = localSpeed;
+
+  const setAnimationSpeedRef = useRef(setAnimationSpeed);
+  setAnimationSpeedRef.current = setAnimationSpeed;
+
+  const sliderWidthRef = useRef(sliderWidth);
+  sliderWidthRef.current = sliderWidth;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        const initialTouchX = evt.nativeEvent.locationX;
+        const width = sliderWidthRef.current || 200;
+        let newSpeed = Math.max(0, Math.min(2, (initialTouchX / width) * 2));
+        newSpeed = Math.round(newSpeed * 20) / 20; // steps of 0.05
+        setLocalSpeed(newSpeed);
+        startSpeedRef.current = newSpeed;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const width = sliderWidthRef.current || 200;
+        const deltaSpeed = (gestureState.dx / width) * 2;
+        let newSpeed = Math.max(0, Math.min(2, startSpeedRef.current + deltaSpeed));
+        newSpeed = Math.round(newSpeed * 20) / 20;
+        setLocalSpeed(newSpeed);
+      },
+      onPanResponderRelease: () => {
+        const finalSpeed = localSpeedRef.current;
+        if (setAnimationSpeedRef.current) {
+          setAnimationSpeedRef.current(finalSpeed);
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={styles.volumeSliderContainer}>
+      <View style={styles.volumeSliderHeader}>
+        <Ionicons name="speedometer-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
+        <Text style={styles.settingTitle}>Global Animation Speed</Text>
+        <Text style={styles.volumePercentage}>
+          {localSpeed === 0 ? 'Instant (0x)' : `${localSpeed}x`}
+        </Text>
+      </View>
+      <View
+        style={styles.volSliderTrack}
+        onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+        {...panResponder.panHandlers}
+      >
+        <View pointerEvents="none" style={[styles.volSliderFill, { width: `${(localSpeed / 2) * 100}%` }]} />
+        <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${(localSpeed / 2) * 100}%` }]} />
+      </View>
+    </View>
+  );
+};
+
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ 
   user, 
   weeklyChartData, 
@@ -192,6 +355,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setIsAutoTimerEnabled,
   onMeasurePress,
   googleUser,
+  isProgressiveOverloadEnabled = false,
+  setIsProgressiveOverloadEnabled,
+  isAutoFinishSetEnabled = true,
+  setIsAutoFinishSetEnabled,
+  isKeyboardDismissOnNextEnabled = true,
+  setIsKeyboardDismissOnNextEnabled,
   onGoogleLogin,
   onGoogleLogout,
   onCloudSync,
@@ -255,6 +424,34 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const insets = useSafeAreaInsets();
   // Modals state
   const [isRenameVisible, setIsRenameVisible] = useState(false);
+  const [developerToolsUnlocked, setDeveloperToolsUnlocked] = useState(isDeveloperModeEnabled);
+  React.useEffect(() => {
+    if (isDeveloperModeEnabled) {
+      setDeveloperToolsUnlocked(true);
+    }
+  }, [isDeveloperModeEnabled]);
+
+  const versionTapCount = useRef(0);
+  const lastVersionTapTime = useRef(0);
+
+  const handleVersionPress = () => {
+    const now = Date.now();
+    if (now - lastVersionTapTime.current > 2000) {
+      versionTapCount.current = 1;
+    } else {
+      versionTapCount.current += 1;
+    }
+    lastVersionTapTime.current = now;
+
+    if (versionTapCount.current >= 3) {
+      setDeveloperToolsUnlocked(true);
+      Alert.alert(
+        "Developer Tools Unlocked",
+        "Developer Mode is now visible at the bottom of the Settings page."
+      );
+      versionTapCount.current = 0;
+    }
+  };
   const [isGoogleModalVisible, setIsGoogleModalVisible] = useState(false);
   const [isBackupPanelVisible, setIsBackupPanelVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -278,21 +475,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [isTimerPickerVisible, setIsTimerPickerVisible] = useState(false);
   const [customTimerValue, setCustomTimerValue] = useState(defaultRestDuration.toString());
 
-  // Volume slider state
-  const [sliderWidth, setSliderWidth] = useState(200);
 
-  const handleSliderTouch = (e: any) => {
-    const touchX = e.nativeEvent.locationX;
-    let newVolume = Math.max(0, Math.min(1, touchX / sliderWidth));
-    // Round to nearest 0.05
-    newVolume = Math.round(newVolume * 20) / 20;
-    if (setSoundVolume) setSoundVolume(newVolume);
-  };
-
-  const handleSliderRelease = () => {
-    // Play a preview of the set completed sound at the new volume
-    import('../utils/soundPlayer').then(m => m.playSoundByKey(soundSetCompleted));
-  };
 
   const handlePickCustomSound = async () => {
     try {
@@ -436,9 +619,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const slideAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
+    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+      ? globalAnimation.speed
+      : 1;
+
+    if (speed === 0) {
+      fadeAnim.setValue(1);
+      return;
+    }
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 450,
+      duration: 450 * speed,
       useNativeDriver: true,
       easing: Easing.out(Easing.cubic),
     }).start();
@@ -1599,9 +1790,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             contentContainerStyle={styles.settingsContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* ── Account Management ──────────────────────────────── */}
+            {/* ── ACCOUNT & SYNC ──────────────────────────────────── */}
             <SectionLabel
-              title="Account Management"
+              title="ACCOUNT & SYNC"
               style={styles.sectionLabel}
             />
             <Card padding={spacing.lg}>
@@ -1701,654 +1892,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </Pressable>
             </Card>
 
-            {/* ── Features & Modules ──────────────────────────────── */}
-            <SectionLabel
-              title="Features & Modules"
-              subtitle="Enable or disable app sections"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
-            <Card padding={spacing.lg}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="disc-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Plate Calculator</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show disc plate calculator in active workout header
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isPlateCalculatorEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsPlateCalculatorEnabled && setIsPlateCalculatorEnabled(!isPlateCalculatorEnabled)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Plate Calculator"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isPlateCalculatorEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isPlateCalculatorEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="ribbon-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Training Programs</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show PPL & 5/3/1 program splits in Workout tab
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isProgramsEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsProgramsEnabled && setIsProgramsEnabled(!isProgramsEnabled)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Training Programs"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isProgramsEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isProgramsEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="time-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Workout History Tab</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show History tab in bottom navigation
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isHistoryEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsHistoryEnabled && setIsHistoryEnabled(!isHistoryEnabled)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle History Tab"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isHistoryEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isHistoryEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="body-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Muscle Map Tab</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show Muscles tab in bottom navigation
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isMusclesEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsMusclesEnabled && setIsMusclesEnabled(!isMusclesEnabled)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Muscle Map Tab"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isMusclesEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isMusclesEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-            </Card>
-
-            {/* ── Timer Preferences ───────────────────────────────── */}
-            <SectionLabel
-              title="Timer Preferences"
-              subtitle="Configure rest countdowns"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
-            <Card padding={spacing.lg}>
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => setIsTimerPickerVisible(true)}
-                android_ripple={rippleTokens.surface}
-                accessibilityLabel="Default Auto-Timer Duration selection"
-              >
-                <View style={styles.settingInfo}>
-                  <Ionicons name="hourglass-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Default Rest Duration</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Initialized when completing a workout set
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
-                    {defaultRestDuration}s
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </View>
-              </Pressable>
-            </Card>
-
-            {/* ── Layout & Declutter ────────────────────────────────── */}
-            <SectionLabel
-              title="Layout & Declutter"
-              subtitle="Configure dashboard elements visibility"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
-            <Card padding={spacing.lg}>
-              {/* Achievement Badges */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="trophy-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Achievement Badges</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show earned milestone badges on profile
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showAchievementBadges && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowAchievementBadges && setShowAchievementBadges(!showAchievementBadges)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Achievement Badges"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showAchievementBadges && styles.togglePillTextActive
-                  ]}>
-                    {showAchievementBadges ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Summary Data Widgets */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="stats-chart-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Summary Data Widgets</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show dashboard stat cards (all-time, streak, avg)
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showSummaryWidgets && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowSummaryWidgets && setShowSummaryWidgets(!showSummaryWidgets)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Summary Data Widgets"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showSummaryWidgets && styles.togglePillTextActive
-                  ]}>
-                    {showSummaryWidgets ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Weekly Tonnage */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="barbell-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Weekly Tonnage / Volume</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show sets volume trends bars on profile
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showWeeklyTonnage && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowWeeklyTonnage && setShowWeeklyTonnage(!showWeeklyTonnage)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Weekly Tonnage Volume"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showWeeklyTonnage && styles.togglePillTextActive
-                  ]}>
-                    {showWeeklyTonnage ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Workouts Chart */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="trending-up-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Workouts Chart</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show workouts per week bar chart
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showWorkoutsChart && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowWorkoutsChart && setShowWorkoutsChart(!showWorkoutsChart)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Workouts Chart"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showWorkoutsChart && styles.togglePillTextActive
-                  ]}>
-                    {showWorkoutsChart ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Highlights & PRs */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="star-outline" size={20} color={colors.gold} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Highlights & PRs</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show recent highlights and personal records
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showHighlights && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowHighlights && setShowHighlights(!showHighlights)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Highlights & PRs"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showHighlights && styles.togglePillTextActive
-                  ]}>
-                    {showHighlights ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Routine Folders */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="folder-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Routine Folders</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Group routines into folders when you have multiple splits
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    enableRoutineFolders && styles.togglePillActive
-                  ]}
-                  onPress={() => setEnableRoutineFolders && setEnableRoutineFolders(!enableRoutineFolders)}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle Routine Folders"
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    enableRoutineFolders && styles.togglePillTextActive
-                  ]}>
-                    {enableRoutineFolders ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-            </Card>
-
-            {/* ── Audio & Feedback ────────────────────────────────── */}
-            <SectionLabel
-              title="Audio & Feedback"
-              subtitle="Customize auditory triggers"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
-            <Card padding={spacing.lg}>
-              {/* Volume Slider Row */}
-              <View style={styles.volumeSliderContainer}>
-                <View style={styles.volumeSliderHeader}>
-                  <Ionicons name="volume-medium-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <Text style={styles.settingTitle}>Sound Volume</Text>
-                  <Text style={styles.volumePercentage}>{Math.round(soundVolume * 100)}%</Text>
-                </View>
-                <View
-                  style={styles.volSliderTrack}
-                  onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onResponderGrant={handleSliderTouch}
-                  onResponderMove={handleSliderTouch}
-                  onResponderRelease={handleSliderRelease}
-                >
-                  <View pointerEvents="none" style={[styles.volSliderFill, { width: `${soundVolume * 100}%` }]} />
-                  <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${soundVolume * 100}%` }]} />
-                </View>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => {
-                  setActiveSoundTrigger('setChecked');
-                  setIsSoundSelectorVisible(true);
-                }}
-                android_ripple={rippleTokens.surface}
-                accessibilityLabel="Set Completed sound trigger selection"
-              >
-                <View style={styles.settingInfo}>
-                  <Ionicons name="volume-high-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Set Completed</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Sound played when checking off a set
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
-                    {formatSoundName(soundSetCompleted)}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </View>
-              </Pressable>
-
-              <View style={styles.settingDivider} />
-
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => {
-                  setActiveSoundTrigger('workoutCompleted');
-                  setIsSoundSelectorVisible(true);
-                }}
-                android_ripple={rippleTokens.surface}
-                accessibilityLabel="Workout Finished sound trigger selection"
-              >
-                <View style={styles.settingInfo}>
-                  <Ionicons name="trophy-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Workout Finished</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Sound played when finishing a session
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
-                    {formatSoundName(soundWorkoutFinished)}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </View>
-              </Pressable>
-
-              <View style={styles.settingDivider} />
-
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => {
-                  setActiveSoundTrigger('timerCompleted');
-                  setIsSoundSelectorVisible(true);
-                }}
-                android_ripple={rippleTokens.surface}
-                accessibilityLabel="Timer Completed sound trigger selection"
-              >
-                <View style={styles.settingInfo}>
-                  <Ionicons name="alarm-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Timer Completed</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Sound played when the rest countdown ends
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
-                    {formatSoundName(soundTimerCompleted)}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </View>
-              </Pressable>
-            </Card>
-
-            {/* ── Workout Preferences ─────────────────────────────── */}
-            <SectionLabel
-              title="Workout Preferences"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
-            <Card padding={spacing.lg}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="alarm-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Auto Rest Timer</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Start 90s countdown after completing a set
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isAutoTimerEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsAutoTimerEnabled(!isAutoTimerEnabled)}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isAutoTimerEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isAutoTimerEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="heart-half-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Native Health Integration (Simulated)</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Simulated sync of calories, workouts & active duration to Apple Health / Health Connect
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isHealthSyncEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => {
-                    const nextVal = !isHealthSyncEnabled;
-                    setIsHealthSyncEnabled(nextVal);
-                    if (nextVal) {
-                      Alert.alert("Health Integration (Simulated)", "Apple Health & Google Health Connect integration successfully authorized in simulated mode! Workouts will now be synced in this sandbox build.");
-                    }
-                  }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isHealthSyncEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isHealthSyncEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="pulse-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Wearable Heart Rate Sync</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Pull active heartbeat BPM telemetry during workout sessions
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isLiveHeartRateEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsLiveHeartRateEnabled(!isLiveHeartRateEnabled)}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isLiveHeartRateEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isLiveHeartRateEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="watch-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Smartwatch Companion Simulator</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Simulate a connected Apple Watch or WearOS smartwatch screen
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isWatchSimulatorVisible && styles.togglePillActive
-                  ]}
-                  onPress={() => {
-                    setIsWatchSimulatorVisible(!isWatchSimulatorVisible);
-                    if (!isWatchSimulatorVisible) {
-                      setIsSettingsVisible(false); // Close settings sheet to reveal the watch face simulator
-                    }
-                  }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isWatchSimulatorVisible && styles.togglePillTextActive
-                  ]}>
-                    {isWatchSimulatorVisible ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* ── Animation Speed Scale Selector ──────────────────── */}
-              <View style={{ marginTop: spacing.md }}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="speedometer-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Global Animation Speed</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Scale factor for entry and view transitions
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Premium Slider (Dots Removed) */}
-                <View style={styles.sliderContainer}>
-                  <View style={styles.sliderTrack}>
-                    <View style={[styles.sliderFill, { width: `${(animationSpeed / 2) * 100}%` }]} />
-                    
-                    {/* Premium dynamic glowing thumb */}
-                    <View style={[styles.sliderThumb, { left: `${(animationSpeed / 2) * 100}%` }]}>
-                      <View style={styles.sliderThumbInner} />
-                    </View>
-
-                    {/* Transparent tactile touch hotspots */}
-                    {[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(val => (
-                      <Pressable
-                        key={val}
-                        style={[
-                          styles.sliderTapZone,
-                          { left: `${(val / 2) * 100}%` }
-                        ]}
-                        onPress={() => setAnimationSpeed(val)}
-                        hitSlop={8}
-                      />
-                    ))}
-                  </View>
-                  <View style={styles.sliderLabels}>
-                    <Text style={styles.sliderLabelText}>0x (Instant)</Text>
-                    <Text style={[styles.sliderLabelText, { color: colors.accent, fontFamily: font.bold }]}>
-                      {animationSpeed === 0 ? 'Instant (0x)' : `${animationSpeed}x`}
-                    </Text>
-                    <Text style={styles.sliderLabelText}>2x (Slow)</Text>
-                  </View>
-                </View>
-              </View>
-            </Card>
-
-
-            {/* ── Cloud Sync & Backup ─────────────────────────────── */}
-            <SectionLabel
-              title="Cloud Sync & Backup"
-              subtitle="Google account sync"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
+            {/* Cloud Sync & Backup (under Account & Sync) */}
+            <View style={{ height: spacing.md }} />
             <Card padding={spacing.lg}>
               {googleUser ? (
                 <View style={styles.syncContainer}>
@@ -2433,12 +1978,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               )}
             </Card>
 
-            {/* ── Data Portability ────────────────────────────── */}
-            <SectionLabel
-              title="Backup / Restore Data"
-              subtitle="Save your data as a file or restore from one"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-            />
+            {/* Data Portability (under Account & Sync) */}
+            <View style={{ height: spacing.md }} />
             <Card padding={spacing.md}>
               {/* Export row */}
               <Pressable
@@ -2534,106 +2075,753 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </Pressable>
             </Card>
 
-            {/* ── Developer Mode Toggle ──────────────────────────── */}
+            {/* ── WORKOUT PREFERENCES ─────────────────────────────── */}
             <SectionLabel
-              title="Developer Mode"
-              subtitle="Access testing & simulation tools"
+              title="WORKOUT PREFERENCES"
               style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.lg}>
+              {/* Auto Rest Timer */}
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Ionicons name="construct-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <Ionicons name="alarm-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Enable Developer Tools</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={3}>
-                      Unlock database generation, system telemetry controls, and local sandbox settings.
+                    <Text style={styles.settingTitle}>Auto Rest Timer</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Start rest countdown after completing a set
                     </Text>
                   </View>
                 </View>
                 <Pressable
                   style={[
                     styles.togglePill,
-                    isDeveloperModeEnabled && styles.togglePillActive
+                    isAutoTimerEnabled && styles.togglePillActive
                   ]}
-                  onPress={() => setIsDeveloperModeEnabled(!isDeveloperModeEnabled)}
+                  onPress={() => setIsAutoTimerEnabled(!isAutoTimerEnabled)}
                   android_ripple={rippleTokens.surface}
                 >
                   <Text style={[
                     styles.togglePillText,
-                    isDeveloperModeEnabled && styles.togglePillTextActive
+                    isAutoTimerEnabled && styles.togglePillTextActive
                   ]}>
-                    {isDeveloperModeEnabled ? 'ON' : 'OFF'}
+                    {isAutoTimerEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Default Rest Duration Picker */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => setIsTimerPickerVisible(true)}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Default Auto-Timer Duration selection"
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="hourglass-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Default Rest Duration</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Initialized when completing a workout set
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
+                    {defaultRestDuration}s
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </View>
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              {/* Wearable Heart Rate Sync */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="pulse-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Wearable Heart Rate Sync</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Pull active heartbeat BPM telemetry during workout sessions
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isLiveHeartRateEnabled && styles.togglePillActive
+                  ]}
+                  onPress={() => setIsLiveHeartRateEnabled(!isLiveHeartRateEnabled)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isLiveHeartRateEnabled && styles.togglePillTextActive
+                  ]}>
+                    {isLiveHeartRateEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Progressive Overload */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="trending-up-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Progressive Overload</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Automatically suggests weight (+2.5kg) or rep (+1 rep) increments for upcoming sets
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isProgressiveOverloadEnabled && styles.togglePillActive
+                  ]}
+                  onPress={() => setIsProgressiveOverloadEnabled && setIsProgressiveOverloadEnabled(!isProgressiveOverloadEnabled)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isProgressiveOverloadEnabled && styles.togglePillTextActive
+                  ]}>
+                    {isProgressiveOverloadEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Auto-Finish Set */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Auto-Finish Set</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Automatically marks a set as completed when pressing "Next" inside the Reps & RPE boxes
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isAutoFinishSetEnabled && styles.togglePillActive
+                  ]}
+                  onPress={() => setIsAutoFinishSetEnabled && setIsAutoFinishSetEnabled(!isAutoFinishSetEnabled)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isAutoFinishSetEnabled && styles.togglePillTextActive
+                  ]}>
+                    {isAutoFinishSetEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Keyboard Dismiss on Next */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="keypad-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Keyboard Dismiss on Next</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Dismisses the keyboard instead of jumping to the next field when pressing "Next" inside Reps & RPE boxes
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isKeyboardDismissOnNextEnabled && styles.togglePillActive
+                  ]}
+                  onPress={() => setIsKeyboardDismissOnNextEnabled && setIsKeyboardDismissOnNextEnabled(!isKeyboardDismissOnNextEnabled)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isKeyboardDismissOnNextEnabled && styles.togglePillTextActive
+                  ]}>
+                    {isKeyboardDismissOnNextEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Smartwatch Simulator */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="watch-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Smartwatch Companion Simulator</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Simulate a connected Apple Watch or WearOS smartwatch screen
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isWatchSimulatorVisible && styles.togglePillActive
+                  ]}
+                  onPress={() => {
+                    setIsWatchSimulatorVisible(!isWatchSimulatorVisible);
+                    if (!isWatchSimulatorVisible) {
+                      setIsSettingsVisible(false); // Close settings sheet to reveal the watch face simulator
+                    }
+                  }}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isWatchSimulatorVisible && styles.togglePillTextActive
+                  ]}>
+                    {isWatchSimulatorVisible ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Native Health Integration */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="heart-half-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Native Health Integration (Simulated)</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      Simulated sync of calories, workouts & active duration to Apple Health / Health Connect
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    isHealthSyncEnabled && styles.togglePillActive
+                  ]}
+                  onPress={() => {
+                    const nextVal = !isHealthSyncEnabled;
+                    setIsHealthSyncEnabled(nextVal);
+                    if (nextVal) {
+                      Alert.alert("Health Integration (Simulated)", "Apple Health & Google Health Connect integration successfully authorized in simulated mode! Workouts will now be synced in this sandbox build.");
+                    }
+                  }}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    isHealthSyncEnabled && styles.togglePillTextActive
+                  ]}>
+                    {isHealthSyncEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Features & Modules Toggles */}
+              <View style={{ marginTop: spacing.md }}>
+                <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginBottom: spacing.xs, color: colors.textSecondary }]}>Enabled Modules</Text>
+                
+                {/* Plate Calculator */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="disc-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.settingTitle}>Plate Calculator</Text>
+                      <Text style={styles.settingSubtitle}>Show disc plate calculator in workout header</Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.togglePill,
+                      isPlateCalculatorEnabled && styles.togglePillActive
+                    ]}
+                    onPress={() => setIsPlateCalculatorEnabled && setIsPlateCalculatorEnabled(!isPlateCalculatorEnabled)}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={[
+                      styles.togglePillText,
+                      isPlateCalculatorEnabled && styles.togglePillTextActive
+                    ]}>
+                      {isPlateCalculatorEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.settingDivider} />
+
+                {/* Training Programs */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="ribbon-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.settingTitle}>Training Programs</Text>
+                      <Text style={styles.settingSubtitle}>Show PPL & 5/3/1 splits in Workout tab</Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.togglePill,
+                      isProgramsEnabled && styles.togglePillActive
+                    ]}
+                    onPress={() => setIsProgramsEnabled && setIsProgramsEnabled(!isProgramsEnabled)}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={[
+                      styles.togglePillText,
+                      isProgramsEnabled && styles.togglePillTextActive
+                    ]}>
+                      {isProgramsEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.settingDivider} />
+
+                {/* Workout History Tab */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="time-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.settingTitle}>Workout History Tab</Text>
+                      <Text style={styles.settingSubtitle}>Show History tab in bottom navigation</Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.togglePill,
+                      isHistoryEnabled && styles.togglePillActive
+                    ]}
+                    onPress={() => setIsHistoryEnabled && setIsHistoryEnabled(!isHistoryEnabled)}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={[
+                      styles.togglePillText,
+                      isHistoryEnabled && styles.togglePillTextActive
+                    ]}>
+                      {isHistoryEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.settingDivider} />
+
+                {/* Muscle Map Tab */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Ionicons name="body-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.settingTitle}>Muscle Map Tab</Text>
+                      <Text style={styles.settingSubtitle}>Show Muscles tab in bottom navigation</Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.togglePill,
+                      isMusclesEnabled && styles.togglePillActive
+                    ]}
+                    onPress={() => setIsMusclesEnabled && setIsMusclesEnabled(!isMusclesEnabled)}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={[
+                      styles.togglePillText,
+                      isMusclesEnabled && styles.togglePillTextActive
+                    ]}>
+                      {isMusclesEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Card>
+
+            {/* ── APPEARANCE & INTERACTION ────────────────────────── */}
+            <SectionLabel
+              title="APPEARANCE & INTERACTION"
+              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
+            />
+            <Card padding={spacing.lg}>
+              {/* Global Animation Speed (Smooth Draggable Slider) */}
+              <AnimationSpeedSlider
+                animationSpeed={animationSpeed}
+                setAnimationSpeed={setAnimationSpeed}
+              />
+
+              <View style={styles.settingDivider} />
+
+              {/* Volume Slider Row */}
+              <VolumeSlider
+                soundVolume={soundVolume}
+                setSoundVolume={setSoundVolume || (() => {})}
+                soundSetCompleted={soundSetCompleted}
+              />
+
+              <View style={styles.settingDivider} />
+
+              {/* Sound dropdowns */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => {
+                  setActiveSoundTrigger('setChecked');
+                  setIsSoundSelectorVisible(true);
+                }}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Set Completed sound trigger selection"
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="volume-high-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Set Completed</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Sound played when checking off a set
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
+                    {formatSoundName(soundSetCompleted)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </View>
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => {
+                  setActiveSoundTrigger('workoutCompleted');
+                  setIsSoundSelectorVisible(true);
+                }}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Workout Finished sound trigger selection"
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="trophy-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Workout Finished</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Sound played when finishing a session
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
+                    {formatSoundName(soundWorkoutFinished)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </View>
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => {
+                  setActiveSoundTrigger('timerCompleted');
+                  setIsSoundSelectorVisible(true);
+                }}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Timer Completed sound trigger selection"
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="alarm-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Timer Completed</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Sound played when the rest countdown ends
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
+                    {formatSoundName(soundTimerCompleted)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </View>
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              {/* Layout visibility toggles header */}
+              <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginTop: spacing.md, marginBottom: spacing.xs, color: colors.textSecondary }]}>Visible Dashboard Widgets</Text>
+
+              {/* Achievement Badges */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="trophy-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Achievement Badges</Text>
+                    <Text style={styles.settingSubtitle}>Show earned milestone badges on profile</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    showAchievementBadges && styles.togglePillActive
+                  ]}
+                  onPress={() => setShowAchievementBadges && setShowAchievementBadges(!showAchievementBadges)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    showAchievementBadges && styles.togglePillTextActive
+                  ]}>
+                    {showAchievementBadges ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Summary Data Widgets */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="stats-chart-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Summary Data Widgets</Text>
+                    <Text style={styles.settingSubtitle}>Show dashboard stat cards (all-time, streak, avg)</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    showSummaryWidgets && styles.togglePillActive
+                  ]}
+                  onPress={() => setShowSummaryWidgets && setShowSummaryWidgets(!showSummaryWidgets)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    showSummaryWidgets && styles.togglePillTextActive
+                  ]}>
+                    {showSummaryWidgets ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Weekly Tonnage */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="barbell-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Weekly Tonnage / Volume</Text>
+                    <Text style={styles.settingSubtitle}>Show sets volume trends bars on profile</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    showWeeklyTonnage && styles.togglePillActive
+                  ]}
+                  onPress={() => setShowWeeklyTonnage && setShowWeeklyTonnage(!showWeeklyTonnage)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    showWeeklyTonnage && styles.togglePillTextActive
+                  ]}>
+                    {showWeeklyTonnage ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Workouts Chart */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="trending-up-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Workouts Chart</Text>
+                    <Text style={styles.settingSubtitle}>Show workouts per week bar chart</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    showWorkoutsChart && styles.togglePillActive
+                  ]}
+                  onPress={() => setShowWorkoutsChart && setShowWorkoutsChart(!showWorkoutsChart)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    showWorkoutsChart && styles.togglePillTextActive
+                  ]}>
+                    {showWorkoutsChart ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Highlights & PRs */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="star-outline" size={20} color={colors.gold} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Highlights & PRs</Text>
+                    <Text style={styles.settingSubtitle}>Show recent highlights and personal records</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    showHighlights && styles.togglePillActive
+                  ]}
+                  onPress={() => setShowHighlights && setShowHighlights(!showHighlights)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    showHighlights && styles.togglePillTextActive
+                  ]}>
+                    {showHighlights ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              {/* Routine Folders */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="folder-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Routine Folders</Text>
+                    <Text style={styles.settingSubtitle}>Group routines into folders</Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    enableRoutineFolders && styles.togglePillActive
+                  ]}
+                  onPress={() => setEnableRoutineFolders && setEnableRoutineFolders(!enableRoutineFolders)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[
+                    styles.togglePillText,
+                    enableRoutineFolders && styles.togglePillTextActive
+                  ]}>
+                    {enableRoutineFolders ? 'ON' : 'OFF'}
                   </Text>
                 </Pressable>
               </View>
             </Card>
 
-            {/* ── Developer Settings (only shown when enabled) ─────── */}
-            {isDeveloperModeEnabled && (
-              <>
-                <SectionLabel
-                  title="Developer Settings"
-                  subtitle="Testing and demo tools"
-                  style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-                />
-                <Card padding={spacing.lg}>
-                  <Text style={[styles.settingSubtitle, { marginBottom: spacing.md, color: colors.textSecondary }]}>
-                    Developer settings are configuration options and utility commands used to test and verify app features during development. They allow developers and testers to inspect states, load pre-defined mock databases, and emulate physical device sensors or integrations.
-                  </Text>
-                  {authMode === 'guest' ? (
-                    <Pressable
-                      style={styles.settingRow}
-                      onPress={handleLoadDemoData}
-                      android_ripple={rippleTokens.surface}
-                      accessibilityLabel="Load demo database"
-                    >
-                      <View style={styles.settingInfo}>
-                        <Ionicons name="code-slash-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.settingTitle, { color: colors.textSecondary }]}>Load Demo Database</Text>
-                          <Text style={styles.settingSubtitle}>
-                            Populate app with sample workouts, sessions, and metrics for testing
-                          </Text>
-                        </View>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                    </Pressable>
-                  ) : (
-                    <View style={[styles.settingRow, { opacity: 0.45 }]}>
-                      <View style={styles.settingInfo}>
-                        <Ionicons name="code-slash-outline" size={20} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.settingTitle, { color: colors.textMuted }]}>Load Demo Database</Text>
-                          <Text style={styles.settingSubtitle}>
-                            Only available for Guest accounts. Sign out to enable.
-                          </Text>
-                        </View>
-                      </View>
-                      <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
-                    </View>
-                  )}
-                </Card>
-              </>
-            )}
-
-
-            {/* ── App Info ────────────────────────────────────────── */}
+            {/* ── ABOUT ────────────────────────────────────────── */}
             <SectionLabel
-              title="About"
+              title="ABOUT"
               style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.lg}>
-              <View style={styles.aboutRow}>
+              <Pressable
+                onPress={handleVersionPress}
+                style={styles.aboutRow}
+                android_ripple={rippleTokens.surface}
+              >
                 <View style={[styles.aboutIconBox, { backgroundColor: colors.accent + '22' }]}>
                   <Ionicons name="barbell-outline" size={20} color={colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.aboutAppName}>strongerN</Text>
-                  <Text style={styles.aboutVersion}>Version 1.0.0  ·  AMOLED Optimized</Text>
+                  <Text style={styles.aboutVersion}>Version 1.0.0  ·  AMOLED Optimized (Tap version to unlock developer tools)</Text>
                 </View>
-              </View>
+              </Pressable>
             </Card>
+
+            {/* ── DEVELOPER OPTIONS (Conditionally Shown) ───────── */}
+            {developerToolsUnlocked && (
+              <>
+                <SectionLabel
+                  title="DEVELOPER OPTIONS"
+                  subtitle="Testing and demo tools"
+                  style={[styles.sectionLabel, { marginTop: spacing.xl }]}
+                />
+                <Card padding={spacing.lg}>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Ionicons name="construct-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.settingTitle}>Enable Developer Tools</Text>
+                        <Text style={styles.settingSubtitle}>
+                          Unlock database generation, system telemetry controls, and local sandbox settings.
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.togglePill,
+                        isDeveloperModeEnabled && styles.togglePillActive
+                      ]}
+                      onPress={() => setIsDeveloperModeEnabled(!isDeveloperModeEnabled)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={[
+                        styles.togglePillText,
+                        isDeveloperModeEnabled && styles.togglePillTextActive
+                      ]}>
+                        {isDeveloperModeEnabled ? 'ON' : 'OFF'}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {isDeveloperModeEnabled && (
+                    <>
+                      <View style={styles.settingDivider} />
+                      <Text style={[styles.settingSubtitle, { marginVertical: spacing.md, color: colors.textSecondary }]}>
+                        Developer settings are configuration options and utility commands used to test and verify app features during development. They allow developers and testers to inspect states, load pre-defined mock databases, and emulate physical device sensors or integrations.
+                      </Text>
+                      {authMode === 'guest' ? (
+                        <Pressable
+                          style={styles.settingRow}
+                          onPress={handleLoadDemoData}
+                          android_ripple={rippleTokens.surface}
+                          accessibilityLabel="Load demo database"
+                        >
+                          <View style={styles.settingInfo}>
+                            <Ionicons name="code-slash-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.settingTitle, { color: colors.textSecondary }]}>Load Demo Database</Text>
+                              <Text style={styles.settingSubtitle}>
+                                Populate app with sample workouts, sessions, and metrics for testing
+                              </Text>
+                            </View>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                        </Pressable>
+                      ) : (
+                        <View style={[styles.settingRow, { opacity: 0.45 }]}>
+                          <View style={styles.settingInfo}>
+                            <Ionicons name="code-slash-outline" size={20} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.settingTitle, { color: colors.textMuted }]}>Load Demo Database</Text>
+                              <Text style={styles.settingSubtitle}>
+                                Only available for Guest accounts. Sign out to enable.
+                              </Text>
+                            </View>
+                          </View>
+                          <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+                        </View>
+                      )}
+                    </>
+                  )}
+                </Card>
+              </>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -3147,45 +3335,45 @@ const styles = StyleSheet.create({
   recoveryDivider: {
     height: 1,
     backgroundColor: colors.border,
-    width: '100%',
     marginVertical: spacing.md,
   },
   recoveryGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    columnGap: spacing.sm,
-    width: '100%',
+    rowGap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   recoveryBtn: {
-    flex: 1,
-    flexDirection: 'row',
+    width: '48%',
     alignItems: 'center',
     justifyContent: 'center',
+    rowGap: 6,
     backgroundColor: colors.surface2,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radius.xs,
-    paddingVertical: 10,
-    columnGap: 6,
+    borderRadius: radius.sm,
+    paddingVertical: 14,
   },
   recoveryBtnText: {
-    color: colors.textPrimary,
-    fontSize: 9,
+    color: colors.textSecondary,
+    fontSize: 10,
     fontFamily: font.bold,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   wipeSimBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
-    paddingVertical: 8,
     columnGap: 6,
-    width: '100%',
+    paddingVertical: spacing.xs,
   },
   wipeSimBtnText: {
-    color: colors.textSecondary,
+    color: colors.error,
     fontSize: 9,
     fontFamily: font.bold,
+    letterSpacing: 0.5,
   },
   syncTitle: {
     color: colors.textPrimary,
@@ -3253,50 +3441,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  // Recovery Panel
-  recoveryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  recoveryBtn: {
-    width: '48%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    rowGap: 6,
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingVertical: 14,
-  },
-  recoveryBtnText: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    fontFamily: font.bold,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  recoveryDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-  wipeSimBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    columnGap: 6,
-    paddingVertical: spacing.xs,
-  },
-  wipeSimBtnText: {
-    color: colors.error,
-    fontSize: 9,
-    fontFamily: font.bold,
-    letterSpacing: 0.5,
-  },
+
 
   // Modals Styling
   modalBackdrop: {

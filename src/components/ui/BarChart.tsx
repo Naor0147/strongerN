@@ -74,6 +74,7 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
 
   useEffect(() => {
     hasAnimated.current = false;
+    animValuesRef.current.forEach(anim => anim.setValue(0));
     startAnimation();
     return () => {
       if (activeAnimRef.current) {

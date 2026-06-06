@@ -14,7 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { WorkoutSession, ExerciseSet } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
@@ -24,6 +24,7 @@ import { sectionListGetItemLayout } from '../utils/listLayout';
 
 interface HistoryScreenProps {
   sessions: WorkoutSession[];
+  onResumeWorkout?: (session: WorkoutSession) => void;
 }
 
 interface SectionData {
@@ -80,7 +81,10 @@ const ExerciseRow: React.FC<{ exercise: ExerciseSet }> = React.memo(({ exercise 
 ));
 
 // ─── Session Card ─────────────────────────────────────────────────
-const SessionCard: React.FC<{ session: WorkoutSession }> = React.memo(({ session }) => {
+const SessionCard: React.FC<{
+  session: WorkoutSession;
+  onResumeWorkout?: (session: WorkoutSession) => void;
+}> = React.memo(({ session, onResumeWorkout }) => {
   const hasPR   = session.prs > 0;
   const variant = hasPR ? 'highlight' : 'default';
 
@@ -97,12 +101,25 @@ const SessionCard: React.FC<{ session: WorkoutSession }> = React.memo(({ session
           <Text style={styles.sessionTitle}>{session.title}</Text>
           <Text style={styles.sessionDate}>{formatDate(session.datetime)}</Text>
         </View>
-        {hasPR && (
-          <View style={styles.prBadge}>
-            <Ionicons name="trophy" size={12} color={colors.gold} />
-            <Text style={styles.prText}>{session.prs} PR</Text>
-          </View>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
+          {hasPR && (
+            <View style={styles.prBadge}>
+              <Ionicons name="trophy" size={12} color={colors.gold} />
+              <Text style={styles.prText}>{session.prs} PR</Text>
+            </View>
+          )}
+          {onResumeWorkout && (
+            <Pressable
+              style={styles.resumeBtn}
+              onPress={() => onResumeWorkout(session)}
+              android_ripple={rippleTokens.accent}
+              accessibilityLabel={`Resume or edit ${session.title} workout`}
+            >
+              <Ionicons name="play" size={10} color={colors.accent} style={{ marginRight: 2 }} />
+              <Text style={styles.resumeBtnText}>EDIT / RESUME</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {session.comment ? (
@@ -135,7 +152,7 @@ const SessionCard: React.FC<{ session: WorkoutSession }> = React.memo(({ session
 });
 
 // ─── Screen ────────────────────────────────────────────────────────
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -149,15 +166,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
   const slideAnim = React.useRef(new Animated.Value(20)).current;
 
   React.useEffect(() => {
+    if (globalAnimation.speed === 0) {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      return;
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 350,
+        duration: getScaledDuration(350),
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 350,
+        duration: getScaledDuration(350),
         useNativeDriver: true,
       }),
     ]).start();
@@ -206,8 +228,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
   }, [filteredSessions]);
 
   const renderItem = useCallback(
-    ({ item }: { item: WorkoutSession }) => <SessionCard session={item} />,
-    []
+    ({ item }: { item: WorkoutSession }) => (
+      <SessionCard session={item} onResumeWorkout={onResumeWorkout} />
+    ),
+    [onResumeWorkout]
   );
 
   const renderSectionHeader = useCallback(
@@ -764,6 +788,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     position: 'absolute',
     bottom: 2,
+  },
+  resumeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: radius.xs,
+    backgroundColor: '#4F8EF718', // 10% opacity accent
+    borderWidth: 1,
+    borderColor: '#4F8EF740', // 25% opacity accent border
+  },
+  resumeBtnText: {
+    color: colors.accent,
+    fontSize: font.sizes.xs - 2,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
   },
 });
 

@@ -25,7 +25,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { AuthMode } from '../utils/authStore';
 import { pickAndReadBackupFile } from '../utils/backupManager';
 
@@ -81,18 +81,23 @@ const AnimatedLogo: React.FC = () => {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    if (globalAnimation.speed === 0) {
+      pulseAnim.setValue(1);
+      glowAnim.setValue(0);
+      return;
+    }
+    const anim = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(pulseAnim, {
             toValue: 1.08,
-            duration: 1400,
+            duration: getScaledDuration(1400),
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(glowAnim, {
             toValue: 1,
-            duration: 1400,
+            duration: getScaledDuration(1400),
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: false,
           }),
@@ -100,20 +105,22 @@ const AnimatedLogo: React.FC = () => {
         Animated.parallel([
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 1400,
+            duration: getScaledDuration(1400),
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(glowAnim, {
             toValue: 0,
-            duration: 1400,
+            duration: getScaledDuration(1400),
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: false,
           }),
         ]),
       ])
-    ).start();
-  }, []);
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [globalAnimation.speed]);
 
   const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
@@ -158,12 +165,16 @@ const DataInfoCard: React.FC = () => {
 
   const toggle = () => {
     const toValue = expanded ? 0 : 1;
-    Animated.timing(heightAnim, {
-      toValue,
-      duration: 250,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
+    if (globalAnimation.speed === 0) {
+      heightAnim.setValue(toValue);
+    } else {
+      Animated.timing(heightAnim, {
+        toValue,
+        duration: getScaledDuration(250),
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    }
     setExpanded(!expanded);
   };
 
@@ -269,16 +280,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
   // Mount animation
   useEffect(() => {
+    if (globalAnimation.speed === 0) {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      return;
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: getScaledDuration(600),
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: getScaledDuration(600),
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -420,7 +436,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
       <View style={{ flex: 1, paddingTop: insets.top }}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <ScrollView

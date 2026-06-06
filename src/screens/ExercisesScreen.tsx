@@ -17,7 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { Exercise } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
@@ -170,21 +170,66 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [selectedExerciseState, setSelectedExercise] = useState<Exercise | null>(null);
+
+  const enrichedExercises = useMemo(() => {
+    const weeklyCounts: Record<string, number> = {};
+    const allTimeCounts: Record<string, number> = {};
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+    sessions.forEach((session: any) => {
+      const sessDate = new Date(session.datetime).getTime();
+      const isLast7Days = sessDate >= sevenDaysAgo;
+
+      if (session.exercises) {
+        session.exercises.forEach((ex: any) => {
+          if (ex.name) {
+            const exKey = ex.name.toLowerCase().trim();
+            const setsCount = typeof ex.sets === 'number' ? ex.sets : (ex.setsDetails?.length || 0);
+
+            allTimeCounts[exKey] = (allTimeCounts[exKey] || 0) + setsCount;
+            if (isLast7Days) {
+              weeklyCounts[exKey] = (weeklyCounts[exKey] || 0) + setsCount;
+            }
+          }
+        });
+      }
+    });
+
+    return exercises.map(ex => {
+      const exKey = ex.name.toLowerCase().trim();
+      return {
+        ...ex,
+        weeklySets: weeklyCounts[exKey] || 0,
+        allTimeSets: allTimeCounts[exKey] || 0,
+      };
+    });
+  }, [exercises, sessions]);
+
+  const selectedExercise = useMemo(() => {
+    if (!selectedExerciseState) return null;
+    return enrichedExercises.find(e => e.id === selectedExerciseState.id) || selectedExerciseState;
+  }, [selectedExerciseState, enrichedExercises]);
 
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(20)).current;
 
   React.useEffect(() => {
+    if (globalAnimation.speed === 0) {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      return;
+    }
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 350,
+        duration: getScaledDuration(350),
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 350,
+        duration: getScaledDuration(350),
         useNativeDriver: true,
       }),
     ]).start();
@@ -274,7 +319,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   // 1. Filter exercises based on search query, active muscles, and active equipment
   const filteredExercises = useMemo(() => {
-    let result = exercises;
+    let result = enrichedExercises;
 
     // Search query filter
     if (searchQuery.trim()) {
@@ -298,7 +343,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     }
 
     return result;
-  }, [exercises, searchQuery, selectedMuscles, selectedEquipment]);
+  }, [enrichedExercises, searchQuery, selectedMuscles, selectedEquipment]);
 
   // 2. Sort exercises
   const sortedExercises = useMemo(() => {
@@ -758,9 +803,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     <View style={styles.detailsStatDivider} />
                     <View style={styles.detailsStatBox}>
                       <Text style={styles.detailsStatValue}>
-                        {selectedExercise.id.startsWith('ex-custom-') ? 'CUSTOM' : 'SYSTEM'}
+                        {(selectedExercise as any).allTimeSets || 0}
                       </Text>
-                      <Text style={styles.detailsStatLabel}>SOURCE</Text>
+                      <Text style={styles.detailsStatLabel}>ALL-TIME SETS</Text>
                     </View>
                   </View>
 
@@ -897,7 +942,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
             style={styles.modalBackdrop} 
             onPress={() => setIsContextMenuVisible(false)}
           >
-            <View style={[styles.modalCard, { paddingVertical: spacing.md }]}>
+            <Pressable style={[styles.modalCard, { paddingVertical: spacing.md }]} onPress={(e) => e.stopPropagation()}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle} numberOfLines={1}>{contextMenuExercise.name.toUpperCase()}</Text>
                 <IconButton
@@ -965,7 +1010,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                   </Pressable>
                 ) : null}
               </View>
-            </View>
+            </Pressable>
           </Pressable>
         </Modal>
       )}

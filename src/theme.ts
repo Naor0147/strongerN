@@ -155,6 +155,26 @@ export const globalAnimation = {
   speed: 1,
 };
 
+export const getScaledDuration = (baseDuration: number): number => {
+  return baseDuration * globalAnimation.speed;
+};
+
+export const getSpringConfig = (baseStiffness = 140, baseDamping = 16, baseMass = 0.9) => {
+  const s = globalAnimation.speed;
+  if (s <= 0) {
+    return {
+      stiffness: 99999,
+      damping: 999,
+      mass: 0.01,
+    };
+  }
+  return {
+    stiffness: baseStiffness / (s * s),
+    damping: baseDamping / s,
+    mass: baseMass,
+  };
+};
+
 // ─────────────────────────────────────────────────────────────────
 // RIPPLE HELPER — Android ripple config factory
 // ─────────────────────────────────────────────────────────────────

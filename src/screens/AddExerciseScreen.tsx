@@ -54,6 +54,7 @@ export interface AddExerciseScreenProps {
   /** If provided (replace mode), single-tap selects immediately */
   singleSelect?: boolean;
   title?: string;
+  sessions?: any[];
 }
 
 const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
@@ -64,6 +65,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   onAddCustomExercise,
   singleSelect = false,
   title = 'ADD EXERCISES',
+  sessions = [],
 }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery]       = useState('');
@@ -90,25 +92,72 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     }
   }, [visible]);
 
+  const exerciseFrequencies = useMemo(() => {
+    const freqs: Record<string, number> = {};
+    sessions.forEach((session: any) => {
+      if (session.exercises) {
+        session.exercises.forEach((ex: any) => {
+          if (ex.name) {
+            const lowerName = ex.name.toLowerCase().trim();
+            freqs[lowerName] = (freqs[lowerName] || 0) + 1;
+          }
+        });
+      }
+    });
+    return freqs;
+  }, [sessions]);
+
   const filteredExercises = useMemo(() => {
     let result = exercises;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        ex =>
-          ex.name.toLowerCase().includes(q) ||
-          ex.muscleGroup.toLowerCase().includes(q) ||
-          (ex.equipment || '').toLowerCase().includes(q)
-      );
-    }
+
     if (selectedMuscles.length > 0) {
       result = result.filter(ex => selectedMuscles.includes(ex.muscleGroup));
     }
     if (selectedEquipment.length > 0) {
       result = result.filter(ex => selectedEquipment.includes(ex.equipment || 'Other'));
     }
-    return result;
-  }, [exercises, searchQuery, selectedMuscles, selectedEquipment]);
+
+    const q = searchQuery.toLowerCase().trim();
+    if (q) {
+      const scored = result
+        .map(ex => {
+          const nameLower = ex.name.toLowerCase();
+          const muscleLower = ex.muscleGroup.toLowerCase();
+          const equipLower = (ex.equipment || '').toLowerCase();
+          
+          let matchScore = 0;
+          
+          if (nameLower === q) {
+            matchScore = 10000;
+          } else if (nameLower.startsWith(q)) {
+            matchScore = 5000;
+          } else if (new RegExp(`\\b${q}`).test(nameLower)) {
+            matchScore = 2000;
+          } else if (nameLower.includes(q)) {
+            matchScore = 1000;
+          } else if (muscleLower.includes(q) || equipLower.includes(q)) {
+            matchScore = 100;
+          }
+          
+          if (matchScore === 0) return null;
+          
+          const freq = exerciseFrequencies[nameLower.trim()] || 0;
+          const totalScore = matchScore + freq;
+          
+          return { ex, totalScore };
+        })
+        .filter((item): item is { ex: Exercise; totalScore: number } => item !== null);
+        
+      scored.sort((a, b) => b.totalScore - a.totalScore);
+      return scored.map(item => item.ex);
+    } else {
+      return [...result].sort((a, b) => {
+        const freqA = exerciseFrequencies[a.name.toLowerCase().trim()] || 0;
+        const freqB = exerciseFrequencies[b.name.toLowerCase().trim()] || 0;
+        return freqB - freqA;
+      });
+    }
+  }, [exercises, searchQuery, selectedMuscles, selectedEquipment, exerciseFrequencies]);
 
   const toggleMuscle = useCallback((m: string) => {
     setSelectedMuscles(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);

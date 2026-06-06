@@ -11,11 +11,12 @@ import {
   Alert,
   PanResponder,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Ellipse, Line, Defs, RadialGradient, Stop, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, ripple as rippleTokens } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import ScreenHeader from '../components/layout/ScreenHeader';
 
 interface MuscleMapScreenProps {
@@ -123,8 +124,6 @@ const FrontSvgMap: React.FC<{
       height={380}
       viewBox="0 0 660.46 1206.46"
       fill="none"
-      onStartShouldSetResponder={() => true}
-      onResponderTerminationRequest={() => false}
     >
       <Defs>
         <RadialGradient id="jointradial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
@@ -365,8 +364,6 @@ const BackSvgMap: React.FC<{
       height={380}
       viewBox="0 0 660.46 1206.46"
       fill="none"
-      onStartShouldSetResponder={() => true}
-      onResponderTerminationRequest={() => false}
     >
       <Defs>
         <RadialGradient id="jointradial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
@@ -597,10 +594,9 @@ const ZOOM_OFFSETS: Record<string, { scale: number; x: number; y: number }> = {
   Forearms:   { scale: 1.6, x: 0,   y: 0 },
 };
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 // ─── Screen ───────────────────────────────────────────────────────────────────
 const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList }) => {
+  const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { top } = useSafeAreaInsets();
   
   // Snap points
@@ -608,8 +604,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const T_COLLAPSED = SCREEN_HEIGHT * 0.52;
   const T_CLOSED = SCREEN_HEIGHT;
 
-  // Dynamic Height calculation: limit to 82% of screen, and keep below top safe area + spacing
-  const sheetHeight = Math.min(SCREEN_HEIGHT * 0.82, SCREEN_HEIGHT - (top + 20));
+  // Dynamic Height calculation: limit to 82% of screen, and keep below top safe area + spacing, never negative
+  const sheetHeight = Math.max(0, Math.min(SCREEN_HEIGHT * 0.82, SCREEN_HEIGHT - (top + 20)));
 
   const [view, setView] = useState<'front' | 'back'>('front');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
@@ -620,6 +616,28 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const translateYAnim = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(T_CLOSED)).current;
 
+  const springScale = (anim: Animated.Value, toValue: number, speedMultiplier = 1) => {
+    const s = globalAnimation.speed * speedMultiplier;
+    if (s === 0) {
+      return Animated.timing(anim, { toValue, duration: 0, useNativeDriver: true });
+    }
+    return Animated.spring(anim, {
+      toValue,
+      stiffness: 140 / (s * s),
+      damping: 16 / s,
+      mass: 0.9,
+      useNativeDriver: true,
+    });
+  };
+
+  const timingSheet = (anim: Animated.Value, toValue: number, baseDuration = 250) => {
+    return Animated.timing(anim, {
+      toValue,
+      duration: getScaledDuration(baseDuration),
+      useNativeDriver: true,
+    });
+  };
+
   const snapTo = (state: 'expanded' | 'collapsed' | 'closed') => {
     let toValue = T_CLOSED;
     if (state === 'expanded') {
@@ -628,12 +646,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       toValue = T_COLLAPSED;
     }
 
-    Animated.spring(sheetTranslateY, {
-      toValue,
-      tension: 40,
-      friction: 8,
-      useNativeDriver: true,
-    }).start(() => {
+    springScale(sheetTranslateY, toValue).start(() => {
       setSheetState(state);
       if (state === 'closed') {
         setSelectedMuscle(null);
@@ -647,58 +660,19 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     const zoom = ZOOM_OFFSETS[muscle] ?? { scale: 1.0, x: 0, y: 0 };
     
     Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: zoom.scale,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(translateXAnim, {
-        toValue: zoom.x,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(translateYAnim, {
-        toValue: zoom.y,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(sheetTranslateY, {
-        toValue: T_COLLAPSED,
-        friction: 7,
-        tension: 35,
-        useNativeDriver: true,
-      })
+      springScale(scaleAnim, zoom.scale),
+      springScale(translateXAnim, zoom.x),
+      springScale(translateYAnim, zoom.y),
+      springScale(sheetTranslateY, T_COLLAPSED),
     ]).start();
   };
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1.0,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(translateXAnim, {
-        toValue: 0,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.spring(translateYAnim, {
-        toValue: 0,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(sheetTranslateY, {
-        toValue: T_CLOSED,
-        duration: 250,
-        useNativeDriver: true,
-      })
+      springScale(scaleAnim, 1.0),
+      springScale(translateXAnim, 0),
+      springScale(translateYAnim, 0),
+      timingSheet(sheetTranslateY, T_CLOSED, 250),
     ]).start(() => {
       setSelectedMuscle(null);
       setSheetState('closed');
@@ -737,29 +711,10 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         } else if (dy > 40 || (dy > 0 && velocityY > 0.3)) {
           if (currentTranslateY > T_COLLAPSED + 60) {
             Animated.parallel([
-              Animated.spring(scaleAnim, {
-                toValue: 1.0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.spring(translateXAnim, {
-                toValue: 0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.spring(translateYAnim, {
-                toValue: 0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.timing(sheetTranslateY, {
-                toValue: T_CLOSED,
-                duration: 250,
-                useNativeDriver: true,
-              })
+              springScale(scaleAnim, 1.0),
+              springScale(translateXAnim, 0),
+              springScale(translateYAnim, 0),
+              timingSheet(sheetTranslateY, T_CLOSED, 250),
             ]).start(() => {
               setSelectedMuscle(null);
               setSheetState('closed');
@@ -774,29 +729,10 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             snapTo('collapsed');
           } else {
             Animated.parallel([
-              Animated.spring(scaleAnim, {
-                toValue: 1.0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.spring(translateXAnim, {
-                toValue: 0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.spring(translateYAnim, {
-                toValue: 0,
-                friction: 6,
-                tension: 40,
-                useNativeDriver: true,
-              }),
-              Animated.timing(sheetTranslateY, {
-                toValue: T_CLOSED,
-                duration: 250,
-                useNativeDriver: true,
-              })
+              springScale(scaleAnim, 1.0),
+              springScale(translateXAnim, 0),
+              springScale(translateYAnim, 0),
+              timingSheet(sheetTranslateY, T_CLOSED, 250),
             ]).start(() => {
               setSelectedMuscle(null);
               setSheetState('closed');
@@ -839,12 +775,15 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     
     const exerciseSetsMap: Record<string, { sets: number; maxWeight: number }> = {};
     sessions.forEach(session => {
+      if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
-      if (sessionDate >= oneWeekAgo) {
+      if (sessionDate >= oneWeekAgo && session.exercises && Array.isArray(session.exercises)) {
         session.exercises.forEach((ex: any) => {
-          const libEx = exercisesList.find((le: any) => le.name.toLowerCase() === ex.name.toLowerCase());
-          const group = libEx ? libEx.muscleGroup : '';
-          if (group.toLowerCase() === selectedMuscle.toLowerCase()) {
+          if (!ex || !ex.name) return;
+          const libEx = exercisesList.find((le: any) => le && le.name && le.name.toLowerCase() === ex.name.toLowerCase());
+          let group = libEx ? libEx.muscleGroup : '';
+          if (group === 'Core') group = 'Abs';
+          if (group && group.toLowerCase() === selectedMuscle.toLowerCase()) {
             const setsCount = ex.sets || 0;
             const weight = ex.bestWeight || 0;
             if (exerciseSetsMap[ex.name]) {
@@ -867,7 +806,12 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
 
   const suggestedExercisesForMuscle = useMemo(() => {
     if (!selectedMuscle) return [];
-    return exercisesList.filter((ex: any) => ex.muscleGroup.toLowerCase() === selectedMuscle.toLowerCase());
+    return exercisesList.filter((ex: any) => {
+      if (!ex || !ex.muscleGroup) return false;
+      let group = ex.muscleGroup;
+      if (group === 'Core') group = 'Abs';
+      return group.toLowerCase() === selectedMuscle.toLowerCase();
+    });
   }, [selectedMuscle, exercisesList]);
 
   const weeklyWorkouts = useMemo(() => {
@@ -879,11 +823,16 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     sessions.forEach(session => {
+      if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
-      if (sessionDate >= oneWeekAgo) {
+      if (sessionDate >= oneWeekAgo && session.exercises && Array.isArray(session.exercises)) {
         const matchingExercises = session.exercises.filter((se: any) => {
-          const libEx = exercisesList.find((le: any) => le.name.toLowerCase() === se.name.toLowerCase());
-          return libEx && libEx.muscleGroup.toLowerCase() === selectedMuscle.toLowerCase();
+          if (!se || !se.name) return false;
+          const libEx = exercisesList.find((le: any) => le && le.name && le.name.toLowerCase() === se.name.toLowerCase());
+          if (!libEx || !libEx.muscleGroup) return false;
+          let group = libEx.muscleGroup;
+          if (group === 'Core') group = 'Abs';
+          return group.toLowerCase() === selectedMuscle.toLowerCase();
         });
         
         if (matchingExercises.length > 0) {
@@ -907,13 +856,18 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     const breakdown: { name: string; equipment: string; setsList: { weight: number; reps: number }[] }[] = [];
     
     sessions.forEach(session => {
+      if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
-      if (sessionDate >= oneWeekAgo) {
+      if (sessionDate >= oneWeekAgo && session.exercises && Array.isArray(session.exercises)) {
         session.exercises.forEach((ex: any) => {
-          const libEx = exercisesList.find((le: any) => le.name.toLowerCase() === ex.name.toLowerCase());
-          if (libEx && libEx.muscleGroup.toLowerCase() === selectedMuscle.toLowerCase()) {
+          if (!ex || !ex.name) return;
+          const libEx = exercisesList.find((le: any) => le && le.name && le.name.toLowerCase() === ex.name.toLowerCase());
+          if (!libEx || !libEx.muscleGroup) return;
+          let group = libEx.muscleGroup;
+          if (group === 'Core') group = 'Abs';
+          if (group.toLowerCase() === selectedMuscle.toLowerCase()) {
             const setsList: { weight: number; reps: number }[] = [];
-            if (ex.setsDetails) {
+            if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
               ex.setsDetails.forEach((sd: any) => {
                 setsList.push({ weight: sd.weight || 0, reps: sd.reps || 0 });
               });
@@ -949,14 +903,17 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     
     sessions.forEach(session => {
+      if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
-      if (sessionDate >= oneWeekAgo) {
+      if (sessionDate >= oneWeekAgo && session.exercises && Array.isArray(session.exercises)) {
         session.exercises.forEach((ex: any) => {
-          const libEx = exercisesList.find((le: any) => le.name.toLowerCase() === ex.name.toLowerCase());
-          const group = libEx ? libEx.muscleGroup : '';
-          if (group.toLowerCase() === selectedMuscle.toLowerCase()) {
+          if (!ex || !ex.name) return;
+          const libEx = exercisesList.find((le: any) => le && le.name && le.name.toLowerCase() === ex.name.toLowerCase());
+          let group = libEx ? libEx.muscleGroup : '';
+          if (group === 'Core') group = 'Abs';
+          if (group && group.toLowerCase() === selectedMuscle.toLowerCase()) {
             setsCount += ex.sets || 0;
-            if (ex.setsDetails) {
+            if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
               ex.setsDetails.forEach((set: any) => {
                 totalTonnage += (set.weight || 0) * (set.reps || 0);
               });
@@ -1531,7 +1488,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: SCREEN_HEIGHT * 0.88,
+    height: Dimensions.get('window').height * 0.88,
     backgroundColor: '#0D0F14',
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,

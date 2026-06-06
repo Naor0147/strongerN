@@ -60,6 +60,33 @@ if not exist "android" (
     color 0B
 )
 
+:: Select Build Target Architecture to optimize build speed
+color 0E
+echo ======================================================================
+echo [OPTIMIZATION] Select Build Target Architecture
+echo ======================================================================
+echo React Native compiles native C++ code for each target architecture.
+echo Restricting the build to your target device is MUCH faster.
+echo.
+echo  [1] Universal APK (Slow - compiles arm64-v8a, armeabi-v7a, x86, x86_64)
+echo  [2] Physical Device ONLY (Fastest - compiles arm64-v8a for modern phones)
+echo  [3] Emulator ONLY (Fastest - compiles x86_64 for Android Studio emulators)
+echo.
+set /p arch_choice="Select build target (1-3) [Default is 2]: "
+
+set "ARCH_FLAG="
+if "%arch_choice%"=="1" (
+    set "ARCH_FLAG="
+    echo [BUILD] Building for all architectures...
+) else if "%arch_choice%"=="3" (
+    set "ARCH_FLAG=-PreactNativeArchitectures=x86_64"
+    echo [BUILD] Building for Emulator [x86_64] only...
+) else (
+    set "ARCH_FLAG=-PreactNativeArchitectures=arm64-v8a"
+    echo [BUILD] Building for Physical Device [arm64-v8a] only...
+)
+echo.
+
 :: Build the standalone APK
 echo ======================================================================
 echo [BUILD] Compiling Standalone Android APK (Release Variant)
@@ -68,7 +95,7 @@ echo ======================================================================
 echo.
 
 cd android
-call gradlew.bat assembleRelease
+call gradlew.bat assembleRelease %ARCH_FLAG%
 if %ERRORLEVEL% neq 0 (
     color 0C
     echo.
