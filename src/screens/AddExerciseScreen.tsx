@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Exercise } from '../data/mockData';
@@ -65,6 +65,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   singleSelect = false,
   title = 'ADD EXERCISES',
 }) => {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery]       = useState('');
   const [selectedMuscles, setSelectedMuscles]     = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
@@ -195,7 +196,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
       >
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={[styles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
 
           {/* ── Header ── */}
           <View style={styles.header}>
@@ -450,7 +451,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
               )}
             </>
           )}
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );

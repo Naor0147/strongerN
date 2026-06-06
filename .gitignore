@@ -40,10 +40,16 @@ yarn-error.*
 /ios
 /android
 
-# env files
+# env files — NEVER commit secrets
 .env
 .env.*
+.env*.local
 !.env.example
+
+# Production keystores — NEVER commit, keep a separate secure backup
+*.keystore
+*.jks
+google-services.json
 
 # logs
 *.log

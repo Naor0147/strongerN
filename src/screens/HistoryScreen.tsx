@@ -11,7 +11,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
@@ -136,6 +136,7 @@ const SessionCard: React.FC<{ session: WorkoutSession }> = React.memo(({ session
 
 // ─── Screen ────────────────────────────────────────────────────────
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
@@ -343,7 +344,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
   }, [sessions.length, filteredSessions.length, searchQuery, selectedCalendarDate]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title="History"
         subtitle={subtitle}
@@ -457,7 +458,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions }) => {
           windowSize={10}
         />
       </Animated.View>
-    </SafeAreaView>
+    </View>
   );
 };
 

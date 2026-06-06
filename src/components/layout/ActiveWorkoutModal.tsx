@@ -18,7 +18,7 @@ import {
   PanResponder,
   Vibration,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
@@ -193,6 +193,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   defaultRestDuration = 90,
   onRenameWorkout,
 }) => {
+  const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
   const [workoutFinished, setWorkoutFinished] = useState(false);
@@ -830,7 +831,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
       >
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={[styles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.modalContainer}>
             {/* ── Header ────────────────────────────────────────── */}
             <View style={styles.header}>
@@ -1539,7 +1540,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               onClose={() => setActiveInput(null)}
             />
           </View>
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
     <AddExerciseScreen

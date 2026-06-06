@@ -13,7 +13,7 @@ import {
   Alert,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -162,6 +162,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   onUpdateExerciseNotes,
   sessions = [] 
 }) => {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
@@ -441,7 +442,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   }, [exercises.length, filteredExercises.length, searchQuery, selectedMuscles, selectedEquipment]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title="Exercises"
         subtitle={subtitle}
@@ -1030,7 +1031,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           </View>
         </Modal>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -4,7 +4,7 @@ import { importStrongCSV } from '../utils/csvImporter';
 import { mockExercises } from '../data/mockData';
 
 describe('Real Strong CSV Import Verification', () => {
-  const realCSVPath = 'F:/Antigravity/strongerN/csvDemo/strong4726328791545586766.csv';
+  const realCSVPath = 'F:/Antigravity/strongerN/csvDemo/strong4726328791545586766_updated.csv';
 
   it('should successfully read and parse the real user-provided CSV', () => {
     // Check if file is readable

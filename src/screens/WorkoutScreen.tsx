@@ -11,7 +11,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -164,6 +164,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   enableRoutineFolders = false,
   onAddCustomExercise,
 }) => {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'routines' | 'programs'>('routines');
 
   useEffect(() => {
@@ -470,7 +471,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, [activeProgram, viewingWeek]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title="Workout"
         actions={headerActions}
@@ -1097,7 +1098,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -1002,7 +1002,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: top }]}>
       <ScreenHeader
         title="Muscle Map"
         subtitle="This week's training focus"
@@ -1334,7 +1334,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
           </ScrollView>
         </Animated.View>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

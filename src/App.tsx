@@ -12,6 +12,11 @@ import { initDb, saveToDb, loadFromDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
 import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureStore';
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
+import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
+import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
+
+// Screens — Auth
+import LoginScreen from './screens/LoginScreen';
 
 
 // Design tokens
@@ -56,6 +61,59 @@ export default function App() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // ── Auth State ────────────────────────────────────────────────
+  // null = loading from storage; false = needs onboarding; AuthState = loaded
+  const [authState, setAuthState] = React.useState<{
+    hasCompletedOnboarding: boolean;
+    authMode: AuthMode;
+    localUsername: string;
+    googleProfile?: GoogleProfile | null;
+  } | null>(null);
+
+  // Guard to prevent overwriting stored data with defaults on mount
+  const [isDataLoaded, setIsDataLoaded] = React.useState(false);
+
+  // Load auth state from DB on mount
+  React.useEffect(() => {
+    (async () => {
+      await initDb();
+      const saved = await loadAuthState();
+      if (saved) {
+        setAuthState(saved);
+        // If previously signed in with Google, pre-populate googleUser from authStore
+        // (the main DB load below will also run and may enrich it with the SecureStore token)
+        if (saved.authMode === 'google' && saved.googleProfile) {
+          const p = saved.googleProfile;
+          setGoogleUser(prev => prev ?? {
+            email: p.email,
+            name: p.name,
+            avatarUri: p.avatarUri,
+            fileId: p.fileId,
+            accessToken: undefined, // Token loaded separately from SecureStore in loadData()
+          });
+          setUser(prev => ({
+            ...prev,
+            name: p.name || prev.name,
+            avatarUri: p.avatarUri || prev.avatarUri,
+          }));
+        }
+      } else {
+        // First launch — show onboarding
+        setAuthState({ hasCompletedOnboarding: false, authMode: 'guest', localUsername: '' });
+      }
+    })();
+  }, []);
+
+  const handleAuthComplete = async (authMode: AuthMode, username: string) => {
+    const newState = { hasCompletedOnboarding: true, authMode, localUsername: username };
+    setAuthState(newState);
+    await saveAuthState(newState);
+    // Set user display name
+    if (username && username !== 'Guest') {
+      setUser(prev => ({ ...prev, name: username }));
+    }
+  };
 
   const STORAGE_KEY = 'strongern_app_data_v1';
   const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
@@ -136,7 +194,7 @@ export default function App() {
   const [showWorkoutsChart, setShowWorkoutsChart] = React.useState(true);
   const [showHighlights, setShowHighlights] = React.useState(false);
 
-  // Dynamically calculate weekly chart data based on sessionsList
+  // Dynamically calculate weekly chart data based on sessionsList (Monday start to match getWeeklyStreak)
   const dynamicWeeklyChartData = React.useMemo(() => {
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
     const oneDay = 24 * 60 * 60 * 1000;
@@ -144,7 +202,9 @@ export default function App() {
     for (let i = 7; i >= 0; i--) {
       const start = new Date(Date.now() - i * 7 * oneDay);
       const day = start.getDay();
-      start.setTime(start.getTime() - day * oneDay);
+      // Monday start: Sunday (0) shifts back 6 days, Monday-Saturday (1-6) shifts back (day - 1) days
+      const diff = day === 0 ? 6 : day - 1;
+      start.setTime(start.getTime() - diff * oneDay);
       start.setHours(0, 0, 0, 0);
       
       weeks.push({
@@ -238,6 +298,8 @@ export default function App() {
         }
       } catch (e) {
         console.warn('Error loading persisted state', e);
+      } finally {
+        setIsDataLoaded(true);
       }
     }
     loadData();
@@ -252,6 +314,7 @@ export default function App() {
 
   // Save to database on state changes
   React.useEffect(() => {
+    if (!isDataLoaded) return;
     try {
       const googleUserToSave = googleUser ? { ...googleUser, accessToken: undefined } : null;
       const data = {
@@ -328,7 +391,17 @@ export default function App() {
     if (accessToken) {
       await setSecureItem('google_oauth_token', accessToken);
     }
-    
+
+    // Persist Google profile to authStore so it survives app restarts
+    // Token expiry: Google access tokens last ~1 hour from issuance
+    await saveGoogleProfile({
+      email,
+      name,
+      avatarUri,
+      fileId,
+      tokenExpiresAt: accessToken ? Date.now() + 55 * 60 * 1000 : undefined, // 55 min
+    });
+
     // Check if real Google Drive backup exists and auto-restore it!
     if (accessToken && fileId) {
       try {
@@ -364,6 +437,25 @@ export default function App() {
     setGoogleUser(null);
     await deleteSecureItem('google_oauth_token');
   };
+
+  const handleAppLogout = async () => {
+    if (googleUser) {
+      await handleGoogleLogout();
+    }
+    const { resetAuthState } = await import('./utils/authStore');
+    await resetAuthState();
+    setAuthState({
+      hasCompletedOnboarding: false,
+      authMode: 'guest',
+      localUsername: '',
+    });
+    setUser({
+      name: 'Guest User',
+      totalWorkouts: 0,
+      isPro: false,
+    });
+  };
+
 
   const handleCloudSync = async () => {
     if (!googleUser || !googleUser.accessToken) return false;
@@ -405,7 +497,41 @@ export default function App() {
   };
 
   // Export/Import backups
-  const handleExportBackup = (): string => {
+  const handleExportBackup = async (): Promise<boolean> => {
+    const settings = {
+      isAutoTimerEnabled,
+      defaultRestDuration,
+      soundSetCompleted,
+      soundWorkoutFinished,
+      soundTimerCompleted,
+      soundVolume,
+      isPlateCalculatorEnabled,
+      isProgramsEnabled,
+      isHistoryEnabled,
+      isMusclesEnabled,
+      enableRoutineFolders,
+      showAchievementBadges,
+      showSummaryWidgets,
+      showWeeklyTonnage,
+      showWorkoutsChart,
+      showHighlights,
+      animationSpeed,
+    };
+    const backupData = buildBackupData({
+      username: user.name,
+      user,
+      sessionsList,
+      templatesList,
+      exercisesList,
+      primaryMetricsList,
+      bodyPartMetricsList,
+      settings,
+    });
+    return exportBackupToFile(backupData);
+  };
+
+  /** Build a legacy JSON string (for the CSV/text export path) */
+  const handleExportBackupString = (): string => {
     const data = {
       user,
       sessionsList,
@@ -423,6 +549,16 @@ export default function App() {
   const handleImportBackup = (backupStr: string): boolean => {
     try {
       const parsed = JSON.parse(backupStr);
+      return applyBackupData(parsed);
+    } catch (e) {
+      console.warn('Error importing backup', e);
+      return false;
+    }
+  };
+
+  /** Shared logic to apply any parsed backup object (used by both paste-import and file-restore) */
+  const applyBackupData = (parsed: any): boolean => {
+    try {
       if (parsed.user) setUser(parsed.user);
       if (parsed.sessionsList) {
         setSessionsList(parsed.sessionsList.map((s: any) => ({
@@ -440,9 +576,48 @@ export default function App() {
       if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
       if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
       if (parsed.lastSynced) setLastSynced(parsed.lastSynced);
+      // Apply settings from v2 format (nested under `settings`) or v1 format (flat)
+      const s = parsed.settings || parsed;
+      if (s.isAutoTimerEnabled !== undefined) setIsAutoTimerEnabled(s.isAutoTimerEnabled);
+      if (s.defaultRestDuration !== undefined) setDefaultRestDuration(s.defaultRestDuration);
+      if (s.soundSetCompleted !== undefined) setSoundSetCompleted(s.soundSetCompleted);
+      if (s.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(s.soundWorkoutFinished);
+      if (s.soundTimerCompleted !== undefined) setSoundTimerCompleted(s.soundTimerCompleted);
+      if (s.soundVolume !== undefined) setSoundVolume(s.soundVolume);
+      if (s.isPlateCalculatorEnabled !== undefined) setIsPlateCalculatorEnabled(s.isPlateCalculatorEnabled);
+      if (s.isProgramsEnabled !== undefined) setIsProgramsEnabled(s.isProgramsEnabled);
+      if (s.isHistoryEnabled !== undefined) setIsHistoryEnabled(s.isHistoryEnabled);
+      if (s.isMusclesEnabled !== undefined) setIsMusclesEnabled(s.isMusclesEnabled);
+      if (s.enableRoutineFolders !== undefined) setEnableRoutineFolders(s.enableRoutineFolders);
+      if (s.showAchievementBadges !== undefined) setShowAchievementBadges(s.showAchievementBadges);
+      if (s.showSummaryWidgets !== undefined) setShowSummaryWidgets(s.showSummaryWidgets);
+      if (s.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(s.showWeeklyTonnage);
+      if (s.showWorkoutsChart !== undefined) setShowWorkoutsChart(s.showWorkoutsChart);
+      if (s.showHighlights !== undefined) setShowHighlights(s.showHighlights);
+      if (s.animationSpeed !== undefined) setAnimationSpeed(s.animationSpeed);
       return true;
     } catch (e) {
-      console.warn('Error importing backup', e);
+      console.warn('Error applying backup data', e);
+      return false;
+    }
+  };
+
+  /**
+   * Called when user picks a backup file on the LoginScreen (post-reinstall restore).
+   * Applies all data, then the login flow calls handleAuthComplete automatically.
+   */
+  const handleRestoreBackup = async (backupData: BackupData, username: string): Promise<boolean> => {
+    try {
+      const success = applyBackupData(backupData);
+      if (success) {
+        // Also update the user name to match the restored profile
+        if (username) {
+          setUser(prev => ({ ...prev, name: username }));
+        }
+      }
+      return success;
+    } catch (e) {
+      console.warn('[App] handleRestoreBackup error:', e);
       return false;
     }
   };
@@ -966,10 +1141,22 @@ export default function App() {
     );
   }
 
+  // Show login/onboarding if not yet completed
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <StatusBar style="light" />
-      <NavigationContainer>
+      {authState === null ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : !authState.hasCompletedOnboarding ? (
+        <LoginScreen
+          onComplete={handleAuthComplete}
+          onGoogleLogin={handleGoogleLogin}
+          onRestoreBackup={handleRestoreBackup}
+        />
+      ) : (
+        <NavigationContainer>
         <View style={styles.root}>
           <Tab.Navigator
             tabBar={props => (
@@ -1054,6 +1241,8 @@ export default function App() {
                   setEnableRoutineFolders={setEnableRoutineFolders}
                   isDeveloperModeEnabled={isDeveloperModeEnabled}
                   setIsDeveloperModeEnabled={setIsDeveloperModeEnabled}
+                  authMode={authState.authMode}
+                  onAppLogout={handleAppLogout}
                 />
               )}
             </Tab.Screen>
@@ -1311,7 +1500,8 @@ export default function App() {
             </Modal>
           )}
         </View>
-      </NavigationContainer>
+        </NavigationContainer>
+      )}
     </SafeAreaProvider>
   );
 }

@@ -17,7 +17,7 @@ import {
   Vibration,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../../theme';
 import { Exercise } from '../../data/mockData';
@@ -170,6 +170,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   onClose,
   onAddCustomExercise,
 }) => {
+  const insets = useSafeAreaInsets();
   const [routineName,  setRoutineName]  = useState(initialName);
   const [routineFolder, setRoutineFolder] = useState(initialFolder);
   const [editorExercises, setEditorExercises] = useState<RoutineExercise[]>([]);
@@ -403,7 +404,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={edStyles.keyboardAvoid}
         >
-          <SafeAreaView style={edStyles.safe} edges={['top', 'bottom']}>
+          <View style={[edStyles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             <View style={edStyles.container}>
 
               {/* ── Header ── */}
@@ -736,7 +737,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
               onNext={handleNextField}
               onClose={() => setActiveInput(null)}
             />
-          </SafeAreaView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 

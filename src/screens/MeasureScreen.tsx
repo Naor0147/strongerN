@@ -13,7 +13,7 @@ import {
   PanResponder,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
@@ -156,6 +156,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   onAddMetric,
   onDeleteMetricLog,
 }) => {
+  const insets = useSafeAreaInsets();
   const [selectedMetric, setSelectedMetric] = useState<MeasureItem | null>(null);
   const [isLogModalVisible, setIsLogModalVisible] = useState(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
@@ -257,7 +258,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   }, [primaryMetrics.length, bodyPartMetrics.length]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title="Measure"
         subtitle={`${totalCount} metrics tracked`}
@@ -501,7 +502,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 

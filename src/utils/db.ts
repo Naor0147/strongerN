@@ -1,126 +1,140 @@
 // utils/db.ts
-// Local-first SQLite database interface with clean web fallback
+// Local-first SQLite database interface with clean web fallback.
+// On native (Android/iOS): uses expo-sqlite for persistent, reliable storage.
+// On web: falls back to localStorage.
+import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 
 let db: any = null;
 const TABLE_NAME = 'strongern_kv_store';
+const isWeb = Platform.OS === 'web';
 
 export async function initDb(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return false; // Server side or unsupported
-  }
-  
-  // Check if we are running in a Web browser environment
-  const isWeb = typeof document !== 'undefined';
+  // ── Web: use localStorage, no SQLite ──────────────────────────────────────
   if (isWeb) {
-    console.log('[SQLite DB] Web environment detected. Falling back to local storage.');
+    console.log('[DB] Web environment — using localStorage.');
     return true;
   }
 
+  // ── Native: open SQLite database ──────────────────────────────────────────
+  if (db) return true; // Already initialized
+
   try {
-    // Open SQLite Database
     db = SQLite.openDatabaseSync('strongern.db');
-    
-    // Create KV store table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
         key TEXT PRIMARY KEY,
         value TEXT
       );
     `);
-    console.log('[SQLite DB] SQLite database initialized successfully.');
+    console.log('[DB] SQLite initialized successfully.');
     return true;
   } catch (err) {
-    console.warn('[SQLite DB] Failed to initialize SQLite database, using local storage fallback.', err);
-    return false;
+    console.warn('[DB] SQLite initialization failed, falling back to localStorage.', err);
+    db = null;
+    return true; // Still return true so the app can use localStorage fallback
   }
 }
 
 export async function saveToDb(key: string, value: any): Promise<boolean> {
   const serialized = JSON.stringify(value);
-  
-  if (!db) {
-    // Fallback to local storage
+
+  // Native SQLite path
+  if (!isWeb && db) {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(key, serialized);
-        return true;
-      }
-    } catch (e) {
-      console.error('[LocalStorage Save Error]', e);
+      db.runSync(
+        `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value) VALUES (?, ?);`,
+        [key, serialized]
+      );
+      return true;
+    } catch (err) {
+      console.error('[DB] SQLite save error, trying localStorage fallback:', err);
+      // Fall through to localStorage
     }
-    return false;
   }
 
+  // Web / localStorage fallback
   try {
-    db.runSync(
-      `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value) VALUES (?, ?);`,
-      [key, serialized]
-    );
-    return true;
-  } catch (err) {
-    console.error('[SQLite DB Save Error]', err);
-    // fallback
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(key, serialized);
       return true;
     }
-    return false;
+  } catch (e) {
+    console.error('[DB] localStorage save error:', e);
   }
+  return false;
 }
 
 export async function loadFromDb(key: string): Promise<any | null> {
-  if (!db) {
-    // Fallback to local storage
+  // Native SQLite path
+  if (!isWeb && db) {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem(key);
-        return saved ? JSON.parse(saved) : null;
-      }
-    } catch (e) {
-      console.error('[LocalStorage Load Error]', e);
+      const row = db.getFirstSync(
+        `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
+        [key]
+      );
+      return row ? JSON.parse(row.value) : null;
+    } catch (err) {
+      console.error('[DB] SQLite load error, trying localStorage fallback:', err);
+      // Fall through to localStorage
     }
-    return null;
   }
 
+  // Web / localStorage fallback
   try {
-    const row = db.getFirstSync(
-      `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
-      [key]
-    );
-    return row ? JSON.parse(row.value) : null;
-  } catch (err) {
-    console.error('[SQLite DB Load Error]', err);
-    // fallback
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = window.localStorage.getItem(key);
       return saved ? JSON.parse(saved) : null;
     }
-    return null;
+  } catch (e) {
+    console.error('[DB] localStorage load error:', e);
   }
+  return null;
 }
 
 export async function deleteFromDb(key: string): Promise<boolean> {
-  if (!db) {
+  // Native SQLite path
+  if (!isWeb && db) {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.removeItem(key);
-        return true;
-      }
-    } catch (e) {
-      console.error('[LocalStorage Delete Error]', e);
+      db.runSync(`DELETE FROM ${TABLE_NAME} WHERE key = ?;`, [key]);
+      return true;
+    } catch (err) {
+      console.error('[DB] SQLite delete error:', err);
+      // Fall through to localStorage
     }
-    return false;
   }
 
+  // Web / localStorage fallback
   try {
-    db.runSync(
-      `DELETE FROM ${TABLE_NAME} WHERE key = ?;`,
-      [key]
-    );
-    return true;
-  } catch (err) {
-    console.error('[SQLite DB Delete Error]', err);
-    return false;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+      return true;
+    }
+  } catch (e) {
+    console.error('[DB] localStorage delete error:', e);
   }
+  return false;
+}
+
+/**
+ * Wipe all keys from the KV store (used for full data reset).
+ */
+export async function clearDb(): Promise<boolean> {
+  if (!isWeb && db) {
+    try {
+      db.execSync(`DELETE FROM ${TABLE_NAME};`);
+      return true;
+    } catch (err) {
+      console.error('[DB] SQLite clearDb error:', err);
+    }
+  }
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.clear();
+      return true;
+    }
+  } catch (e) {
+    console.error('[DB] localStorage clear error:', e);
+  }
+  return false;
 }

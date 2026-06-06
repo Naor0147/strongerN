@@ -1,5 +1,11 @@
 // screens/ProfileScreen.tsx
 import React, { useMemo, useState, useRef } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
+
+// Required: warm up the browser so Google sign-in opens instantly on Android
+WebBrowser.maybeCompleteAuthSession();
 import {
   View,
   Text,
@@ -15,10 +21,11 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
+import { pickAndReadBackupFile } from '../utils/backupManager';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import * as googleDrive from '../utils/googleDrive';
@@ -59,7 +66,7 @@ interface ProfileScreenProps {
   onUpdateUser?:         (name: string) => void;
   onImportBackup?:       (backupStr: string) => boolean;
   onImportStrongCSV?:    (csvText: string) => { importedCount: number; addedExercisesCount: number };
-  onExportBackup?:       () => string;
+  onExportBackup?:       () => Promise<boolean>;
   onExportCSV?:          () => string;
   animationSpeed:        number;
   setAnimationSpeed:     (val: number) => void;
@@ -110,6 +117,8 @@ interface ProfileScreenProps {
   setEnableRoutineFolders?:   (val: boolean) => void;
   isDeveloperModeEnabled:     boolean;
   setIsDeveloperModeEnabled: (val: boolean) => void;
+  authMode?:                  'guest' | 'local' | 'google';
+  onAppLogout?:               () => Promise<void> | void;
 }
 
 const formatLastSynced = (isoString: string | null): string => {
@@ -240,7 +249,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setEnableRoutineFolders,
   isDeveloperModeEnabled = false,
   setIsDeveloperModeEnabled,
+  authMode = 'guest',
+  onAppLogout,
 }) => {
+  const insets = useSafeAreaInsets();
   // Modals state
   const [isRenameVisible, setIsRenameVisible] = useState(false);
   const [isGoogleModalVisible, setIsGoogleModalVisible] = useState(false);
@@ -378,10 +390,46 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     import('../utils/soundPlayer').then(m => m.playSoundByKey(soundKey));
   };
 
-  const [googleClientId, setGoogleClientId] = useState(
-    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '806742513296-amc1kbf9u6k11qg50jrt1r4b3qg0k9n0.apps.googleusercontent.com'
-  );
+  // Client ID is read from env — never hardcode here. See .env.example
+  const [googleClientId, setGoogleClientId] = useState(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '');
   const [googleAccessToken, setGoogleAccessToken] = useState('');
+
+  // Reverse client ID redirect URI — must match AndroidManifest.xml intent filter
+  const androidRedirectUri = React.useMemo(() => {
+    const clientId = googleClientId.replace('.apps.googleusercontent.com', '');
+    return AuthSession.makeRedirectUri({
+      scheme: `com.googleusercontent.apps.${clientId}`,
+      path: 'oauth2redirect',
+    });
+  }, [googleClientId]);
+
+  // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
+  // redirectUri must use the reverse client ID scheme for Android OAuth clients
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: googleClientId,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? googleClientId,
+    redirectUri: androidRedirectUri,
+    scopes: [
+      'openid',
+      'profile',
+      'email',
+      'https://www.googleapis.com/auth/drive.file',
+    ],
+  });
+
+  // React to the auth response from Google in Profile Settings
+  React.useEffect(() => {
+    if (response?.type === 'success') {
+      const token = response.authentication?.accessToken;
+      if (token) {
+        handleConnectWithToken(token);
+      } else {
+        setIsSyncing(false);
+      }
+    } else if (response?.type === 'error' || response?.type === 'cancel') {
+      setIsSyncing(false);
+    }
+  }, [response]);
 
   // Load animations
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -630,97 +678,24 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   // Google Sign-In via OAuth (with support for both Web Popup and Native Deep Linking)
-  const handleGoogleWebAuth = () => {
+  const handleGoogleWebAuth = async () => {
     if (!googleClientId.trim()) {
       Alert.alert('Error', 'Please enter a Google Client ID.');
       return;
     }
 
-    const isWeb = Platform.OS === 'web';
-    const redirectUri = isWeb 
-      ? ((typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:8081')
-      : 'strongern://oauth-callback';
+    if (!request) {
+      Alert.alert('Google Client Not Ready', 'The Google client is initializing. Please try again in a moment, or use the Developer Token tab.');
+      return;
+    }
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(googleClientId.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email')}`;
-
-    if (isWeb) {
-      const popup = typeof window !== 'undefined' ? window.open(authUrl, 'google-oauth', 'width=500,height=600') : null;
-
-      if (!popup) {
-        Alert.alert(
-          'Popup Blocked',
-          'Google Login popup was blocked by your browser. Please allow popups or use the Developer Token tab to connect instantly!'
-        );
-        return;
-      }
-
-      setIsSyncing(true);
-
-      const interval = setInterval(async () => {
-        try {
-          if (popup && popup.location && popup.location.hash) {
-            const hash = popup.location.hash;
-            if (hash.includes('access_token')) {
-              const params = new URLSearchParams(hash.substring(1));
-              const token = params.get('access_token');
-              popup.close();
-              clearInterval(interval);
-
-              if (token) {
-                await handleConnectWithToken(token);
-              } else {
-                setIsSyncing(false);
-                Alert.alert('Authentication Failed', 'Could not retrieve access token from Google.');
-              }
-            }
-          }
-        } catch (e) {
-          // Cross-origin boundaries throw errors while popup is on Google login page, which is expected
-        }
-
-        if (!popup || popup.closed) {
-          clearInterval(interval);
-          setIsSyncing(false);
-        }
-      }, 500);
-    } else {
-      // Native Deep Linking Flow
-      setIsSyncing(true);
-
-      let subscription: any = null;
-
-      const handleIncomingUrl = async (url: string) => {
-        if (url.includes('access_token')) {
-          const hashPart = url.split('#')[1];
-          if (hashPart) {
-            const params = new URLSearchParams(hashPart);
-            const token = params.get('access_token');
-            if (token) {
-              try {
-                await handleConnectWithToken(token);
-              } catch (err: any) {
-                Alert.alert('Authentication Failed', err.message || String(err));
-              } finally {
-                setIsSyncing(false);
-                if (subscription) subscription.remove();
-              }
-              return;
-            }
-          }
-        }
-        setIsSyncing(false);
-        if (subscription) subscription.remove();
-      };
-
-      subscription = Linking.addEventListener('url', (event) => {
-        handleIncomingUrl(event.url);
-      });
-
-      Linking.openURL(authUrl).catch(err => {
-        setIsSyncing(false);
-        if (subscription) subscription.remove();
-        Alert.alert('Error', 'Failed to open the system browser for authentication: ' + err.message);
-      });
+    setIsSyncing(true);
+    try {
+      await promptAsync();
+    } catch (err: any) {
+      console.error('[ProfileScreen] promptAsync error', err);
+      setIsSyncing(false);
+      Alert.alert('Authentication Failed', err.message || String(err));
     }
   };
 
@@ -749,12 +724,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  // Clipboard backups
-  const handleExportJson = () => {
+  // File-based export
+  const handleExportJson = async () => {
     if (onExportBackup) {
-      const json = onExportBackup();
-      setBackupText(json);
-      setIsBackupPanelVisible(true);
+      try {
+        const ok = await onExportBackup();
+        if (!ok) {
+          Alert.alert('Export Failed', 'Could not export the backup file. Please try again.');
+        }
+        // Success message is shown by the native Share sheet / download trigger
+      } catch (e: any) {
+        Alert.alert('Export Error', e.message || 'An error occurred during export.');
+      }
     }
   };
 
@@ -781,8 +762,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const fileUri = asset.uri;
 
       // Read content of picked CSV file
-      const sourceFile = new File(fileUri);
-      const csvText = await sourceFile.text();
+      let csvText = '';
+      if (Platform.OS === 'web') {
+        const response = await fetch(fileUri);
+        csvText = await response.text();
+      } else {
+        const sourceFile = new File(fileUri);
+        csvText = await sourceFile.text();
+      }
 
       if (!csvText || !csvText.trim()) {
         Alert.alert('Error', 'The picked CSV file is empty.');
@@ -801,6 +788,29 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     } catch (error: any) {
       console.warn('Error importing Strong CSV:', error);
       Alert.alert('Import Failed', error.message || 'Failed to parse and import the CSV file.');
+    }
+  };
+
+  // File-picker-based import
+  const handleImportFromFile = async () => {
+    try {
+      const backupData = await pickAndReadBackupFile();
+      if (!backupData) return; // User cancelled or invalid file (alert shown)
+
+      if (onImportBackup) {
+        // Convert to legacy string format for existing handler (which calls applyBackupData)
+        const ok = onImportBackup(JSON.stringify(backupData));
+        if (ok) {
+          Alert.alert(
+            '✅ Restore Complete',
+            `Successfully restored all workouts, exercises, and settings from your backup file!`
+          );
+        } else {
+          Alert.alert('Restore Failed', 'Could not apply the backup data. Please check the file.');
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Import Error', e.message || 'An error occurred during import.');
     }
   };
 
@@ -860,8 +870,29 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     );
   };
 
+  const handleAppLogoutConfirm = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out of your current session? Your local data will be preserved, but you will need to sign in again to access it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSettingsVisible(false);
+            if (onAppLogout) {
+              await onAppLogout();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title="Profile"
         actions={[
@@ -889,7 +920,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], width: '100%' }}>
           {/* ── Welcome Empty State / Load Demo Data Card ────────── */}
-          {user?.totalWorkouts === 0 && !googleUser && (
+          {user?.totalWorkouts === 0 && !googleUser && authMode === 'guest' && isDeveloperModeEnabled && (
             <Card padding={spacing.lg} style={styles.demoCard}>
               <View style={styles.demoHeader}>
                 <View style={[styles.demoIconCircle, { backgroundColor: colors.accent + '22' }]}>
@@ -1548,7 +1579,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         transparent={false}
         onRequestClose={() => setIsSettingsVisible(false)}
       >
-        <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={[styles.safe, { paddingTop: insets.top }]}>
           {/* Settings Header */}
           <View style={styles.settingsHeader}>
             <Pressable
@@ -1574,6 +1605,61 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               style={styles.sectionLabel}
             />
             <Card padding={spacing.lg}>
+              {/* Account Status Info */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons 
+                    name={
+                      authMode === 'google' 
+                        ? "logo-google" 
+                        : authMode === 'local'
+                        ? "person-circle-outline"
+                        : "eye-off-outline"
+                    } 
+                    size={22} 
+                    color={authMode === 'google' ? colors.success : colors.accent} 
+                    style={{ marginRight: spacing.sm }} 
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>
+                      {authMode === 'google' 
+                        ? 'Google Connected' 
+                        : authMode === 'local'
+                        ? 'Local Profile'
+                        : 'Guest Session'}
+                    </Text>
+                    <Text style={styles.settingSubtitle}>
+                      {authMode === 'google'
+                        ? googleUser?.email || 'Connected with Google'
+                        : authMode === 'local'
+                        ? `Logged in as ${user?.name || 'Local User'}`
+                        : 'Workouts saved locally. Sign in to back up.'}
+                    </Text>
+                  </View>
+                </View>
+                
+                {authMode === 'guest' || authMode === 'local' ? (
+                  <Pressable
+                    style={styles.inlineLoginBtn}
+                    onPress={() => {
+                      setGoogleName(user?.name || '');
+                      setIsGoogleModalVisible(true);
+                    }}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={styles.inlineLoginBtnText}>
+                      {authMode === 'local' ? 'LINK GOOGLE' : 'LOG IN'}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <View style={styles.connectedBadge}>
+                    <Text style={styles.connectedBadgeText}>ACTIVE</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.settingDivider} />
+
               <Pressable
                 style={styles.settingRow}
                 onPress={() => {
@@ -1583,11 +1669,31 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 android_ripple={rippleTokens.surface}
               >
                 <View style={styles.settingInfo}>
-                  <Ionicons name="person-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <Ionicons name="create-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Edit Name</Text>
+                    <Text style={styles.settingTitle}>Edit Display Name</Text>
                     <Text style={styles.settingSubtitle}>
                       Change your profile name
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              {/* Log Out Action */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={handleAppLogoutConfirm}
+                android_ripple={rippleTokens.surface}
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="log-out-outline" size={20} color={colors.error} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { color: colors.error }]}>Log Out</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Sign out of this session and return to launch screen
                     </Text>
                   </View>
                 </View>
@@ -2263,22 +2369,47 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
                   <View style={styles.syncDivider} />
 
-                  <View style={styles.syncStatusRow}>
-                    <View style={styles.syncStatusLeft}>
-                      <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                      <Text style={styles.syncStatusText}>Auto-Backup Active</Text>
-                    </View>
-                    <Text style={styles.syncTimeLabel}>{formatLastSynced(lastSynced)}</Text>
-                  </View>
+                  {googleUser.accessToken ? (
+                    <>
+                      <View style={styles.syncStatusRow}>
+                        <View style={styles.syncStatusLeft}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                          <Text style={styles.syncStatusText}>Auto-Backup Active</Text>
+                        </View>
+                        <Text style={styles.syncTimeLabel}>{formatLastSynced(lastSynced)}</Text>
+                      </View>
 
-                  <Pressable
-                    onPress={handleManualSyncPress}
-                    style={styles.syncNowBtn}
-                    android_ripple={rippleTokens.accent}
-                  >
-                    <Ionicons name="sync" size={16} color="#0D0F14" />
-                    <Text style={styles.syncNowBtnText}>SYNC NOW</Text>
-                  </Pressable>
+                      <Pressable
+                        onPress={handleManualSyncPress}
+                        style={styles.syncNowBtn}
+                        android_ripple={rippleTokens.accent}
+                      >
+                        <Ionicons name="sync" size={16} color="#0D0F14" />
+                        <Text style={styles.syncNowBtnText}>SYNC NOW</Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.syncStatusRow}>
+                        <View style={styles.syncStatusLeft}>
+                          <Ionicons name="alert-circle-outline" size={16} color="#FF9F0A" />
+                          <Text style={[styles.syncStatusText, { color: '#FF9F0A' }]}>Session Expired / Reconnect Needed</Text>
+                        </View>
+                      </View>
+
+                      <Pressable
+                        onPress={() => {
+                          setGoogleName(user?.name || '');
+                          setIsGoogleModalVisible(true);
+                        }}
+                        style={[styles.syncNowBtn, { backgroundColor: '#FF9F0A' }]}
+                        android_ripple={rippleTokens.accent}
+                      >
+                        <Ionicons name="logo-google" size={16} color="#0D0F14" />
+                        <Text style={styles.syncNowBtnText}>RECONNECT TO SYNC</Text>
+                      </Pressable>
+                    </>
+                  )}
                 </View>
               ) : (
                 <View style={styles.googlePromoContainer}>
@@ -2302,23 +2433,61 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               )}
             </Card>
 
-            {/* ── Manual Data Recovery ────────────────────────────── */}
+            {/* ── Data Portability ────────────────────────────── */}
             <SectionLabel
-              title="Data Portability"
-              subtitle="Export · Import · Recovery"
+              title="Backup / Restore Data"
+              subtitle="Save your data as a file or restore from one"
               style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.md}>
-              <View style={styles.recoveryGrid}>
-                <Pressable
-                  style={styles.recoveryBtn}
-                  onPress={handleExportJson}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Ionicons name="code-download-outline" size={18} color={colors.accent} />
-                  <Text style={styles.recoveryBtnText}>EXPORT JSON</Text>
-                </Pressable>
+              {/* Export row */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={handleExportJson}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Export backup JSON file"
+              >
+                <View style={styles.settingInfo}>
+                  <View style={[styles.backupIconCircle, { backgroundColor: colors.accent + '22' }]}>
+                    <Ionicons name="cloud-download-outline" size={20} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Export Backup File</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Save all workouts, exercises &amp; settings as a .json file. Share to Files, email, or cloud storage.
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
 
+              <View style={styles.settingDivider} />
+
+              {/* Import / Restore row */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={handleImportFromFile}
+                android_ripple={rippleTokens.surface}
+                accessibilityLabel="Restore from backup file"
+              >
+                <View style={styles.settingInfo}>
+                  <View style={[styles.backupIconCircle, { backgroundColor: colors.violet + '22' }]}>
+                    <Ionicons name="folder-open-outline" size={20} color={colors.violet} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Restore from Backup File</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Pick a .json backup file to recover all your data instantly.
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+
+              <View style={styles.recoveryDivider} />
+
+              {/* Secondary options row */}
+              <View style={styles.recoveryGrid}>
                 <Pressable
                   style={styles.recoveryBtn}
                   onPress={handleExportCsvPress}
@@ -2337,8 +2506,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   }}
                   android_ripple={rippleTokens.surface}
                 >
-                  <Ionicons name="push-outline" size={18} color={colors.highlight} />
-                  <Text style={styles.recoveryBtnText}>IMPORT BACKUP</Text>
+                  <Ionicons name="clipboard-outline" size={18} color={colors.highlight} />
+                  <Text style={styles.recoveryBtnText}>PASTE JSON</Text>
                 </Pressable>
 
                 <Pressable
@@ -2349,10 +2518,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   accessibilityLabel="Import Strong App CSV file"
                 >
                   <Ionicons name="document-attach-outline" size={18} color={colors.violet} />
-                  <Text style={styles.recoveryBtnText}>IMPORT STRONG CSV</Text>
+                  <Text style={styles.recoveryBtnText}>IMPORT STRONG</Text>
                 </Pressable>
-
-
               </View>
 
               <View style={styles.recoveryDivider} />
@@ -2414,26 +2581,42 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   <Text style={[styles.settingSubtitle, { marginBottom: spacing.md, color: colors.textSecondary }]}>
                     Developer settings are configuration options and utility commands used to test and verify app features during development. They allow developers and testers to inspect states, load pre-defined mock databases, and emulate physical device sensors or integrations.
                   </Text>
-                  <Pressable
-                    style={styles.settingRow}
-                    onPress={handleLoadDemoData}
-                    android_ripple={rippleTokens.surface}
-                    accessibilityLabel="Load demo database"
-                  >
-                    <View style={styles.settingInfo}>
-                      <Ionicons name="code-slash-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.settingTitle, { color: colors.textSecondary }]}>Load Demo Database</Text>
-                        <Text style={styles.settingSubtitle}>
-                          Populate app with sample workouts, sessions, and metrics for testing
-                        </Text>
+                  {authMode === 'guest' ? (
+                    <Pressable
+                      style={styles.settingRow}
+                      onPress={handleLoadDemoData}
+                      android_ripple={rippleTokens.surface}
+                      accessibilityLabel="Load demo database"
+                    >
+                      <View style={styles.settingInfo}>
+                        <Ionicons name="code-slash-outline" size={20} color={colors.highlight} style={{ marginRight: spacing.sm }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.settingTitle, { color: colors.textSecondary }]}>Load Demo Database</Text>
+                          <Text style={styles.settingSubtitle}>
+                            Populate app with sample workouts, sessions, and metrics for testing
+                          </Text>
+                        </View>
                       </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </Pressable>
+                  ) : (
+                    <View style={[styles.settingRow, { opacity: 0.45 }]}>
+                      <View style={styles.settingInfo}>
+                        <Ionicons name="code-slash-outline" size={20} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.settingTitle, { color: colors.textMuted }]}>Load Demo Database</Text>
+                          <Text style={styles.settingSubtitle}>
+                            Only available for Guest accounts. Sign out to enable.
+                          </Text>
+                        </View>
+                      </View>
+                      <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
+                  )}
                 </Card>
               </>
             )}
+
 
             {/* ── App Info ────────────────────────────────────────── */}
             <SectionLabel
@@ -2452,7 +2635,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </View>
             </Card>
           </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Sound Selector Bottom Sheet Modal */}
@@ -2680,7 +2863,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -2952,6 +3135,57 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  backupIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  recoveryDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    width: '100%',
+    marginVertical: spacing.md,
+  },
+  recoveryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    columnGap: spacing.sm,
+    width: '100%',
+  },
+  recoveryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.xs,
+    paddingVertical: 10,
+    columnGap: 6,
+  },
+  recoveryBtnText: {
+    color: colors.textPrimary,
+    fontSize: 9,
+    fontFamily: font.bold,
+  },
+  wipeSimBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    paddingVertical: 8,
+    columnGap: 6,
+    width: '100%',
+  },
+  wipeSimBtnText: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontFamily: font.bold,
   },
   syncTitle: {
     color: colors.textPrimary,
@@ -3757,6 +3991,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accent + '30',
     borderStyle: 'dashed',
+  },
+  inlineLoginBtn: {
+    backgroundColor: colors.accent,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineLoginBtnText: {
+    color: '#0D0F14',
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+  },
+  connectedBadge: {
+    backgroundColor: colors.successGlow,
+    borderColor: colors.success,
+    borderWidth: 1,
+    borderRadius: radius.xs,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignSelf: 'center',
+  },
+  connectedBadgeText: {
+    color: colors.success,
+    fontSize: font.sizes.xs - 1,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
   },
 });
 
