@@ -1029,75 +1029,19 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             ] 
           }]}>
             {view === 'front' ? (
-              <View style={{ position: 'relative' }}>
-                <FrontSvgMap 
-                  muscleSets={weeklyMuscleSets} 
-                  maxSets={maxSets} 
-                  selectedMuscle={selectedMuscle} 
-                  onMusclePress={handleMusclePress} 
-                />
-                <View style={styles.touchOverlay} pointerEvents="box-none">
-                  {/* Traps */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '16%', left: '38%', width: '24%', height: '6%' }]} onPress={() => handleMusclePress('Shoulders')} />
-                  
-                  {/* Chest */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '21.5%', left: '32%', width: '36%', height: '9%' }]} onPress={() => handleMusclePress('Chest')} />
-                  
-                  {/* Shoulders */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '19.5%', left: '22%', width: '15%', height: '9%' }]} onPress={() => handleMusclePress('Shoulders')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '19.5%', left: '63%', width: '15%', height: '9%' }]} onPress={() => handleMusclePress('Shoulders')} />
-                  
-                  {/* Biceps */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '27.5%', left: '18%', width: '14%', height: '10%' }]} onPress={() => handleMusclePress('Biceps')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '27.5%', left: '68%', width: '14%', height: '10%' }]} onPress={() => handleMusclePress('Biceps')} />
-                  
-                  {/* Abs / Obliques */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '32%', left: '34%', width: '32%', height: '16%' }]} onPress={() => handleMusclePress('Abs')} />
-                  
-                  {/* Quads */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '47%', left: '26%', width: '22%', height: '22%' }]} onPress={() => handleMusclePress('Quads')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '47%', left: '52%', width: '22%', height: '22%' }]} onPress={() => handleMusclePress('Quads')} />
-                  
-                  {/* Calves */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '72%', left: '26%', width: '18%', height: '22%' }]} onPress={() => handleMusclePress('Calves')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '72%', left: '56%', width: '18%', height: '22%' }]} onPress={() => handleMusclePress('Calves')} />
-                </View>
-              </View>
+              <FrontSvgMap 
+                muscleSets={weeklyMuscleSets} 
+                maxSets={maxSets} 
+                selectedMuscle={selectedMuscle} 
+                onMusclePress={handleMusclePress} 
+              />
             ) : (
-              <View style={{ position: 'relative' }}>
-                <BackSvgMap 
-                  muscleSets={weeklyMuscleSets} 
-                  maxSets={maxSets} 
-                  selectedMuscle={selectedMuscle} 
-                  onMusclePress={handleMusclePress} 
-                />
-                <View style={styles.touchOverlay} pointerEvents="box-none">
-                  {/* Traps */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '15.5%', left: '38%', width: '24%', height: '10%' }]} onPress={() => handleMusclePress('Shoulders')} />
-                  
-                  {/* Rear Delts */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '19.5%', left: '22%', width: '15%', height: '9%' }]} onPress={() => handleMusclePress('Rear Delts')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '19.5%', left: '63%', width: '15%', height: '9%' }]} onPress={() => handleMusclePress('Rear Delts')} />
-                  
-                  {/* Triceps */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '26.5%', left: '18%', width: '14%', height: '11%' }]} onPress={() => handleMusclePress('Triceps')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '26.5%', left: '68%', width: '14%', height: '11%' }]} onPress={() => handleMusclePress('Triceps')} />
-                  
-                  {/* Back / Lats */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '30%', left: '30%', width: '40%', height: '18%' }]} onPress={() => handleMusclePress('Back')} />
-                  
-                  {/* Glutes */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '46%', left: '30%', width: '40%', height: '11%' }]} onPress={() => handleMusclePress('Glutes')} />
-                  
-                  {/* Hamstrings */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '56%', left: '26%', width: '22%', height: '22%' }]} onPress={() => handleMusclePress('Hamstrings')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '56%', left: '52%', width: '22%', height: '22%' }]} onPress={() => handleMusclePress('Hamstrings')} />
-                  
-                  {/* Calves */}
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '76%', left: '26%', width: '18%', height: '20%' }]} onPress={() => handleMusclePress('Calves')} />
-                  <Pressable hitSlop={8} style={[styles.touchZone, { top: '76%', left: '56%', width: '18%', height: '20%' }]} onPress={() => handleMusclePress('Calves')} />
-                </View>
-              </View>
+              <BackSvgMap 
+                muscleSets={weeklyMuscleSets} 
+                maxSets={maxSets} 
+                selectedMuscle={selectedMuscle} 
+                onMusclePress={handleMusclePress} 
+              />
             )}
           </Animated.View>
 
@@ -1380,30 +1324,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 8,
     position: 'relative',
-  },
-  touchOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-  },
-  touchZone: {
-    position: 'absolute',
-    backgroundColor: 'transparent',
-  },
-  bodyImage: {
-    width: IMG_W,
-    height: IMG_H,
-    // Tint the white PNG to match the dark theme
-    tintColor: colors.textPrimary,
-  },
-  overlayWrapper: {
-    position: 'absolute',
-    top: spacing.lg,   // matches card padding
-    left: spacing.lg,
-    width: IMG_W,
-    height: IMG_H,
   },
 
   // Intensity scale

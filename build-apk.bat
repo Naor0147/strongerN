@@ -18,6 +18,15 @@ echo.
 set "ANDROID_HOME=C:\Users\NAORA\AppData\Local\Android\Sdk"
 set "PATH=%PATH%;%ANDROID_HOME%\platform-tools"
 
+:: Check if ADB device is connected
+set "DEVICE_CONNECTED=false"
+adb.exe get-state 2>nul | findstr /i "device" >nul
+if %ERRORLEVEL% equ 0 (
+    set "DEVICE_CONNECTED=true"
+    echo [SYSTEM] USB Device detected! Enabling automatic installation mode.
+    echo.
+)
+
 if exist "C:\Program Files\Java\jdk-19" (
     set "JAVA_HOME=C:\Program Files\Java\jdk-19"
     echo [SYSTEM] Using compatible JDK 19 at C:\Program Files\Java\jdk-19
@@ -33,6 +42,11 @@ set "APK_DEST=apk\strongerN.apk"
 
 :: Check if APK already exists to offer skipping build
 if exist "%APK_DEST%" (
+    if "%DEVICE_CONNECTED%"=="true" (
+        echo [INFO] USB Device connected. Automatically rebuilding and installing...
+        echo.
+        goto skip_rebuild_prompt
+    )
     color 0E
     echo ======================================================================
     echo [INFO] An existing compiled APK was found at: %APK_DEST%
@@ -43,6 +57,7 @@ if exist "%APK_DEST%" (
     if /i "%rebuild%"=="no" goto post_build_menu
     echo.
 )
+:skip_rebuild_prompt
 
 :: Run prebuild if android folder is missing
 if not exist "android" (
@@ -61,6 +76,12 @@ if not exist "android" (
 )
 
 :: Select Build Target Architecture to optimize build speed
+if "%DEVICE_CONNECTED%"=="true" (
+    set "ARCH_FLAG=-PreactNativeArchitectures=arm64-v8a"
+    echo [BUILD] USB Device connected. Automatically compiling for Physical Device [arm64-v8a]...
+    echo.
+    goto skip_arch_prompt
+)
 color 0E
 echo ======================================================================
 echo [OPTIMIZATION] Select Build Target Architecture
@@ -86,6 +107,7 @@ if "%arch_choice%"=="1" (
     echo [BUILD] Building for Physical Device [arm64-v8a] only...
 )
 echo.
+:skip_arch_prompt
 
 :: Build the standalone APK
 echo ======================================================================
@@ -123,6 +145,7 @@ if not exist "apk" mkdir apk
 copy /y "%APK_SRC%" "%APK_DEST%" >nul
 
 :post_build_menu
+if "%DEVICE_CONNECTED%"=="true" goto install_usb
 cls
 color 0B
 echo ======================================================================
@@ -165,9 +188,11 @@ echo  1. The phone is connected to this PC via USB.
 echo  2. USB Debugging is turned ON in Developer Options on your phone.
 echo  3. You accepted the "Allow USB debugging" prompt on your phone's screen.
 echo.
+if "%DEVICE_CONNECTED%"=="true" goto proceed_install
 set /p proceed="Attempt installation? (y/n): "
 if /i "%proceed%" neq "y" goto post_build_menu
 
+:proceed_install
 echo.
 echo [ADB] Installing "%APK_DEST%" on your device...
 call adb.exe install -r "%APK_DEST%"
@@ -184,6 +209,11 @@ color 0A
 echo.
 echo [SUCCESS] App successfully installed on your device!
 echo.
+if "%DEVICE_CONNECTED%"=="true" (
+    echo [SYSTEM] Exiting automatically in 5 seconds...
+    timeout /t 5 >nul
+    goto exit_script
+)
 pause
 goto post_build_menu
 

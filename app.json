@@ -2,7 +2,10 @@
   "expo": {
     "name": "StrongerN",
     "slug": "strongerN",
-    "scheme": "strongern",
+    "scheme": [
+      "strongern",
+      "com.googleusercontent.apps.81738149264-q7gqeu0nvksebi02nrce68blhfqlhe1q"
+    ],
     "version": "1.0.0",
     "jsEngine": "hermes",
     "orientation": "portrait",

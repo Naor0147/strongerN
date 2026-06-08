@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,10 +54,7 @@ if (!ANDROID_CLIENT_ID) {
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CLIENT_ID;
 
 // Reverse client ID redirect URI — registered in AndroidManifest.xml as an intent filter
-const ANDROID_REDIRECT_URI = AuthSession.makeRedirectUri({
-  scheme: `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}`,
-  path: 'oauth2redirect',
-});
+const ANDROID_REDIRECT_URI = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -150,7 +148,10 @@ const AnimatedLogo: React.FC = () => {
           { transform: [{ scale: pulseAnim }] },
         ]}
       >
-        <Ionicons name="barbell" size={44} color={colors.accent} />
+        <Image
+          source={require('../../assets/StorngNLogo.png')}
+          style={styles.logoImage}
+        />
       </Animated.View>
     </View>
   );
@@ -266,15 +267,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
   // React to the auth response from Google
   useEffect(() => {
-    if (response?.type === 'success') {
-      const token = response.authentication?.accessToken;
-      if (token) {
-        handleGoogleConnectWithToken(token);
-      } else {
+    if (response) {
+      if (response.type === 'success') {
+        const token = response.authentication?.accessToken;
+        if (token) {
+          handleGoogleConnectWithToken(token);
+        } else {
+          setIsGoogleLoading(false);
+          Alert.alert('Google Sign-In Error', 'No access token returned from Google.');
+        }
+      } else if (response.type === 'error') {
         setIsGoogleLoading(false);
+        Alert.alert('Google Sign-In Error', `OAuth error: ${response.error?.message || 'Unknown error'}`);
+      } else if (response.type === 'cancel') {
+        setIsGoogleLoading(false);
+        Alert.alert('Google Sign-In Cancelled', 'The Google Sign-In flow was closed or cancelled.');
       }
-    } else if (response?.type === 'error' || response?.type === 'cancel') {
-      setIsGoogleLoading(false);
     }
   }, [response]);
 
@@ -781,6 +789,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.accentGlow as object,
+  },
+  logoImage: {
+    width: 48,
+    height: 48,
+    resizeMode: 'contain',
   },
 
   // App name

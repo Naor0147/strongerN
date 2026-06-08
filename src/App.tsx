@@ -1,6 +1,6 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking } from 'react-native';
 import { NavigationContainer }      from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -97,6 +97,11 @@ export default function App() {
             name: p.name || prev.name,
             avatarUri: p.avatarUri || prev.avatarUri,
           }));
+        } else if (saved.authMode === 'local' && saved.localUsername) {
+          setUser(prev => ({
+            ...prev,
+            name: saved.localUsername,
+          }));
         }
       } else {
         // First launch — show onboarding
@@ -106,9 +111,16 @@ export default function App() {
   }, []);
 
   const handleAuthComplete = async (authMode: AuthMode, username: string) => {
-    const newState = { hasCompletedOnboarding: true, authMode, localUsername: username };
-    setAuthState(newState);
-    await saveAuthState(newState);
+    if (authMode !== 'google') {
+      const newState = {
+        hasCompletedOnboarding: true,
+        authMode,
+        localUsername: username,
+        googleProfile: null,
+      };
+      setAuthState(newState);
+      await saveAuthState(newState);
+    }
     // Set user display name
     if (username && username !== 'Guest') {
       setUser(prev => ({ ...prev, name: username }));
@@ -179,6 +191,10 @@ export default function App() {
   const [isMusclesEnabled, setIsMusclesEnabled] = React.useState(true);
   const [enableRoutineFolders, setEnableRoutineFolders] = React.useState(false);
   const [isDeveloperModeEnabled, setIsDeveloperModeEnabled] = React.useState(false);
+  const [appTheme, setAppThemeState] = React.useState<string>('default');
+  const [customAccentColor, setCustomAccentColor] = React.useState('#4F8EF7');
+  const [themeVersion, setThemeVersion] = React.useState(0);
+  const [themeOverrides, setThemeOverrides] = React.useState<any>({});
 
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
   const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
@@ -239,9 +255,30 @@ export default function App() {
       try {
         const dbReady = await initDb();
         if (dbReady) {
+          const secureOverridesStr = await getSecureItem('theme_overrides');
+          let parsedOverrides: any = {};
+          if (secureOverridesStr) {
+            try {
+              parsedOverrides = JSON.parse(secureOverridesStr);
+              setThemeOverrides(parsedOverrides);
+            } catch (e) {
+              console.warn('Failed to parse theme overrides', e);
+            }
+          }
           const parsed = await loadFromDb(STORAGE_KEY);
           if (parsed) {
-            if (parsed.user) setUser(parsed.user);
+            if (parsed.user) {
+              const currentAuth = await loadAuthState();
+              const currentAuthMode = currentAuth?.authMode || parsed.authMode;
+              const isAuthed = currentAuthMode === 'google' || currentAuthMode === 'local';
+              const authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
+              
+              setUser(prev => ({
+                ...parsed.user,
+                name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
+                avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
+              }));
+            }
             if (parsed.sessionsList) {
               setSessionsList(parsed.sessionsList.map((s: any) => ({
                 ...s,
@@ -289,6 +326,15 @@ export default function App() {
             if (parsed.isMusclesEnabled !== undefined) setIsMusclesEnabled(parsed.isMusclesEnabled);
             if (parsed.enableRoutineFolders !== undefined) setEnableRoutineFolders(parsed.enableRoutineFolders);
             if (parsed.isDeveloperModeEnabled !== undefined) setIsDeveloperModeEnabled(parsed.isDeveloperModeEnabled);
+            if (parsed.customAccentColor !== undefined) setCustomAccentColor(parsed.customAccentColor);
+            if (parsed.appTheme !== undefined) {
+              setAppThemeState(parsed.appTheme);
+              const { applyTheme } = require('./theme');
+              applyTheme(parsed.appTheme, parsed.customAccentColor || '#4F8EF7', parsedOverrides);
+            } else {
+              const { applyTheme } = require('./theme');
+              applyTheme('default', '#4F8EF7', parsedOverrides);
+            }
             if (parsed.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(parsed.isProgressiveOverloadEnabled);
             if (parsed.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(parsed.isAutoFinishSetEnabled);
             if (parsed.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(parsed.isKeyboardDismissOnNextEnabled);
@@ -303,6 +349,9 @@ export default function App() {
             if (parsed.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(parsed.showWeeklyTonnage);
             if (parsed.showWorkoutsChart !== undefined) setShowWorkoutsChart(parsed.showWorkoutsChart);
             if (parsed.showHighlights !== undefined) setShowHighlights(parsed.showHighlights);
+          } else {
+            const { applyTheme } = require('./theme');
+            applyTheme('default', '#4F8EF7', parsedOverrides);
           }
         }
       } catch (e) {
@@ -362,12 +411,14 @@ export default function App() {
         isProgressiveOverloadEnabled,
         isAutoFinishSetEnabled,
         isKeyboardDismissOnNextEnabled,
+        appTheme,
+        customAccentColor,
       };
       saveToDb(STORAGE_KEY, data);
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, appTheme, customAccentColor]);
 
   // Synchronize audio preferences to soundConfig helper
   React.useEffect(() => {
@@ -394,11 +445,21 @@ export default function App() {
     avatarUri?: string
   ) => {
     setGoogleUser({ email, name, accessToken, fileId, avatarUri });
-    setUser(prev => ({
-      ...prev,
-      name: name || prev.name,
-      avatarUri: avatarUri || prev.avatarUri,
-    }));
+    
+    // We update the local React state authState to instantly re-render listening screens/components in 'google' mode!
+    const newAuthState = {
+      hasCompletedOnboarding: true,
+      authMode: 'google' as AuthMode,
+      localUsername: name,
+      googleProfile: {
+        email,
+        name,
+        avatarUri,
+        fileId,
+        tokenExpiresAt: accessToken ? Date.now() + 55 * 60 * 1000 : undefined,
+      }
+    };
+    setAuthState(newAuthState);
 
     if (accessToken) {
       await setSecureItem('google_oauth_token', accessToken);
@@ -414,36 +475,228 @@ export default function App() {
       tokenExpiresAt: accessToken ? Date.now() + 55 * 60 * 1000 : undefined, // 55 min
     });
 
-    // Check if real Google Drive backup exists and auto-restore it!
+    let mergedDataToUpload = null;
+    let backupFoundAndMerged = false;
+
+    // Check if real Google Drive backup exists and auto-restore / merge it!
     if (accessToken && fileId) {
       try {
         const backupData = await googleDrive.downloadBackupFile(accessToken, fileId);
         if (backupData) {
-          if (backupData.user) setUser(backupData.user);
-          if (backupData.sessionsList) {
-            setSessionsList(backupData.sessionsList.map((s: any) => ({
-              ...s,
-              datetime: new Date(s.datetime)
-            })));
-          }
-          if (backupData.templatesList) {
-            setTemplatesList(backupData.templatesList.map((t: any) => ({
-              ...t,
-              lastUsed: new Date(t.lastUsed)
-            })));
-          }
-          if (backupData.exercisesList) setExercisesList(backupData.exercisesList);
-          if (backupData.primaryMetricsList) setPrimaryMetricsList(backupData.primaryMetricsList);
-          if (backupData.bodyPartMetricsList) setBodyPartMetricsList(backupData.bodyPartMetricsList);
-          if (backupData.lastSynced) setLastSynced(backupData.lastSynced);
-          return true; // Data loaded
+          backupFoundAndMerged = true;
+
+          // 1. Merge User Profile details (keep highest total workouts)
+          const mergedUser = {
+            ...user,
+            name: name || user.name,
+            avatarUri: avatarUri || user.avatarUri,
+            totalWorkouts: Math.max(user.totalWorkouts || 0, backupData.user?.totalWorkouts || 0),
+            isPro: user.isPro || backupData.user?.isPro || false,
+          };
+          setUser(mergedUser);
+
+          // 2. Merge Sessions (deduplicating by ID)
+          const localSessions = sessionsList || [];
+          const remoteSessions = backupData.sessionsList || [];
+          const mergedSessions = [...localSessions];
+          remoteSessions.forEach((rs: any) => {
+            if (!mergedSessions.some(ls => ls.id === rs.id)) {
+              mergedSessions.push({
+                ...rs,
+                datetime: new Date(rs.datetime)
+              });
+            }
+          });
+          mergedSessions.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+          setSessionsList(mergedSessions);
+
+          // 3. Merge Templates (deduplicating by ID)
+          const localTemplates = templatesList || [];
+          const remoteTemplates = backupData.templatesList || [];
+          const mergedTemplates = [...localTemplates];
+          remoteTemplates.forEach((rt: any) => {
+            if (!mergedTemplates.some(lt => lt.id === rt.id)) {
+              mergedTemplates.push({
+                ...rt,
+                lastUsed: new Date(rt.lastUsed)
+              });
+            }
+          });
+          setTemplatesList(mergedTemplates);
+
+          // 4. Merge Exercises (deduplicating by ID or name)
+          const localExercises = exercisesList || [];
+          const remoteExercises = backupData.exercisesList || [];
+          const mergedExercises = [...localExercises];
+          remoteExercises.forEach((re: any) => {
+            const isDuplicate = mergedExercises.some(
+              le => le.id === re.id || le.name.toLowerCase().trim() === re.name.toLowerCase().trim()
+            );
+            if (!isDuplicate) {
+              mergedExercises.push(re);
+            }
+          });
+          setExercisesList(mergedExercises);
+
+          // 5. Merge Metrics
+          const mergedPrimaryMetrics = mergeMetricsList(primaryMetricsList || [], backupData.primaryMetricsList || []);
+          setPrimaryMetricsList(mergedPrimaryMetrics);
+
+          const mergedBodyPartMetrics = mergeMetricsList(bodyPartMetricsList || [], backupData.bodyPartMetricsList || []);
+          setBodyPartMetricsList(mergedBodyPartMetrics);
+
+          // Set lastSynced timestamp
+          const nowStr = new Date().toISOString();
+          setLastSynced(nowStr);
+
+          // Prepare merged data to write back to Google Drive
+          mergedDataToUpload = {
+            user: mergedUser,
+            sessionsList: mergedSessions,
+            templatesList: mergedTemplates,
+            exercisesList: mergedExercises,
+            primaryMetricsList: mergedPrimaryMetrics,
+            bodyPartMetricsList: mergedBodyPartMetrics,
+            isAutoTimerEnabled,
+            timestamp: nowStr,
+            lastSynced: nowStr,
+          };
         }
       } catch (e) {
         console.warn('Error auto-restoring backup from Google Drive', e);
       }
     }
-    return false;
+
+    // If backup wasn't found (first time connecting), we just link by setting user name/avatar details
+    if (!backupFoundAndMerged) {
+      setUser(prev => ({
+        ...prev,
+        name: name || prev.name,
+        avatarUri: avatarUri || prev.avatarUri,
+      }));
+    }
+
+    // Immediately upload the merged data to Google Drive so the cloud is up to date
+    if (accessToken) {
+      try {
+        const nowStr = new Date().toISOString();
+        const finalBackupData = mergedDataToUpload || {
+          user: {
+            ...user,
+            name: name || user.name,
+            avatarUri: avatarUri || user.avatarUri,
+          },
+          sessionsList,
+          templatesList,
+          exercisesList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+          isAutoTimerEnabled,
+          timestamp: nowStr,
+          lastSynced: nowStr,
+        };
+
+        let activeFileId = fileId;
+        if (!activeFileId) {
+          activeFileId = await googleDrive.createBackupFile(accessToken, finalBackupData);
+          setGoogleUser(prev => prev ? { ...prev, fileId: activeFileId } : { email, name, accessToken, fileId: activeFileId, avatarUri });
+          // Update saved profile with the fileId
+          await saveGoogleProfile({
+            email,
+            name,
+            avatarUri,
+            fileId: activeFileId,
+            tokenExpiresAt: accessToken ? Date.now() + 55 * 60 * 1000 : undefined,
+          });
+        } else {
+          await googleDrive.updateBackupFile(accessToken, activeFileId, finalBackupData);
+        }
+        setLastSynced(nowStr);
+        console.log('[App] SQLite-to-Drive sync completed successfully.');
+      } catch (syncErr) {
+        console.error('[App] SQLite-to-Drive sync failed:', syncErr);
+      }
+    }
+
+    return backupFoundAndMerged;
   };
+
+  // ── Deep Link OAuth Parser ──
+  const parseAndHandleOAuthLink = async (url: string) => {
+    if (!url || !url.includes('strongern://oauth-callback')) return;
+    
+    let accessToken = '';
+    const hashSplit = url.split('#');
+    const querySplit = url.split('?');
+    
+    const parseParams = (paramString: string) => {
+      const params: Record<string, string> = {};
+      const pairs = paramString.split('&');
+      for (const pair of pairs) {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value);
+        }
+      }
+      return params;
+    };
+    
+    if (hashSplit.length > 1) {
+      const params = parseParams(hashSplit[1]);
+      if (params.access_token) accessToken = params.access_token;
+    }
+    
+    if (!accessToken && querySplit.length > 1) {
+      const params = parseParams(querySplit[1]);
+      if (params.access_token) accessToken = params.access_token;
+      else if (params.token) accessToken = params.token;
+    }
+    
+    if (accessToken) {
+      console.log('[App] Extracted OAuth access token from deep link. Authenticating...');
+      try {
+        const profile = await googleDrive.fetchUserProfile(accessToken);
+        const fileId = await googleDrive.findBackupFile(accessToken);
+        
+        await handleGoogleLogin(
+          profile.email,
+          profile.name,
+          accessToken,
+          fileId || undefined,
+          profile.avatarUri
+        );
+      } catch (err) {
+        console.error('[App] Failed to handle Google OAuth from deep link:', err);
+        const newState = { hasCompletedOnboarding: true, authMode: 'guest' as AuthMode, localUsername: 'Guest' };
+        setAuthState(newState);
+        await saveAuthState(newState);
+        setUser(prev => ({ ...prev, name: 'Guest User' }));
+      }
+    }
+  };
+
+  React.useEffect(() => {
+    if (!isDataLoaded) return;
+    
+    const handleDeepLink = async (event: { url: string }) => {
+      await parseAndHandleOAuthLink(event.url);
+    };
+
+    const getInitialLink = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        await parseAndHandleOAuthLink(initialUrl);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    getInitialLink();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isDataLoaded]);
+
 
   const handleGoogleLogout = async () => {
     setGoogleUser(null);
@@ -751,6 +1004,41 @@ export default function App() {
       return `${val.toLocaleString()} kcal`;
     }
     return `${val}${unit}`;
+  };
+
+  const mergeMetricsList = (local: any[], remote: any[]) => {
+    const merged = [...local];
+    remote.forEach((rm: any) => {
+      const localIdx = merged.findIndex(
+        lm => lm.id === rm.id || lm.label.toLowerCase().trim() === rm.label.toLowerCase().trim()
+      );
+      if (localIdx > -1) {
+        const localHistory = merged[localIdx].history || [];
+        const remoteHistory = rm.history || [];
+        const mergedHistory = [...localHistory];
+        remoteHistory.forEach((rh: any) => {
+          if (!mergedHistory.some(lh => lh.date === rh.date)) {
+            mergedHistory.push(rh);
+          }
+        });
+        mergedHistory.sort((a: any, b: any) => a.date.localeCompare(b.date));
+        
+        let lastVal = merged[localIdx].lastValue;
+        if (mergedHistory.length > 0) {
+          const latest = mergedHistory[mergedHistory.length - 1];
+          lastVal = formatMetricValue(latest.value, merged[localIdx].label);
+        }
+        
+        merged[localIdx] = {
+          ...merged[localIdx],
+          history: mergedHistory,
+          lastValue: lastVal,
+        };
+      } else {
+        merged.push(rm);
+      }
+    });
+    return merged;
   };
 
   const handleRecordMetric = (id: string, newValue: string) => {
@@ -1235,6 +1523,7 @@ export default function App() {
         <NavigationContainer>
         <View style={styles.root}>
           <Tab.Navigator
+            initialRouteName="Workout"
             tabBar={props => (
               <>
                 {isWorkoutActive && (
@@ -1317,6 +1606,38 @@ export default function App() {
                   setEnableRoutineFolders={setEnableRoutineFolders}
                   isDeveloperModeEnabled={isDeveloperModeEnabled}
                   setIsDeveloperModeEnabled={setIsDeveloperModeEnabled}
+                  appTheme={appTheme}
+                  setAppTheme={(theme: any) => {
+                    setAppThemeState(theme);
+                    const { applyTheme } = require('./theme');
+                    applyTheme(theme, customAccentColor, themeOverrides);
+                    setThemeVersion(v => v + 1);
+                  }}
+                  customAccentColor={customAccentColor}
+                  setCustomAccentColor={(color: string) => {
+                    setCustomAccentColor(color);
+                    const { applyTheme } = require('./theme');
+                    applyTheme(appTheme, color, themeOverrides);
+                    setThemeVersion(v => v + 1);
+                  }}
+                  themeOverrides={themeOverrides}
+                  onUpdateThemeOverrides={async (newOverrides: any) => {
+                    const merged = { ...themeOverrides, ...newOverrides };
+                    setThemeOverrides(merged);
+                    await setSecureItem('theme_overrides', JSON.stringify(merged));
+                    const { applyTheme } = require('./theme');
+                    applyTheme(appTheme, customAccentColor, merged);
+                    setThemeVersion(v => v + 1);
+                  }}
+                  onResetTheme={async () => {
+                    setThemeOverrides({});
+                    setCustomAccentColor('#4F8EF7');
+                    setAppThemeState('default');
+                    await deleteSecureItem('theme_overrides');
+                    const { applyTheme, DEFAULT_THEME } = require('./theme');
+                    applyTheme('default', '#4F8EF7', DEFAULT_THEME);
+                    setThemeVersion(v => v + 1);
+                  }}
                   authMode={authState.authMode}
                   onAppLogout={handleAppLogout}
                   isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}

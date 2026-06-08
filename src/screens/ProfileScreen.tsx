@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { pickAndReadBackupFile } from '../utils/backupManager';
@@ -126,6 +127,13 @@ interface ProfileScreenProps {
   setIsDeveloperModeEnabled: (val: boolean) => void;
   authMode?:                  'guest' | 'local' | 'google';
   onAppLogout?:               () => Promise<void> | void;
+  appTheme?:                  string;
+  setAppTheme?:               (theme: string) => void;
+  customAccentColor?:         string;
+  setCustomAccentColor?:     (color: string) => void;
+  themeOverrides?:            any;
+  onUpdateThemeOverrides?:    (overrides: any) => void;
+  onResetTheme?:              () => void;
 }
 
 const formatLastSynced = (isoString: string | null): string => {
@@ -420,6 +428,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setIsDeveloperModeEnabled,
   authMode = 'guest',
   onAppLogout,
+  appTheme = 'default',
+  setAppTheme,
+  customAccentColor = '#4F8EF7',
+  setCustomAccentColor,
+  themeOverrides,
+  onUpdateThemeOverrides,
+  onResetTheme,
 }) => {
   const insets = useSafeAreaInsets();
   // Modals state
@@ -452,20 +467,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       versionTapCount.current = 0;
     }
   };
-  const [isGoogleModalVisible, setIsGoogleModalVisible] = useState(false);
   const [isBackupPanelVisible, setIsBackupPanelVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
 
   // Form inputs
   const [tempName, setTempName] = useState(user?.name || '');
-  const [googleName, setGoogleName] = useState(user?.name || '');
   const [backupText, setBackupText] = useState('');
   const [pastedBackup, setPastedBackup] = useState('');
-
-  // Segmented control / developer token states
-  const [googleActiveTab, setGoogleActiveTab] = useState<'login' | 'token'>('login');
-  const [isGoogleHelpExpanded, setIsGoogleHelpExpanded] = useState(false);
 
   // Sound selector overlay states
   const [isSoundSelectorVisible, setIsSoundSelectorVisible] = useState(false);
@@ -574,23 +583,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   // Client ID is read from env — never hardcode here. See .env.example
-  const [googleClientId, setGoogleClientId] = useState(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '');
-  const [googleAccessToken, setGoogleAccessToken] = useState('');
-
-  // Reverse client ID redirect URI — must match AndroidManifest.xml intent filter
-  const androidRedirectUri = React.useMemo(() => {
-    const clientId = googleClientId.replace('.apps.googleusercontent.com', '');
-    return AuthSession.makeRedirectUri({
-      scheme: `com.googleusercontent.apps.${clientId}`,
-      path: 'oauth2redirect',
-    });
-  }, [googleClientId]);
+  const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '';
+  const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CLIENT_ID;
+  const androidRedirectUri = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: googleClientId,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? googleClientId,
+    androidClientId: ANDROID_CLIENT_ID,
+    webClientId: WEB_CLIENT_ID,
     redirectUri: androidRedirectUri,
     scopes: [
       'openid',
@@ -602,15 +603,22 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // React to the auth response from Google in Profile Settings
   React.useEffect(() => {
-    if (response?.type === 'success') {
-      const token = response.authentication?.accessToken;
-      if (token) {
-        handleConnectWithToken(token);
-      } else {
+    if (response) {
+      if (response.type === 'success') {
+        const token = response.authentication?.accessToken;
+        if (token) {
+          handleConnectWithToken(token);
+        } else {
+          setIsSyncing(false);
+          Alert.alert('Google Sign-In Error', 'No access token returned from Google.');
+        }
+      } else if (response.type === 'error') {
         setIsSyncing(false);
+        Alert.alert('Google Sign-In Error', `OAuth error: ${response.error?.message || 'Unknown error'}`);
+      } else if (response.type === 'cancel') {
+        setIsSyncing(false);
+        Alert.alert('Google Sign-In Cancelled', 'The Google Sign-In flow was closed or cancelled.');
       }
-    } else if (response?.type === 'error' || response?.type === 'cancel') {
-      setIsSyncing(false);
     }
   }, [response]);
 
@@ -794,13 +802,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, [sessions]);
 
   const topPrs = useMemo(() => {
-    const list: { name: string; weight: number; reps: number; date: string }[] = [];
+    const list: { name: string; weight: number; reps: number; date: string; rawDate: number }[] = [];
     (sessions || []).forEach(session => {
       (session.exercises || []).forEach((ex: any) => {
         const d = new Date(session.datetime);
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const dateStr = `${monthNames[d.getMonth()]} ${d.getDate()}`;
-        list.push({ name: ex.name, weight: ex.bestWeight, reps: ex.bestReps, date: dateStr });
+        list.push({ name: ex.name, weight: ex.bestWeight, reps: ex.bestReps, date: dateStr, rawDate: d.getTime() });
       });
     });
     const unique = new Map<string, typeof list[number]>();
@@ -809,7 +817,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         unique.set(item.name, item);
       }
     });
-    return Array.from(unique.values()).slice(0, 5);
+    const prList = Array.from(unique.values());
+    prList.sort((a, b) => b.rawDate - a.rawDate);
+    return prList.slice(0, 5);
   }, [sessions]);
 
   // Intelligent "Smart Quick Start" next workout selection logic
@@ -846,7 +856,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       );
 
       setIsSyncing(false);
-      setIsGoogleModalVisible(false);
 
       if (isRestored) {
         Alert.alert(
@@ -868,15 +877,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  // Google Sign-In via OAuth (with support for both Web Popup and Native Deep Linking)
+  // Google Sign-In via OAuth (standard native picker flow)
   const handleGoogleWebAuth = async () => {
-    if (!googleClientId.trim()) {
-      Alert.alert('Error', 'Please enter a Google Client ID.');
+    if (!ANDROID_CLIENT_ID) {
+      Alert.alert(
+        'Google Client ID Not Set',
+        'Google Client ID is not configured in environment variables. Please check your .env file.'
+      );
       return;
     }
 
     if (!request) {
-      Alert.alert('Google Client Not Ready', 'The Google client is initializing. Please try again in a moment, or use the Developer Token tab.');
+      Alert.alert('Google Client Not Ready', 'The Google client is initializing. Please try again in a moment.');
       return;
     }
 
@@ -888,14 +900,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       setIsSyncing(false);
       Alert.alert('Authentication Failed', err.message || String(err));
     }
-  };
-
-  const handleDeveloperTokenSubmit = () => {
-    if (!googleAccessToken.trim()) {
-      Alert.alert('Error', 'Please enter a Google Access Token.');
-      return;
-    }
-    handleConnectWithToken(googleAccessToken.trim());
   };
 
   // Manual cloud sync
@@ -936,6 +940,52 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       setBackupText(csv);
       setIsBackupPanelVisible(true);
     }
+  };
+
+  const handleExportPress = () => {
+    Alert.alert(
+      'Export Format',
+      'Select your preferred export format:',
+      [
+        {
+          text: 'Backup File (.json)',
+          onPress: handleExportJson,
+        },
+        {
+          text: 'CSV Spreadsheet (.csv)',
+          onPress: handleExportCsvPress,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleImportPress = () => {
+    Alert.alert(
+      'Import / Restore Method',
+      'Select your preferred import method:',
+      [
+        {
+          text: 'Restore from Backup File (.json)',
+          onPress: handleImportFromFile,
+        },
+        {
+          text: 'Paste JSON Payload',
+          onPress: () => {
+            setPastedBackup('');
+            setBackupText('');
+            setIsBackupPanelVisible(true);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleImportStrongCSV = async () => {
@@ -1138,7 +1188,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <View style={styles.heroContent}>
             <View style={styles.avatarSection}>
               <Avatar
-                initials={getInitials(user?.name || 'Alex Morgan')}
+                initials={getInitials((authMode === 'google' ? googleUser?.name : user?.name) || 'Guest User')}
                 uri={user?.avatarUri}
                 size={64}
                 testID="profile.avatar"
@@ -1146,10 +1196,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
 
             <View style={styles.heroInfo}>
-              <Text style={styles.heroName}>{user?.name || 'Alex Morgan'}</Text>
-              <View style={styles.heroMeta}>
-                <Ionicons name="trophy-outline" size={13} color={colors.gold} />
-                <Text style={styles.heroMetaText}>{user?.totalWorkouts ?? 0} workouts completed</Text>
+              <Text style={styles.heroName}>
+                {authMode === 'google' ? (googleUser?.name || 'Google User') : (user?.name || 'Guest User')}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flexWrap: 'wrap' }}>
+                <View style={styles.heroMeta}>
+                  <Ionicons name="trophy-outline" size={13} color={colors.gold} />
+                  <Text style={styles.heroMetaText}>{user?.totalWorkouts ?? 0} workouts completed</Text>
+                </View>
+                {authMode === 'google' && (
+                  <View style={[styles.heroMeta, { marginLeft: spacing.xs }]}>
+                    <Ionicons name="cloud-done-outline" size={13} color={colors.success} />
+                    <Text style={[styles.heroMetaText, { color: colors.success }]}>Saved on Drive</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -1273,37 +1333,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </>
         )}
 
-        {/* ── Recent Activity Teaser ───────────────────────────── */}
-        {showHighlights && (
-          <>
-            <SectionLabel
-              title="Recent Highlights"
-              subtitle="Your best moments"
-              style={[styles.sectionLabel, { marginTop: spacing.xl }]}
-              testID="profile.highlights-section"
-            />
-            <Card variant="highlight" padding={spacing.lg} style={{ backgroundColor: 'transparent' }} testID="profile.pr-card">
-              <View style={styles.prRow}>
-                <View style={[styles.prIcon, { backgroundColor: colors.accent + '22' }]}>
-                  <Ionicons name="trophy" size={20} color={colors.accent} />
-                </View>
-                <View style={styles.prText}>
-                  <Text style={styles.prTitle}>{bestPr ? `New PR — ${bestPr.name}` : 'Ready to Start!'}</Text>
-                  <Text style={styles.prSub}>
-                    {bestPr ? `${bestPr.weight} kg × ${bestPr.reps} reps  ·  ${bestPr.date}` : 'Log workouts to record achievements.'}
-                  </Text>
-                </View>
-                {bestPr && (
-                  <Badge
-                    label="PR"
-                    color={colors.accent}
-                    textColor={colors.accent}
-                  />
-                )}
-              </View>
-            </Card>
-          </>
-        )}
+
 
         {/* ── Measurements Section ────────────────────────────── */}
         <SectionLabel
@@ -1508,175 +1538,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
       </Modal>
 
-      {/* Modal B: Google Connect Sheet (Redesigned with Web Sign-In & Developer Token) */}
-      <Modal
-        visible={isGoogleModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsGoogleModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>CONNECT GOOGLE</Text>
-              <IconButton
-                name="close"
-                size={22}
-                color={colors.textSecondary}
-                onPress={() => setIsGoogleModalVisible(false)}
-              />
-            </View>
 
-            <ScrollView
-              contentContainerStyle={styles.modalForm}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={{ width: '100%' }}
-            >
-              {/* Tab Selector */}
-              <View style={styles.tabBar}>
-                <Pressable
-                  style={[styles.tabItem, googleActiveTab === 'login' && styles.tabItemActive]}
-                  onPress={() => { setGoogleActiveTab('login'); setIsGoogleHelpExpanded(false); }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[styles.tabText, googleActiveTab === 'login' && styles.tabTextActive]}>
-                    GOOGLE SIGN-IN
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.tabItem, googleActiveTab === 'token' && styles.tabItemActive]}
-                  onPress={() => { setGoogleActiveTab('token'); setIsGoogleHelpExpanded(false); }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[styles.tabText, googleActiveTab === 'token' && styles.tabTextActive]}>
-                    DEV TOKEN
-                  </Text>
-                </Pressable>
-              </View>
-
-              {googleActiveTab === 'login' ? (
-                <View style={{ rowGap: spacing.sm }}>
-                  <Text style={styles.instructionText}>
-                    Sign in dynamically using a secure Google popup. Requires a Client ID configured for this development origin.
-                  </Text>
-
-                  <Text style={styles.inputLabel}>GOOGLE CLIENT ID</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter Google Client ID"
-                    placeholderTextColor={colors.textMuted}
-                    value={googleClientId}
-                    onChangeText={setGoogleClientId}
-                    keyboardAppearance="dark"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-
-                  <Pressable 
-                    onPress={() => setIsGoogleHelpExpanded(!isGoogleHelpExpanded)}
-                    style={styles.helpToggleBtn}
-                    android_ripple={rippleTokens.surface}
-                  >
-                    <Ionicons 
-                      name={isGoogleHelpExpanded ? "chevron-up" : "chevron-down"} 
-                      size={14} 
-                      color={colors.accent} 
-                    />
-                    <Text style={styles.helpToggleBtnText}>
-                      {isGoogleHelpExpanded ? "Hide Setup Guide" : "Show Setup Guide"}
-                    </Text>
-                  </Pressable>
-
-                  {isGoogleHelpExpanded && (
-                    <View style={styles.instructionsContainer}>
-                      <Text style={styles.instructionsTitle}>HOW TO GET A CLIENT ID:</Text>
-                      <Text style={styles.instructionsStep}>1. Open Google Cloud Console API Credentials page.</Text>
-                      <Text style={styles.instructionsStep}>2. Create an OAuth 2.0 Client ID for "Web Application".</Text>
-                      <Text style={styles.instructionsStep}>3. Add authorized JavaScript origin: {(typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:8081'}</Text>
-                      <Text style={[styles.instructionsStep, { marginTop: 6, color: colors.error, fontFamily: font.bold }]}>
-                        ⚠️ MOBILE 404 WARNING: Web Client IDs DO NOT allow custom schemes (strongern://) on mobile and will cause a Google 404 error! Use the DEV TOKEN tab above for direct, instant testing on mobile devices without OAuth client limits.
-                      </Text>
-                    </View>
-                  )}
-
-                  {isSyncing ? (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={colors.accent} />
-                      <Text style={styles.loadingText}>Contacting Google server...</Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={styles.submitBtn}
-                      onPress={handleGoogleWebAuth}
-                      android_ripple={rippleTokens.accent}
-                    >
-                      <Text style={styles.submitBtnText}>SIGN IN WITH GOOGLE</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ) : (
-                <View style={{ rowGap: spacing.sm }}>
-                  <Text style={styles.instructionText}>
-                    Directly connect using a temporary access token from Google's playground. Perfect for instant testing!
-                  </Text>
-
-                  <Text style={styles.inputLabel}>OAUTH ACCESS TOKEN</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Paste access token (starts with ya29...)"
-                    placeholderTextColor={colors.textMuted}
-                    value={googleAccessToken}
-                    onChangeText={setGoogleAccessToken}
-                    keyboardAppearance="dark"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-
-                  <Pressable 
-                    onPress={() => setIsGoogleHelpExpanded(!isGoogleHelpExpanded)}
-                    style={styles.helpToggleBtn}
-                    android_ripple={rippleTokens.surface}
-                  >
-                    <Ionicons 
-                      name={isGoogleHelpExpanded ? "chevron-up" : "chevron-down"} 
-                      size={14} 
-                      color={colors.highlight} 
-                    />
-                    <Text style={[styles.helpToggleBtnText, { color: colors.highlight }]}>
-                      {isGoogleHelpExpanded ? "Hide Connection Steps" : "Show Connection Steps"}
-                    </Text>
-                  </Pressable>
-
-                  {isGoogleHelpExpanded && (
-                    <View style={styles.instructionsContainer}>
-                      <Text style={styles.instructionsTitle}>INSTANT CONNECT STEPS:</Text>
-                      <Text style={styles.instructionsStep}>1. Open developers.google.com/oauthplayground</Text>
-                      <Text style={styles.instructionsStep}>2. Select Drive API v3 (drive.file scope) & userinfo profile/email scopes.</Text>
-                      <Text style={styles.instructionsStep}>3. Click Authorize, click Exchange, and paste the Access Token above!</Text>
-                    </View>
-                  )}
-
-                  {isSyncing ? (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={colors.accent} />
-                      <Text style={styles.loadingText}>Validating credentials...</Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={[styles.submitBtn, { backgroundColor: colors.highlight }]}
-                      onPress={handleDeveloperTokenSubmit}
-                      android_ripple={rippleTokens.accent}
-                    >
-                      <Text style={[styles.submitBtnText, { color: '#0D0F14' }]}>CONNECT WITH TOKEN</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Modal C: Manual Backup Import/Export Text Dashboard */}
       <Modal
@@ -1752,7 +1614,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       </Modal>
 
       {/* Sync Spinner Overlay */}
-      {isSyncing && !isGoogleModalVisible && (
+      {isSyncing && (
         <Modal transparent visible>
           <View style={styles.spinnerBackdrop}>
             <View style={styles.spinnerCard}>
@@ -1832,10 +1694,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 {authMode === 'guest' || authMode === 'local' ? (
                   <Pressable
                     style={styles.inlineLoginBtn}
-                    onPress={() => {
-                      setGoogleName(user?.name || '');
-                      setIsGoogleModalVisible(true);
-                    }}
+                    onPress={handleGoogleWebAuth}
                     android_ripple={rippleTokens.surface}
                   >
                     <Text style={styles.inlineLoginBtnText}>
@@ -1885,6 +1744,47 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     <Text style={[styles.settingTitle, { color: colors.error }]}>Log Out</Text>
                     <Text style={styles.settingSubtitle}>
                       Sign out of this session and return to launch screen
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+
+              <View style={styles.settingDivider} />
+
+              {/* Diagnostic Data Viewer */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={async () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  const { loadAuthState } = await import('../utils/authStore');
+                  const { getSecureItem } = await import('../utils/secureStore');
+                  const savedAuth = await loadAuthState();
+                  const secureToken = await getSecureItem('google_oauth_token');
+                  Alert.alert(
+                    'Inspect Session Data',
+                    `[Active Profile State]\n` +
+                    `• Name: ${user?.name || 'N/A'}\n` +
+                    `• Avatar: ${user?.avatarUri ? 'Present' : 'N/A'}\n` +
+                    `• Total Workouts: ${user?.totalWorkouts ?? 0}\n\n` +
+                    `[Active Google User]\n` +
+                    `• Name: ${googleUser?.name || 'N/A'}\n` +
+                    `• Email: ${googleUser?.email || 'N/A'}\n` +
+                    `• Secure Token: ${secureToken ? 'Loaded (Stored Securely)' : 'Not Found'}\n\n` +
+                    `[Saved Auth State (DB)]\n` +
+                    `• Auth Mode: ${savedAuth?.authMode || 'N/A'}\n` +
+                    `• Local User: ${savedAuth?.localUsername || 'N/A'}\n` +
+                    `• Google Prof: ${savedAuth?.googleProfile ? `${savedAuth.googleProfile.name} (${savedAuth.googleProfile.email})` : 'N/A'}`
+                  );
+                }}
+                android_ripple={rippleTokens.surface}
+              >
+                <View style={styles.settingInfo}>
+                  <Ionicons name="bug-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Inspect Session Data</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Show account metadata, loaded profile fields, and secure storage tokens
                     </Text>
                   </View>
                 </View>
@@ -1943,10 +1843,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       </View>
 
                       <Pressable
-                        onPress={() => {
-                          setGoogleName(user?.name || '');
-                          setIsGoogleModalVisible(true);
-                        }}
+                        onPress={handleGoogleWebAuth}
                         style={[styles.syncNowBtn, { backgroundColor: '#FF9F0A' }]}
                         android_ripple={rippleTokens.accent}
                       >
@@ -1963,17 +1860,16 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   <Text style={styles.googlePromoSubtitle}>
                     Connect your Google Account to automatically back up all workouts, exercises, and templates.
                   </Text>
-                  <Pressable
-                    onPress={() => {
-                      setGoogleName(user?.name || '');
-                      setIsGoogleModalVisible(true);
-                    }}
-                    style={styles.connectGoogleBtn}
-                    android_ripple={rippleTokens.accent}
-                  >
-                    <Ionicons name="logo-google" size={16} color="#0D0F14" />
-                    <Text style={styles.connectGoogleBtnText}>CONNECT GOOGLE ACCOUNT</Text>
-                  </Pressable>
+                  {authMode !== 'guest' && (
+                    <Pressable
+                      onPress={handleGoogleWebAuth}
+                      style={styles.connectGoogleBtn}
+                      android_ripple={rippleTokens.accent}
+                    >
+                      <Ionicons name="logo-google" size={16} color="#0D0F14" />
+                      <Text style={styles.connectGoogleBtnText}>CONNECT GOOGLE ACCOUNT</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
             </Card>
@@ -1984,18 +1880,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {/* Export row */}
               <Pressable
                 style={styles.settingRow}
-                onPress={handleExportJson}
+                onPress={handleExportPress}
                 android_ripple={rippleTokens.surface}
-                accessibilityLabel="Export backup JSON file"
+                accessibilityLabel="Export workouts and settings data"
               >
                 <View style={styles.settingInfo}>
                   <View style={[styles.backupIconCircle, { backgroundColor: colors.accent + '22' }]}>
                     <Ionicons name="cloud-download-outline" size={20} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Export Backup File</Text>
+                    <Text style={styles.settingTitle}>Export Data</Text>
                     <Text style={styles.settingSubtitle}>
-                      Save all workouts, exercises &amp; settings as a .json file. Share to Files, email, or cloud storage.
+                      Export all workouts &amp; settings as a Backup file (.json) or CSV spreadsheet.
                     </Text>
                   </View>
                 </View>
@@ -2007,63 +1903,49 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {/* Import / Restore row */}
               <Pressable
                 style={styles.settingRow}
-                onPress={handleImportFromFile}
+                onPress={handleImportPress}
                 android_ripple={rippleTokens.surface}
-                accessibilityLabel="Restore from backup file"
+                accessibilityLabel="Import or restore workouts and settings data"
               >
                 <View style={styles.settingInfo}>
                   <View style={[styles.backupIconCircle, { backgroundColor: colors.violet + '22' }]}>
                     <Ionicons name="folder-open-outline" size={20} color={colors.violet} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Restore from Backup File</Text>
+                    <Text style={styles.settingTitle}>Import / Restore Data</Text>
                     <Text style={styles.settingSubtitle}>
-                      Pick a .json backup file to recover all your data instantly.
+                      Recover your data from a backup file (.json) or by pasting a JSON payload.
                     </Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </Pressable>
 
-              <View style={styles.recoveryDivider} />
+              <View style={styles.settingDivider} />
 
-              {/* Secondary options row */}
-              <View style={styles.recoveryGrid}>
-                <Pressable
-                  style={styles.recoveryBtn}
-                  onPress={handleExportCsvPress}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Ionicons name="document-text-outline" size={18} color={colors.accent} />
-                  <Text style={styles.recoveryBtnText}>EXPORT CSV</Text>
-                </Pressable>
+              {/* Import Strong CSV row */}
+              <Pressable
+                style={styles.settingRow}
+                onPress={handleImportStrongCSV}
+                android_ripple={rippleTokens.surface}
+                testID="profile.importStrongCSV"
+                accessibilityLabel="Import Strong App CSV file"
+              >
+                <View style={styles.settingInfo}>
+                  <View style={[styles.backupIconCircle, { backgroundColor: colors.violet + '22' }]}>
+                    <Ionicons name="document-attach-outline" size={20} color={colors.violet} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>Import Strong CSV</Text>
+                    <Text style={styles.settingSubtitle}>
+                      Import workout history exported from the Strong app (.csv).
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
 
-                <Pressable
-                  style={styles.recoveryBtn}
-                  onPress={() => {
-                    setPastedBackup('');
-                    setBackupText('');
-                    setIsBackupPanelVisible(true);
-                  }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Ionicons name="clipboard-outline" size={18} color={colors.highlight} />
-                  <Text style={styles.recoveryBtnText}>PASTE JSON</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.recoveryBtn}
-                  onPress={handleImportStrongCSV}
-                  android_ripple={rippleTokens.surface}
-                  testID="profile.importStrongCSV"
-                  accessibilityLabel="Import Strong App CSV file"
-                >
-                  <Ionicons name="document-attach-outline" size={18} color={colors.violet} />
-                  <Text style={styles.recoveryBtnText}>IMPORT STRONG</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.recoveryDivider} />
+              <View style={styles.settingDivider} />
 
               <Pressable
                 onPress={handlePhoneWipeSimulator}
@@ -2135,35 +2017,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </View>
               </Pressable>
 
-              <View style={styles.settingDivider} />
 
-              {/* Wearable Heart Rate Sync */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="pulse-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Wearable Heart Rate Sync</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Pull active heartbeat BPM telemetry during workout sessions
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isLiveHeartRateEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => setIsLiveHeartRateEnabled(!isLiveHeartRateEnabled)}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isLiveHeartRateEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isLiveHeartRateEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
 
               <View style={styles.settingDivider} />
 
@@ -2251,77 +2105,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     isKeyboardDismissOnNextEnabled && styles.togglePillTextActive
                   ]}>
                     {isKeyboardDismissOnNextEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Smartwatch Simulator */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="watch-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Smartwatch Companion Simulator</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Simulate a connected Apple Watch or WearOS smartwatch screen
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isWatchSimulatorVisible && styles.togglePillActive
-                  ]}
-                  onPress={() => {
-                    setIsWatchSimulatorVisible(!isWatchSimulatorVisible);
-                    if (!isWatchSimulatorVisible) {
-                      setIsSettingsVisible(false); // Close settings sheet to reveal the watch face simulator
-                    }
-                  }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isWatchSimulatorVisible && styles.togglePillTextActive
-                  ]}>
-                    {isWatchSimulatorVisible ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
-              {/* Native Health Integration */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="heart-half-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Native Health Integration (Simulated)</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Simulated sync of calories, workouts & active duration to Apple Health / Health Connect
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    isHealthSyncEnabled && styles.togglePillActive
-                  ]}
-                  onPress={() => {
-                    const nextVal = !isHealthSyncEnabled;
-                    setIsHealthSyncEnabled(nextVal);
-                    if (nextVal) {
-                      Alert.alert("Health Integration (Simulated)", "Apple Health & Google Health Connect integration successfully authorized in simulated mode! Workouts will now be synced in this sandbox build.");
-                    }
-                  }}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    isHealthSyncEnabled && styles.togglePillTextActive
-                  ]}>
-                    {isHealthSyncEnabled ? 'ON' : 'OFF'}
                   </Text>
                 </Pressable>
               </View>
@@ -2555,33 +2338,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {/* Layout visibility toggles header */}
               <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginTop: spacing.md, marginBottom: spacing.xs, color: colors.textSecondary }]}>Visible Dashboard Widgets</Text>
 
-              {/* Achievement Badges */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="trophy-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Achievement Badges</Text>
-                    <Text style={styles.settingSubtitle}>Show earned milestone badges on profile</Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    showAchievementBadges && styles.togglePillActive
-                  ]}
-                  onPress={() => setShowAchievementBadges && setShowAchievementBadges(!showAchievementBadges)}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    showAchievementBadges && styles.togglePillTextActive
-                  ]}>
-                    {showAchievementBadges ? 'ON' : 'OFF'}
-                  </Text>
-                </Pressable>
-              </View>
 
-              <View style={styles.settingDivider} />
 
               {/* Summary Data Widgets */}
               <View style={styles.settingRow}>
@@ -2667,13 +2424,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               <View style={styles.settingDivider} />
 
-              {/* Highlights & PRs */}
+              {/* Personal Records */}
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Ionicons name="star-outline" size={20} color={colors.gold} style={{ marginRight: spacing.sm }} />
+                  <Ionicons name="trophy-outline" size={20} color={colors.gold} style={{ marginRight: spacing.sm }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Highlights & PRs</Text>
-                    <Text style={styles.settingSubtitle}>Show recent highlights and personal records</Text>
+                    <Text style={styles.settingTitle}>Personal Records</Text>
+                    <Text style={styles.settingSubtitle}>Show personal records on profile</Text>
                   </View>
                 </View>
                 <Pressable
@@ -2817,9 +2574,326 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                           <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
                         </View>
                       )}
+
+                      <View style={styles.settingDivider} />
+
+                      {/* Theme selection UI */}
+                      <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginTop: spacing.md, marginBottom: spacing.xs, color: colors.textSecondary }]}>
+                        App Theme Color
+                      </Text>
+                      <Text style={[styles.settingSubtitle, { marginBottom: spacing.md }]}>
+                        Change the accent theme color of the app dynamically.
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+                        {[
+                          { id: 'default', label: 'Default', accent: '#4F8EF7', preview: ['#4F8EF7', '#38BDF8', '#161B24'] },
+                          { id: 'purple', label: 'Purple', accent: '#7C5CFC', preview: ['#7C5CFC', '#A855F7', '#161B24'] },
+                          { id: 'black-white', label: 'Mono', accent: '#FFFFFF', preview: ['#FFFFFF', '#E2E8F0', '#161B24'] },
+                          { id: 'custom', label: 'Custom', accent: customAccentColor, preview: [customAccentColor, customAccentColor, '#161B24'] },
+                        ].map((t) => {
+                          const isSelected = appTheme === t.id;
+                          return (
+                            <Pressable
+                              key={t.id}
+                              style={[
+                                styles.themeCard,
+                                isSelected && { borderColor: t.accent, borderWidth: 2 }
+                              ]}
+                              onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                if (setAppTheme) setAppTheme(t.id);
+                              }}
+                              android_ripple={rippleTokens.surface}
+                            >
+                              <View style={{ flexDirection: 'row', gap: 4, marginBottom: spacing.xs }}>
+                                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: t.preview[0] }} />
+                                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: t.preview[1] }} />
+                                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: t.preview[2], borderColor: colors.border, borderWidth: 1 }} />
+                              </View>
+                              <Text style={[
+                                styles.themeCardLabel,
+                                isSelected && { color: t.accent, fontFamily: font.bold }
+                              ]}>
+                                {t.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      {/* Custom Theme Color Picker Input and Presets */}
+                      {appTheme === 'custom' && (
+                        <View style={{ backgroundColor: colors.surfaceHigh, padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.md }}>
+                          <Text style={[styles.settingTitle, { fontSize: font.sizes.sm, fontFamily: font.semibold, color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                            Configure Custom Color
+                          </Text>
+
+                          {/* Quick color preset selector */}
+                          <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+                            {[
+                              { label: 'Emerald', value: '#10B981' },
+                              { label: 'Sunset', value: '#F97316' },
+                              { label: 'Hot Pink', value: '#EC4899' },
+                              { label: 'Crimson', value: '#EF4444' },
+                              { label: 'Yellow', value: '#EAB308' },
+                            ].map((preset) => (
+                              <Pressable
+                                key={preset.value}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  backgroundColor: colors.surface2,
+                                  paddingVertical: 6,
+                                  paddingHorizontal: 12,
+                                  borderRadius: radius.full,
+                                  borderWidth: 1,
+                                  borderColor: customAccentColor === preset.value ? preset.value : 'transparent',
+                                }}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  if (setCustomAccentColor) setCustomAccentColor(preset.value);
+                                }}
+                                android_ripple={rippleTokens.surface}
+                              >
+                                <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: preset.value }} />
+                                <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.medium }}>
+                                  {preset.label}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+
+                          <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                            <TextInput
+                              style={{
+                                flex: 1,
+                                backgroundColor: colors.surface2,
+                                borderColor: colors.border,
+                                borderWidth: 1,
+                                borderRadius: radius.sm,
+                                paddingVertical: spacing.sm,
+                                paddingHorizontal: spacing.md,
+                                color: colors.textPrimary,
+                                fontFamily: font.medium,
+                                fontSize: font.sizes.sm,
+                              }}
+                              placeholder="#HEX Code (e.g. #4F8EF7)"
+                              placeholderTextColor={colors.textMuted}
+                              value={customAccentColor}
+                              onChangeText={(text) => {
+                                const cleanHex = text.replace(/[^#0-9A-Fa-f]/g, '');
+                                if (setCustomAccentColor) {
+                                  setCustomAccentColor(cleanHex);
+                                }
+                              }}
+                              maxLength={7}
+                            />
+                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: customAccentColor.startsWith('#') && customAccentColor.length === 7 ? customAccentColor : colors.accent, borderColor: colors.border, borderWidth: 1 }} />
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Advanced Theme Overrides */}
+                      <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginTop: spacing.md, marginBottom: spacing.xs, color: colors.textSecondary }]}>
+                        Advanced Color Customization
+                      </Text>
+                      <Text style={[styles.settingSubtitle, { marginBottom: spacing.md }]}>
+                        Override specific layout colors. Default AMOLED background is pure black #0D0F14.
+                      </Text>
+
+                      <View style={{ gap: spacing.md, marginBottom: spacing.md }}>
+                        {[
+                          { label: 'Background Color', key: 'bg', defaultVal: '#0D0F14', presets: ['#0D0F14', '#000000', '#0A0E17', '#121212'] },
+                          { label: 'Card Surface Color', key: 'surface', defaultVal: '#161B24', presets: ['#161B24', '#1F2937', '#080808', '#1A1A1A'] },
+                          { label: 'Border Color', key: 'border', defaultVal: '#252D3A', presets: ['#252D3A', '#334155', '#1C2330', '#2E2E2E'] },
+                          { label: 'Primary Text Color', key: 'textPrimary', defaultVal: '#EEF1F6', presets: ['#EEF1F6', '#FFFFFF', '#D0D5DD', '#E0E0E0'] },
+                          { label: 'Secondary Text Color', key: 'textSecondary', defaultVal: '#8B95A5', presets: ['#8B95A5', '#94A3B8', '#4E5A6E', '#64748B'] },
+                        ].map((overrideItem) => {
+                          const currentVal = (themeOverrides && themeOverrides[overrideItem.key]) || overrideItem.defaultVal;
+                          return (
+                            <View key={overrideItem.key} style={{ backgroundColor: colors.surfaceHigh, padding: spacing.sm, borderRadius: radius.md }}>
+                              <Text style={{ color: colors.textPrimary, fontSize: font.sizes.sm, fontFamily: font.semibold, marginBottom: 6 }}>
+                                {overrideItem.label}
+                              </Text>
+                              
+                              {/* Quick Presets */}
+                              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                                {overrideItem.presets.map((presetColor) => (
+                                  <Pressable
+                                    key={presetColor}
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: 12,
+                                      backgroundColor: presetColor,
+                                      borderWidth: 1.5,
+                                      borderColor: currentVal.toLowerCase() === presetColor.toLowerCase() ? colors.accent : colors.border,
+                                    }}
+                                    onPress={() => {
+                                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                      if (onUpdateThemeOverrides) {
+                                        onUpdateThemeOverrides({ [overrideItem.key]: presetColor });
+                                      }
+                                    }}
+                                    android_ripple={rippleTokens.surface}
+                                  />
+                                ))}
+                              </View>
+
+                              {/* Manual Input */}
+                              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                                <TextInput
+                                  style={{
+                                    flex: 1,
+                                    backgroundColor: colors.surface2,
+                                    borderColor: colors.border,
+                                    borderWidth: 1,
+                                    borderRadius: radius.sm,
+                                    paddingVertical: 4,
+                                    paddingHorizontal: spacing.sm,
+                                    color: colors.textPrimary,
+                                    fontFamily: font.medium,
+                                    fontSize: font.sizes.xs,
+                                  }}
+                                  placeholder={`Hex code (e.g. ${overrideItem.defaultVal})`}
+                                  placeholderTextColor={colors.textMuted}
+                                  value={themeOverrides && themeOverrides[overrideItem.key] ? themeOverrides[overrideItem.key] : ''}
+                                  onChangeText={(text) => {
+                                    const cleanHex = text.replace(/[^#0-9A-Fa-f]/g, '');
+                                    if (onUpdateThemeOverrides) {
+                                      onUpdateThemeOverrides({ [overrideItem.key]: cleanHex });
+                                    }
+                                  }}
+                                  maxLength={7}
+                                />
+                                <View
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 14,
+                                    backgroundColor: currentVal.startsWith('#') && currentVal.length === 7 ? currentVal : overrideItem.defaultVal,
+                                    borderColor: colors.border,
+                                    borderWidth: 1,
+                                  }}
+                                />
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      {/* Reset Theme Button */}
+                      <Pressable
+                        style={({ pressed }) => [
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: colors.error + '15',
+                            borderColor: colors.error + '44',
+                            borderWidth: 1,
+                            paddingVertical: spacing.md,
+                            borderRadius: radius.md,
+                            marginTop: spacing.md,
+                            opacity: pressed ? 0.8 : 1,
+                          }
+                        ]}
+                        onPress={() => {
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          Alert.alert(
+                            'Reset Theme',
+                            'Are you sure you want to completely reset the theme and all color overrides to default?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Reset',
+                                style: 'destructive',
+                                onPress: () => {
+                                  if (onResetTheme) onResetTheme();
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                        android_ripple={{ color: colors.error + '25', borderless: false }}
+                      >
+                        <Ionicons name="refresh-outline" size={18} color={colors.error} style={{ marginRight: spacing.sm }} />
+                        <Text style={{ color: colors.error, fontFamily: font.bold, fontSize: font.sizes.base }}>
+                          Reset Theme to Default
+                        </Text>
+                      </Pressable>
                     </>
                   )}
                 </Card>
+
+                {isDeveloperModeEnabled && (
+                  <>
+                    <SectionLabel
+                      title="DEVELOPER SETTINGS"
+                      subtitle="Simulated APIs & system switches"
+                      style={[styles.sectionLabel, { marginTop: spacing.xl }]}
+                    />
+                    <Card padding={spacing.lg}>
+                      {/* Wearable Heart Rate Sync */}
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Ionicons name="pulse-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.settingTitle}>Wearable Heart Rate Sync</Text>
+                            <Text style={styles.settingSubtitle} numberOfLines={2}>
+                              Pull active heartbeat BPM telemetry during workout sessions
+                            </Text>
+                          </View>
+                        </View>
+                        <Pressable
+                          style={[
+                            styles.togglePill,
+                            isLiveHeartRateEnabled && styles.togglePillActive
+                          ]}
+                          onPress={() => setIsLiveHeartRateEnabled(!isLiveHeartRateEnabled)}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={[
+                            styles.togglePillText,
+                            isLiveHeartRateEnabled && styles.togglePillTextActive
+                          ]}>
+                            {isLiveHeartRateEnabled ? 'ON' : 'OFF'}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={styles.settingDivider} />
+
+                      {/* Achievement Badges */}
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Ionicons name="trophy-outline" size={20} color={colors.violet} style={{ marginRight: spacing.sm }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.settingTitle}>Achievement Badges</Text>
+                            <Text style={styles.settingSubtitle}>Show earned milestone badges on profile</Text>
+                          </View>
+                        </View>
+                        <Pressable
+                          style={[
+                            styles.togglePill,
+                            showAchievementBadges && styles.togglePillActive
+                          ]}
+                          onPress={() => setShowAchievementBadges && setShowAchievementBadges(!showAchievementBadges)}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={[
+                            styles.togglePillText,
+                            showAchievementBadges && styles.togglePillTextActive
+                          ]}>
+                            {showAchievementBadges ? 'ON' : 'OFF'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </Card>
+                  </>
+                )}
               </>
             )}
           </ScrollView>
@@ -3217,6 +3291,23 @@ const styles = StyleSheet.create({
   },
   togglePillTextActive: {
     color: colors.textInverse,
+  },
+  themeCard: {
+    flex: 1,
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 65,
+  },
+  themeCardLabel: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.semibold,
   },
 
   // Measure row

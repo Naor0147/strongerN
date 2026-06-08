@@ -8,19 +8,33 @@ export interface GoogleUserProfile {
 }
 
 /**
+ * Parses rich Google API error message.
+ */
+async function handleApiError(res: Response, prefix: string): Promise<never> {
+  const errorText = await res.text();
+  console.error(`[Google API Error] ${prefix}:`, errorText);
+  let errMsg = res.statusText || '';
+  try {
+    const parsed = JSON.parse(errorText);
+    if (parsed.error && parsed.error.message) {
+      errMsg = parsed.error.message;
+    }
+  } catch {}
+  throw new Error(`${prefix}: ${errMsg || errorText || res.status}`);
+}
+
+/**
  * Fetch the authenticated user's profile info from Google OAuth2 UserInfo endpoint.
  */
 export async function fetchUserProfile(token: string): Promise<GoogleUserProfile> {
-  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+  const res = await fetch('https://www.googleapis.com/userinfo/v2/me', {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
 
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error('[Google API] Userinfo failed:', errorText);
-    throw new Error(`Failed to fetch user profile: ${res.statusText}`);
+    await handleApiError(res, 'Failed to fetch user profile');
   }
 
   const data = await res.json();
@@ -46,9 +60,7 @@ export async function findBackupFile(token: string): Promise<string | null> {
   });
 
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error('[Google API] Search files failed:', errorText);
-    throw new Error(`Failed to search Google Drive: ${res.statusText}`);
+    await handleApiError(res, 'Failed to search Google Drive');
   }
 
   const data = await res.json();
@@ -71,9 +83,7 @@ export async function downloadBackupFile(token: string, fileId: string): Promise
   });
 
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error('[Google API] Download failed:', errorText);
-    throw new Error(`Failed to download backup: ${res.statusText}`);
+    await handleApiError(res, 'Failed to download backup');
   }
 
   return await res.json();
@@ -91,7 +101,6 @@ export async function createBackupFile(token: string, data: any): Promise<string
     mimeType: 'application/json',
   };
 
-  // Build a standard multipart/related request body to send metadata and file content in one call
   const body = [
     `--${boundary}`,
     'Content-Type: application/json; charset=UTF-8',
@@ -116,9 +125,7 @@ export async function createBackupFile(token: string, data: any): Promise<string
   });
 
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error('[Google API] File creation failed:', errorText);
-    throw new Error(`Failed to create backup file in Google Drive: ${res.statusText}`);
+    await handleApiError(res, 'Failed to create backup file in Google Drive');
   }
 
   const result = await res.json();
@@ -141,9 +148,7 @@ export async function updateBackupFile(token: string, fileId: string, data: any)
   });
 
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error('[Google API] File update failed:', errorText);
-    throw new Error(`Failed to update backup file in Google Drive: ${res.statusText}`);
+    await handleApiError(res, 'Failed to update backup file in Google Drive');
   }
 
   return true;
