@@ -1186,15 +1186,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flexWrap: 'wrap' }}>
                 <View style={styles.heroMeta}>
-                  <Ionicons name="trophy-outline" size={13} color={colors.gold} />
+                  <Ionicons name="trophy-outline" size={13} color={colors.accent} />
                   <Text style={styles.heroMetaText}>{user?.totalWorkouts ?? 0} workouts completed</Text>
                 </View>
-                {authMode === 'google' && (
-                  <View style={[styles.heroMeta, { marginLeft: spacing.xs }]}>
-                    <Ionicons name="cloud-done-outline" size={13} color={colors.success} />
-                    <Text style={[styles.heroMetaText, { color: colors.success }]}>Saved on Drive</Text>
-                  </View>
-                )}
               </View>
             </View>
           </View>

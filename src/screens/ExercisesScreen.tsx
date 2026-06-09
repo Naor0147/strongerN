@@ -509,6 +509,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
             keyboardAppearance="dark"
             returnKeyType="search"
             testID="exercises.search"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           />
           {searchQuery.length > 0 && (
             <IconButton
@@ -1109,6 +1110,7 @@ const styles = StyleSheet.create({
     fontFamily:  font.medium,
     height:      '100%',
     paddingVertical: 0,
+    paddingHorizontal: spacing.xs,
   },
   clearSearchBtn: {
     padding: 0,

@@ -988,6 +988,10 @@ export default function App() {
       
       if (importedSessions.length > 0) {
         setSessionsList(prev => [...importedSessions, ...prev]);
+        setUser(prev => ({
+          ...prev,
+          totalWorkouts: prev.totalWorkouts + importedSessions.length
+        }));
       }
       
       if (addedExercises.length > 0) {
@@ -1359,9 +1363,7 @@ export default function App() {
       };
     });
 
-    setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : [
-      { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
-    ]);
+    setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
   };
@@ -1438,9 +1440,7 @@ export default function App() {
           return {
             ...s,
             title: workoutName,
-            exercises: completedExercises.length > 0 ? completedExercises : [
-              { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
-            ],
+            exercises: completedExercises.length > 0 ? completedExercises : [],
             durationMinutes: summary.durationMin,
             totalVolumeKg: summary.totalVolume,
             prs: summary.totalVolume > 0 ? 1 : 0,
@@ -1455,9 +1455,7 @@ export default function App() {
         title: workoutName,
         datetime: new Date(),
         comment: 'Logged via live active tracker!',
-        exercises: completedExercises.length > 0 ? completedExercises : [
-          { name: 'Bench Press', sets: 3, bestWeight: 60, bestReps: 10 }
-        ],
+        exercises: completedExercises.length > 0 ? completedExercises : [],
         durationMinutes: summary.durationMin,
         totalVolumeKg: summary.totalVolume,
         prs: summary.totalVolume > 0 ? 1 : 0,

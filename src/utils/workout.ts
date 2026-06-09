@@ -90,7 +90,7 @@ export const getNextWorkout = (
   // 3. Fallback if no templates/program
   return {
     name: 'Empty Workout',
-    exercises: ['Bench Press', 'Squat', 'Deadlift'],
+    exercises: [],
     type: 'Quick Start',
     badgeColor: colors.highlight,
   };

@@ -277,7 +277,7 @@ const FrontSvgMap: React.FC<{
       </G>
 
       {/* ── SKELETON OUTLINE ── */}
-      <G id="body">
+      <G id="body" pointerEvents="none">
         <Line x1={330.4} y1={504.57} x2={330.4} y2={571.92} fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.46} />
         <Line x1={330.17} y1={504.57} x2={330.17} y2={571.92} fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.46} />
         <Line x1={330.05} y1={504.57} x2={330.05} y2={571.92} fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.46} />
@@ -518,7 +518,7 @@ const BackSvgMap: React.FC<{
       </G>
 
       {/* ── SKELETON OUTLINE ── */}
-      <G id="body">
+      <G id="body" pointerEvents="none">
         <Path d="M266.34,935.47c-.89-19.84-16.47-25.12-28.26-16.43-14.11,10.4-36.12-39.53-43.56-12.29" fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.52} />
         <Path d="M17.22,535.8c2.09,7.99,6.55,13.88,11.67,15.84,4.99,1.91,12,.65,18.85-3.56" fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.52} />
         <Path d="M102.63,368.78c-11.91,35.01,10.78,12.73,19.35,18,8.73,5.36-8.23,50.09,34.96,11.52" fill="none" stroke="#484a68" strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.52} />
@@ -615,6 +615,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const translateXAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(T_CLOSED)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const springScale = (anim: Animated.Value, toValue: number, speedMultiplier = 1) => {
     const s = globalAnimation.speed * speedMultiplier;
@@ -665,6 +666,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       springScale(translateYAnim, zoom.y),
       springScale(sheetTranslateY, T_COLLAPSED),
     ]).start();
+
+    // Smoothly scroll to the top to see the highlighted muscle and sheet
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const handleClose = () => {
@@ -966,6 +970,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         testID="musclemap.header"
       />
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}

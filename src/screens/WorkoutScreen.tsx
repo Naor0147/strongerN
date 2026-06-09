@@ -526,6 +526,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardAppearance="dark"
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 />
               </View>
             </View>
@@ -745,7 +746,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   subtitle={searchQuery.trim() ? `Found ${filteredTemplates.length} results` : `${filteredTemplates.length} templates`}
                   rightIcon="add-circle-outline"
                   rightIconColor={colors.accent}
-                  onRightPress={handleOpenCreator}
+                  onRightPress={() => {
+                    import('../utils/soundPlayer').then(m => m.playSoundByKey('chime'));
+                    handleOpenCreator();
+                  }}
                   style={styles.sectionLabel}
                   testID="workout.templates-section"
                 />
@@ -1162,6 +1166,7 @@ const styles = StyleSheet.create({
     fontFamily:  font.medium,
     height:      '100%',
     paddingVertical: 0,
+    paddingHorizontal: spacing.xs,
   },
 
   // Tabs style

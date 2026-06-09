@@ -19,12 +19,14 @@ import {
   Vibration,
   LayoutAnimation,
   UIManager,
+  AppState,
 } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
@@ -276,6 +278,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Auto rest timer countdown states
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const restTimerEndTarget = useRef<number | null>(null);
 
   // Exercise library selector modal states
   const [isLibraryVisible, setIsLibraryVisible] = useState(false);
@@ -483,26 +486,87 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => clearInterval(id);
   }, [visible, startTime]);
 
+  // Configure notifications
+  useEffect(() => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  }, []);
+
+  // Background and Foreground Time Sync
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        // Sync total elapsed
+        setElapsed(formatElapsed(startTime));
+
+        // Sync rest timer
+        if (isTimerActive && restTimerEndTarget.current) {
+          const now = Date.now();
+          if (now >= restTimerEndTarget.current) {
+            setRestTimeRemaining(0);
+            setIsTimerActive(false);
+          } else {
+            setRestTimeRemaining(Math.ceil((restTimerEndTarget.current - now) / 1000));
+          }
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [isTimerActive, startTime]);
+
   // Rest Timer Countdown Interval
   useEffect(() => {
     if (!isTimerActive || restTimeRemaining <= 0) {
       if (isTimerActive && restTimeRemaining === 0) {
         setIsTimerActive(false);
+        restTimerEndTarget.current = null;
       }
       return;
     }
+
+    // Set target when timer becomes active
+    if (!restTimerEndTarget.current) {
+      restTimerEndTarget.current = Date.now() + restTimeRemaining * 1000;
+    }
+
     const timerId = setInterval(() => {
-      setRestTimeRemaining(prev => {
-        if (prev <= 1) {
-          setIsTimerActive(false);
-          playTimerCompletedSound();
-          return 0;
-        }
-        return prev - 1;
-      });
+      if (!restTimerEndTarget.current) return;
+      const now = Date.now();
+      const remaining = Math.ceil((restTimerEndTarget.current - now) / 1000);
+
+      if (remaining <= 0) {
+        setRestTimeRemaining(0);
+        setIsTimerActive(false);
+        restTimerEndTarget.current = null;
+        playTimerCompletedSound();
+      } else {
+        setRestTimeRemaining(remaining);
+      }
     }, 1000);
+
     return () => clearInterval(timerId);
   }, [isTimerActive, restTimeRemaining]);
+
+  const scheduleRestNotification = async (duration: number) => {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    if (duration > 0) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Rest Timer Completed! ⏱️",
+          body: "Time's up! Get ready for your next set.",
+          sound: true,
+        },
+        trigger: {
+          seconds: duration,
+        },
+      });
+    }
+  };
 
   const timerPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -540,8 +604,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (willBeCompleted) {
       playSetCheckedSound();
       if (isAutoTimerEnabled) {
+        restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
         setRestTimeRemaining(defaultRestDuration);
         setIsTimerActive(true);
+        scheduleRestNotification(defaultRestDuration);
       }
     }
 
@@ -630,8 +696,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       if (targetSet && !targetSet.completed) {
         playSetCheckedSound();
         if (isAutoTimerEnabled) {
+          restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
           setRestTimeRemaining(defaultRestDuration);
           setIsTimerActive(true);
+          scheduleRestNotification(defaultRestDuration);
         }
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActiveExercises(prev => {
@@ -1072,9 +1140,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   onPress={() => {
                     if (isTimerActive) {
                       setIsTimerActive(false);
+                      restTimerEndTarget.current = null;
+                      Notifications.cancelAllScheduledNotificationsAsync();
                     } else {
+                      restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
                       setRestTimeRemaining(defaultRestDuration);
                       setIsTimerActive(true);
+                      scheduleRestNotification(defaultRestDuration);
                     }
                   }}
                   style={[styles.headerStopwatchBtn, isTimerActive && styles.headerTimerBtnActive]}
@@ -1115,13 +1187,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
               <View style={styles.headerRight}>
                 <Pressable
+                  onPress={handleOpenAddExercise}
+                  style={[styles.headerStopwatchBtn, { marginRight: spacing.sm }]}
+                  android_ripple={rippleTokens.surface}
+                  accessibilityLabel="Add Exercise"
+                >
+                  <Ionicons name="add" size={20} color={colors.accent} />
+                </Pressable>
+                <Pressable
                   onPress={handleFinishPress}
                   style={styles.headerFinishBtn}
                   android_ripple={rippleTokens.accent}
                   accessibilityLabel="Finish workout"
                 >
-                  <Ionicons name="checkmark" size={14} color="#0D0F14" />
-                  <Text style={styles.headerFinishBtnText}>FINISH</Text>
+                  <Ionicons name="checkmark" size={20} color="#0D0F14" />
                 </Pressable>
               </View>
             </View>
@@ -1346,16 +1425,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   );
                 })
               )}
-
-              {/* Add Exercise dynamically to active workout */}
-              <Pressable
-                style={styles.scrollAddExBtn}
-                onPress={handleOpenAddExercise}
-                android_ripple={rippleTokens.surface}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={colors.accent} style={{ marginRight: spacing.xs }} />
-                <Text style={styles.scrollAddExText}>ADD EXERCISE</Text>
-              </Pressable>
 
               {/* Discard Workout button */}
               <Pressable
@@ -1887,7 +1956,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               selectTextOnFocus
             />
             {set.rpe ? (
-              <Text style={styles.rpeInlineText}>
+              <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
                 {`@${set.rpe}`}
               </Text>
             ) : null}
@@ -1992,18 +2061,12 @@ const styles = StyleSheet.create({
   headerFinishBtn: {
     flexDirection:     'row',
     alignItems:        'center',
-    columnGap:         6,
+    justifyContent:    'center',
     backgroundColor:   colors.accent,
     borderRadius:      radius.full,
-    paddingVertical:   7,
-    paddingHorizontal: spacing.md,
-    ...( shadow.accentGlow as object),
-  },
-  headerFinishBtnText: {
-    color:         '#0D0F14',
-    fontSize:      font.sizes.sm,
-    fontFamily:    font.bold,
-    letterSpacing: 0.8,
+    width:             36,
+    height:            36,
+    ...(shadow.accentGlow as object),
   },
 
   // Main Scroll View Workout Title Section
@@ -2209,27 +2272,6 @@ const styles = StyleSheet.create({
     color:      colors.accent,
     fontSize:   font.sizes.xs,
     fontFamily: font.semibold,
-  },
-
-  // Add Exercise Button
-  scrollAddExBtn: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    backgroundColor: colors.bg,
-    borderColor:     colors.accent + '60',
-    borderWidth:     1,
-    borderStyle:     'dashed',
-    borderRadius:    radius.md,
-    paddingVertical: spacing.md,
-    marginTop:       spacing.sm,
-    marginBottom:    spacing.sm,
-  },
-  scrollAddExText: {
-    color:         colors.accent,
-    fontSize:      font.sizes.sm,
-    fontFamily:    font.bold,
-    letterSpacing: 0.8,
   },
 
   // Scroll Discard Button
