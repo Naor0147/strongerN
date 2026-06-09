@@ -420,6 +420,95 @@ export default function App() {
     }
   }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, appTheme, customAccentColor]);
 
+  // Auto-sync state changes to Google Drive
+  const isInitialLoadRef = React.useRef(true);
+  
+  const handleGoogleSessionExpired = React.useCallback(async () => {
+    setGoogleUser(prev => prev ? { ...prev, accessToken: undefined } : null);
+    await deleteSecureItem('google_oauth_token');
+    const currentAuth = await loadAuthState();
+    if (currentAuth && currentAuth.googleProfile) {
+      await saveGoogleProfile({
+        ...currentAuth.googleProfile,
+        tokenExpiresAt: undefined,
+      });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!isDataLoaded) return;
+    
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    if (!googleUser || !googleUser.accessToken) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      console.log('[Auto-Sync] Commencing automatic Google Drive backup update...');
+      try {
+        const nowStr = new Date().toISOString();
+        const backupData = {
+          user,
+          sessionsList,
+          templatesList,
+          exercisesList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+          isAutoTimerEnabled,
+          timestamp: nowStr,
+          lastSynced: nowStr,
+        };
+
+        let fileId = googleUser.fileId;
+        let fileIdUpdated = false;
+        if (!fileId) {
+          const foundId = await googleDrive.findBackupFile(googleUser.accessToken);
+          if (foundId) {
+            fileId = foundId;
+            fileIdUpdated = true;
+          }
+        }
+
+        if (fileId) {
+          await googleDrive.updateBackupFile(googleUser.accessToken, fileId, backupData);
+        } else {
+          fileId = await googleDrive.createBackupFile(googleUser.accessToken, backupData);
+          fileIdUpdated = true;
+        }
+
+        if (fileIdUpdated) {
+          const updatedFileId = fileId;
+          setGoogleUser(prev => prev ? { ...prev, fileId: updatedFileId } : null);
+          const currentAuth = await loadAuthState();
+          if (currentAuth && currentAuth.googleProfile) {
+            await saveGoogleProfile({
+              ...currentAuth.googleProfile,
+              fileId: updatedFileId,
+            });
+          }
+        }
+
+        setLastSynced(nowStr);
+        console.log('[Auto-Sync] Automatic backup completed successfully.');
+      } catch (e: any) {
+        console.warn('[Auto-Sync Error]', e);
+        if (e.message && (
+          e.message.includes('401') || 
+          e.message.toLowerCase().includes('unauthorized') || 
+          e.message.toLowerCase().includes('invalid credentials') || 
+          e.message.toLowerCase().includes('auth')
+        )) {
+          console.warn('[Auto-Sync] Access token invalid or expired. Triggering reconnect.');
+          await handleGoogleSessionExpired();
+        }
+      }
+    }, 2000);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser]);
+
   // Synchronize audio preferences to soundConfig helper
   React.useEffect(() => {
     soundConfig.setChecked = soundSetCompleted;
@@ -1390,40 +1479,6 @@ export default function App() {
 
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
-
-    // Auto backup if Google connected
-    if (googleUser && googleUser.accessToken) {
-      setTimeout(async () => {
-        const nowStr = new Date().toISOString();
-        const backupData = {
-          user: nextUser,
-          sessionsList: updatedSessions,
-          templatesList,
-          exercisesList,
-          primaryMetricsList,
-          bodyPartMetricsList,
-          isAutoTimerEnabled,
-          timestamp: nowStr,
-          lastSynced: nowStr,
-        };
-        try {
-          let fileId = googleUser.fileId;
-          if (!fileId) {
-            const foundId = await googleDrive.findBackupFile(googleUser.accessToken!);
-            if (foundId) fileId = foundId;
-          }
-          if (fileId) {
-            await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
-          } else {
-            const newFileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
-            setGoogleUser(prev => prev ? { ...prev, fileId: newFileId } : null);
-          }
-          setLastSynced(nowStr);
-        } catch (e) {
-          console.warn('[Google Auto Sync Error]', e);
-        }
-      }, 500);
-    }
   };
 
   const handleDiscardWorkout = () => {

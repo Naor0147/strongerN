@@ -902,22 +902,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  // Manual cloud sync
-  const handleManualSyncPress = async () => {
-    setIsSyncing(true);
-    try {
-      const ok = await onCloudSync();
-      setIsSyncing(false);
-      if (ok) {
-        Alert.alert('Cloud Sync Successful', 'All workouts, custom exercises, circumferences, and templates are backed up successfully in your Google Drive cloud!');
-      } else {
-        Alert.alert('Error', 'Sync failed. Please connect a Google account first.');
-      }
-    } catch (e: any) {
-      setIsSyncing(false);
-      Alert.alert('Error', `Sync failed: ${e.message || e}`);
-    }
-  };
+
 
   // File-based export
   const handleExportJson = async () => {
@@ -1683,7 +1668,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     </Text>
                     <Text style={styles.settingSubtitle}>
                       {authMode === 'google'
-                        ? googleUser?.email || 'Connected with Google'
+                        ? (googleUser?.email || 'Connected with Google') + (googleUser?.accessToken ? '' : ' (Session Expired)')
                         : authMode === 'local'
                         ? `Logged in as ${user?.name || 'Local User'}`
                         : 'Workouts saved locally. Sign in to back up.'}
@@ -1700,6 +1685,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     <Text style={styles.inlineLoginBtnText}>
                       {authMode === 'local' ? 'LINK GOOGLE' : 'LOG IN'}
                     </Text>
+                  </Pressable>
+                ) : googleUser && !googleUser.accessToken ? (
+                  <Pressable
+                    style={[styles.inlineLoginBtn, { backgroundColor: '#FF9F0A' }]}
+                    onPress={handleGoogleWebAuth}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Text style={[styles.inlineLoginBtnText, { color: '#0D0F14' }]}>RECONNECT</Text>
                   </Pressable>
                 ) : (
                   <View style={styles.connectedBadge}>
@@ -1750,129 +1743,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </Pressable>
 
-              <View style={styles.settingDivider} />
 
-              {/* Diagnostic Data Viewer */}
-              <Pressable
-                style={styles.settingRow}
-                onPress={async () => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  const { loadAuthState } = await import('../utils/authStore');
-                  const { getSecureItem } = await import('../utils/secureStore');
-                  const savedAuth = await loadAuthState();
-                  const secureToken = await getSecureItem('google_oauth_token');
-                  Alert.alert(
-                    'Inspect Session Data',
-                    `[Active Profile State]\n` +
-                    `• Name: ${user?.name || 'N/A'}\n` +
-                    `• Avatar: ${user?.avatarUri ? 'Present' : 'N/A'}\n` +
-                    `• Total Workouts: ${user?.totalWorkouts ?? 0}\n\n` +
-                    `[Active Google User]\n` +
-                    `• Name: ${googleUser?.name || 'N/A'}\n` +
-                    `• Email: ${googleUser?.email || 'N/A'}\n` +
-                    `• Secure Token: ${secureToken ? 'Loaded (Stored Securely)' : 'Not Found'}\n\n` +
-                    `[Saved Auth State (DB)]\n` +
-                    `• Auth Mode: ${savedAuth?.authMode || 'N/A'}\n` +
-                    `• Local User: ${savedAuth?.localUsername || 'N/A'}\n` +
-                    `• Google Prof: ${savedAuth?.googleProfile ? `${savedAuth.googleProfile.name} (${savedAuth.googleProfile.email})` : 'N/A'}`
-                  );
-                }}
-                android_ripple={rippleTokens.surface}
-              >
-                <View style={styles.settingInfo}>
-                  <Ionicons name="bug-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Inspect Session Data</Text>
-                    <Text style={styles.settingSubtitle}>
-                      Show account metadata, loaded profile fields, and secure storage tokens
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </Pressable>
             </Card>
 
-            {/* Cloud Sync & Backup (under Account & Sync) */}
-            <View style={{ height: spacing.md }} />
-            <Card padding={spacing.lg}>
-              {googleUser ? (
-                <View style={styles.syncContainer}>
-                  <View style={styles.syncHeaderRow}>
-                    <View style={styles.syncLeft}>
-                      <View style={[styles.googleIconCircle, { backgroundColor: colors.accent + '22' }]}>
-                        <Ionicons name="logo-google" size={18} color={colors.accent} />
-                      </View>
-                      <View>
-                        <Text style={styles.syncTitle}>Google Account Connected</Text>
-                        <Text style={styles.syncEmail} numberOfLines={1}>{googleUser.email}</Text>
-                      </View>
-                    </View>
-                    <Pressable onPress={onGoogleLogout} style={styles.signOutBtn}>
-                      <Text style={styles.signOutBtnText}>Sign Out</Text>
-                    </Pressable>
-                  </View>
 
-                  <View style={styles.syncDivider} />
-
-                  {googleUser.accessToken ? (
-                    <>
-                      <View style={styles.syncStatusRow}>
-                        <View style={styles.syncStatusLeft}>
-                          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                          <Text style={styles.syncStatusText}>Auto-Backup Active</Text>
-                        </View>
-                        <Text style={styles.syncTimeLabel}>{formatLastSynced(lastSynced)}</Text>
-                      </View>
-
-                      <Pressable
-                        onPress={handleManualSyncPress}
-                        style={styles.syncNowBtn}
-                        android_ripple={rippleTokens.accent}
-                      >
-                        <Ionicons name="sync" size={16} color="#0D0F14" />
-                        <Text style={styles.syncNowBtnText}>SYNC NOW</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <>
-                      <View style={styles.syncStatusRow}>
-                        <View style={styles.syncStatusLeft}>
-                          <Ionicons name="alert-circle-outline" size={16} color="#FF9F0A" />
-                          <Text style={[styles.syncStatusText, { color: '#FF9F0A' }]}>Session Expired / Reconnect Needed</Text>
-                        </View>
-                      </View>
-
-                      <Pressable
-                        onPress={handleGoogleWebAuth}
-                        style={[styles.syncNowBtn, { backgroundColor: '#FF9F0A' }]}
-                        android_ripple={rippleTokens.accent}
-                      >
-                        <Ionicons name="logo-google" size={16} color="#0D0F14" />
-                        <Text style={styles.syncNowBtnText}>RECONNECT TO SYNC</Text>
-                      </Pressable>
-                    </>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.googlePromoContainer}>
-                  <Ionicons name="cloud-upload-outline" size={32} color={colors.accent} />
-                  <Text style={styles.googlePromoTitle}>NEVER LOSE YOUR WORKOUTS</Text>
-                  <Text style={styles.googlePromoSubtitle}>
-                    Connect your Google Account to automatically back up all workouts, exercises, and templates.
-                  </Text>
-                  {authMode !== 'guest' && (
-                    <Pressable
-                      onPress={handleGoogleWebAuth}
-                      style={styles.connectGoogleBtn}
-                      android_ripple={rippleTokens.accent}
-                    >
-                      <Ionicons name="logo-google" size={16} color="#0D0F14" />
-                      <Text style={styles.connectGoogleBtnText}>CONNECT GOOGLE ACCOUNT</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
-            </Card>
 
             {/* Data Portability (under Account & Sync) */}
             <View style={{ height: spacing.md }} />
@@ -2891,6 +2765,47 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                           </Text>
                         </Pressable>
                       </View>
+
+                      <View style={styles.settingDivider} />
+
+                      {/* Diagnostic Data Viewer */}
+                      <Pressable
+                        style={styles.settingRow}
+                        onPress={async () => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          const { loadAuthState } = await import('../utils/authStore');
+                          const { getSecureItem } = await import('../utils/secureStore');
+                          const savedAuth = await loadAuthState();
+                          const secureToken = await getSecureItem('google_oauth_token');
+                          Alert.alert(
+                            'Inspect Session Data',
+                            `[Active Profile State]\n` +
+                            `• Name: ${user?.name || 'N/A'}\n` +
+                            `• Avatar: ${user?.avatarUri ? 'Present' : 'N/A'}\n` +
+                            `• Total Workouts: ${user?.totalWorkouts ?? 0}\n\n` +
+                            `[Active Google User]\n` +
+                            `• Name: ${googleUser?.name || 'N/A'}\n` +
+                            `• Email: ${googleUser?.email || 'N/A'}\n` +
+                            `• Secure Token: ${secureToken ? 'Loaded (Stored Securely)' : 'Not Found'}\n\n` +
+                            `[Saved Auth State (DB)]\n` +
+                            `• Auth Mode: ${savedAuth?.authMode || 'N/A'}\n` +
+                            `• Local User: ${savedAuth?.localUsername || 'N/A'}\n` +
+                            `• Google Prof: ${savedAuth?.googleProfile ? `${savedAuth.googleProfile.name} (${savedAuth.googleProfile.email})` : 'N/A'}`
+                          );
+                        }}
+                        android_ripple={rippleTokens.surface}
+                      >
+                        <View style={styles.settingInfo}>
+                          <Ionicons name="bug-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.settingTitle}>Inspect Session Data</Text>
+                            <Text style={styles.settingSubtitle}>
+                              Show account metadata, loaded profile fields, and secure storage tokens
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                      </Pressable>
                     </Card>
                   </>
                 )}
