@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
+import { Rubik_400Regular, Rubik_500Medium, Rubik_600SemiBold, Rubik_700Bold } from '@expo-google-fonts/rubik';
 import { Ionicons }                 from '@expo/vector-icons';
 import * as googleDrive             from './utils/googleDrive';
 import { initDb, saveToDb, loadFromDb } from './utils/db';
@@ -60,6 +61,10 @@ export default function App() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    Rubik_400Regular,
+    Rubik_500Medium,
+    Rubik_600SemiBold,
+    Rubik_700Bold,
   });
 
   // ── Auth State ────────────────────────────────────────────────
@@ -464,7 +469,7 @@ export default function App() {
         let fileId = googleUser.fileId;
         let fileIdUpdated = false;
         if (!fileId) {
-          const foundId = await googleDrive.findBackupFile(googleUser.accessToken);
+          const foundId = await googleDrive.findBackupFile(googleUser.accessToken!);
           if (foundId) {
             fileId = foundId;
             fileIdUpdated = true;
@@ -472,9 +477,9 @@ export default function App() {
         }
 
         if (fileId) {
-          await googleDrive.updateBackupFile(googleUser.accessToken, fileId, backupData);
+          await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
         } else {
-          fileId = await googleDrive.createBackupFile(googleUser.accessToken, backupData);
+          fileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
           fileIdUpdated = true;
         }
 
@@ -1578,7 +1583,7 @@ export default function App() {
         <NavigationContainer>
         <View style={styles.root}>
           <Tab.Navigator
-            initialRouteName="Workout"
+            initialRouteName="Profile"
             tabBar={props => (
               <>
                 {isWorkoutActive && (

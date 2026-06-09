@@ -12,6 +12,8 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, animation, globalAnimation } from '../../theme';
+import i18n from '../../utils/i18n';
+import { I18nManager } from 'react-native';
 
 interface TabConfig {
   route:      string;
@@ -20,12 +22,12 @@ interface TabConfig {
   label:      string;
 }
 
-const TAB_CONFIG: TabConfig[] = [
-  { route: 'Profile',   icon: 'person-outline',     iconActive: 'person',      label: 'Profile'   },
-  { route: 'History',   icon: 'time-outline',        iconActive: 'time',        label: 'History'   },
-  { route: 'Workout',   icon: 'add-circle-outline',  iconActive: 'add-circle',  label: 'Workout'   },
-  { route: 'Exercises', icon: 'barbell-outline',     iconActive: 'barbell',     label: 'Exercises' },
-  { route: 'Muscles',   icon: 'body-outline',        iconActive: 'body',        label: 'Muscles'   },
+const getTabConfig = (): TabConfig[] => [
+  { route: 'Profile',   icon: 'person-outline',     iconActive: 'person',      label: i18n.t('tabs.profile')   },
+  { route: 'History',   icon: 'time-outline',        iconActive: 'time',        label: i18n.t('tabs.history')   },
+  { route: 'Workout',   icon: 'add-circle-outline',  iconActive: 'add-circle',  label: i18n.t('tabs.workout')   },
+  { route: 'Exercises', icon: 'barbell-outline',     iconActive: 'barbell',     label: i18n.t('tabs.exercises') },
+  { route: 'Muscles',   icon: 'body-outline',        iconActive: 'body',        label: i18n.t('tabs.muscles')   },
 ];
 
 // Single animated tab item
@@ -73,7 +75,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, in
           <View style={styles.activePill} />
         )}
         <Ionicons name={iconName} size={24} color={iconColor} />
-        <Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
+        <Text style={[styles.label, { color: labelColor, fontFamily: I18nManager.isRTL ? 'Rubik_500Medium' : font.medium }]} numberOfLines={1}>
           {tab.label}
         </Text>
       </Animated.View>
@@ -97,7 +99,8 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
 
       <View style={styles.row}>
         {state.routes.map((route, index) => {
-          const tab = TAB_CONFIG.find(t => t.route === route.name);
+          const tabConfigs = getTabConfig();
+          const tab = tabConfigs.find(t => t.route === route.name);
           if (!tab) return null;
           
           return (
