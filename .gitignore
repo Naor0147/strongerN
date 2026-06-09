@@ -61,3 +61,19 @@ pnpm-debug.log*
 # Graphify
 graphify-out/
 
+# IDEs and editors
+.idea/
+.project
+.classpath
+.cproject
+.settings/
+*.launch
+*.sublime-workspace
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Build / local files
+.expo-shared/

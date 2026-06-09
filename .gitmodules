@@ -1,0 +1,3 @@
+[submodule ".agents/ui-ux-design-pro-max"]
+	path = .agents/ui-ux-design-pro-max
+	url = https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git
