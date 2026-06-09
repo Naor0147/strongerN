@@ -178,6 +178,16 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
+    const normalizedExKeys = new Map<string, string>();
+    const getNormalizedKey = (name: string) => {
+      let key = normalizedExKeys.get(name);
+      if (!key) {
+        key = name.toLowerCase().trim();
+        normalizedExKeys.set(name, key);
+      }
+      return key;
+    };
+
     sessions.forEach((session: any) => {
       const sessDate = new Date(session.datetime).getTime();
       const isLast7Days = sessDate >= sevenDaysAgo;
@@ -185,7 +195,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       if (session.exercises) {
         session.exercises.forEach((ex: any) => {
           if (ex.name) {
-            const exKey = ex.name.toLowerCase().trim();
+            const exKey = getNormalizedKey(ex.name);
             const setsCount = typeof ex.sets === 'number' ? ex.sets : (ex.setsDetails?.length || 0);
 
             allTimeCounts[exKey] = (allTimeCounts[exKey] || 0) + setsCount;
@@ -198,7 +208,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     });
 
     return exercises.map(ex => {
-      const exKey = ex.name.toLowerCase().trim();
+      const exKey = getNormalizedKey(ex.name);
       return {
         ...ex,
         weeklySets: weeklyCounts[exKey] || 0,

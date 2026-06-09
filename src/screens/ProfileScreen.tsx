@@ -26,6 +26,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
+import i18n from '../utils/i18n';
+import { I18nManager } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { pickAndReadBackupFile } from '../utils/backupManager';
 
@@ -1169,7 +1171,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           )}
 
           {/* ── User Hero Card ───────────────────────────────────── */}
-        <Card style={[styles.heroCard, { backgroundColor: 'transparent' }]} padding={0} testID="profile.user-card">
+        <Card style={styles.heroCard} padding={0} testID="profile.user-card">
           <View style={styles.heroContent}>
             <View style={styles.avatarSection}>
               <Avatar
@@ -2101,6 +2103,43 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.lg}>
+              {/* Language Toggle */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="language-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.settingTitle, { fontFamily: I18nManager.isRTL ? 'Rubik_600SemiBold' : font.semibold }]}>{i18n.t('settings.language')}</Text>
+                    <Text style={[styles.settingSubtitle, { fontFamily: I18nManager.isRTL ? 'Rubik_400Regular' : font.regular }]} numberOfLines={1}>
+                      {I18nManager.isRTL ? i18n.t('settings.hebrew') : i18n.t('settings.english')}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={styles.togglePill}
+                  onPress={() => {
+                    Alert.alert(
+                      i18n.t('settings.restartRequired'),
+                      i18n.t('settings.restartMessage'),
+                      [
+                        {
+                          text: i18n.t('settings.ok'),
+                          onPress: () => {
+                            I18nManager.forceRTL(!I18nManager.isRTL);
+                          }
+                        }
+                      ]
+                    );
+                  }}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[styles.togglePillText, { fontFamily: I18nManager.isRTL ? 'Rubik_700Bold' : font.bold }]}>
+                    {I18nManager.isRTL ? 'EN' : 'HE'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
               {/* Global Animation Speed (Smooth Draggable Slider) */}
               <AnimationSpeedSlider
                 animationSpeed={animationSpeed}
