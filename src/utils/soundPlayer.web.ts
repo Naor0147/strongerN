@@ -71,6 +71,30 @@ function playWebSound(soundKey: string) {
       { freq: 783.99, duration: 0.2, delay: 0.16 },
       { freq: 1046.50, duration: 0.4, delay: 0.24 },
     ]);
+  } else if (soundKey === 'bell1') {
+    try {
+      const audio = new Audio(require('../../assets/sounds/bell1.mp3'));
+      audio.volume = soundConfig.volume ?? 1.0;
+      audio.play().catch(err => console.warn('[Web bell1 Audio Play Error]', err));
+    } catch (err) {
+      console.warn('[Web bell1 Audio Init Error]', err);
+    }
+  } else if (soundKey === 'bell2') {
+    try {
+      const audio = new Audio(require('../../assets/sounds/bell2.mp3'));
+      audio.volume = soundConfig.volume ?? 1.0;
+      audio.play().catch(err => console.warn('[Web bell2 Audio Play Error]', err));
+    } catch (err) {
+      console.warn('[Web bell2 Audio Init Error]', err);
+    }
+  } else if (soundKey === 'boxing-bell') {
+    try {
+      const audio = new Audio(require('../../assets/sounds/boxing-bell.mp3'));
+      audio.volume = soundConfig.volume ?? 1.0;
+      audio.play().catch(err => console.warn('[Web boxing-bell Audio Play Error]', err));
+    } catch (err) {
+      console.warn('[Web boxing-bell Audio Init Error]', err);
+    }
   } else {
     // Check for custom sound
     const custom = soundConfig.customSounds.find(s => s.id === soundKey);

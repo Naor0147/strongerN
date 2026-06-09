@@ -104,6 +104,12 @@ async function playNativeSound(soundKey: string) {
       player = createAudioPlayer(require('../../assets/sounds/timer_completed.wav'));
     } else if (soundKey === 'fanfare') {
       player = createAudioPlayer(require('../../assets/sounds/workout_completed.wav'));
+    } else if (soundKey === 'bell1') {
+      player = createAudioPlayer(require('../../assets/sounds/bell1.mp3'));
+    } else if (soundKey === 'bell2') {
+      player = createAudioPlayer(require('../../assets/sounds/bell2.mp3'));
+    } else if (soundKey === 'boxing-bell') {
+      player = createAudioPlayer(require('../../assets/sounds/boxing-bell.mp3'));
     } else {
       // Check for custom sound
       const custom = soundConfig.customSounds.find(s => s.id === soundKey);

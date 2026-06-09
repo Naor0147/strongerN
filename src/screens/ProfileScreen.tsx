@@ -567,6 +567,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     if (soundKey === 'chime') return 'Chime';
     if (soundKey === 'beep') return 'Double Beep';
     if (soundKey === 'fanfare') return 'Fanfare';
+    if (soundKey === 'bell1') return 'Bell 1';
+    if (soundKey === 'bell2') return 'Bell 2';
+    if (soundKey === 'boxing-bell') return 'Boxing Bell';
     if (soundKey === 'mute') return 'Mute / None';
     const found = customSounds.find(c => c.id === soundKey);
     return found ? found.name : 'Custom Sound';
@@ -2874,18 +2877,21 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
 
             <View style={styles.bottomSheetOptions}>
-              {([...(['chime', 'beep', 'fanfare', 'mute'] as const), ...customSounds.map(s => s.id)]).map((soundKey) => {
+              {([...(['chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'] as const), ...customSounds.map(s => s.id)]).map((soundKey) => {
                 let isSelected = false;
                 if (activeSoundTrigger === 'setChecked' && soundSetCompleted === soundKey) isSelected = true;
                 if (activeSoundTrigger === 'workoutCompleted' && soundWorkoutFinished === soundKey) isSelected = true;
                 if (activeSoundTrigger === 'timerCompleted' && soundTimerCompleted === soundKey) isSelected = true;
 
-                const isCustom = !['chime', 'beep', 'fanfare', 'mute'].includes(soundKey);
+                const isCustom = !['chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'].includes(soundKey);
 
                 let iconName: any = 'musical-notes-outline';
                 if (soundKey === 'chime') iconName = 'musical-notes-outline';
                 else if (soundKey === 'beep') iconName = 'notifications-outline';
                 else if (soundKey === 'fanfare') iconName = 'trophy-outline';
+                else if (soundKey === 'bell1') iconName = 'notifications-circle-outline';
+                else if (soundKey === 'bell2') iconName = 'notifications-circle-outline';
+                else if (soundKey === 'boxing-bell') iconName = 'alarm-outline';
                 else if (soundKey === 'mute') iconName = 'volume-mute-outline';
                 else iconName = 'document-attach-outline';
 
