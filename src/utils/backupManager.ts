@@ -4,7 +4,7 @@
 // On web: falls back to browser download / file input.
 
 import { Platform, Alert, Share } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 
 export const BACKUP_VERSION = 'strongern_backup_v2';

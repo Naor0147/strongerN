@@ -28,7 +28,7 @@ import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n from '../utils/i18n';
 import { I18nManager } from 'react-native';
-import { File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import { pickAndReadBackupFile } from '../utils/backupManager';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation } from '../theme';
@@ -504,14 +504,16 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const fileUri = asset.uri;
 
       // Copy to document directory for permanent local offline access
-      const destFile = new File(Paths.document, `${Date.now()}_${fileName}`);
-      const sourceFile = new File(fileUri);
-      sourceFile.copy(destFile);
+      const destUri = `${FileSystem.documentDirectory}${Date.now()}_${fileName}`;
+      await FileSystem.copyAsync({
+        from: fileUri,
+        to: destUri,
+      });
 
       const newSound = {
         id: `custom-${Date.now()}`,
         name: fileName.replace(/\.[^/.]+$/, ""), // Strip extension for clean display
-        uri: destFile.uri,
+        uri: destUri,
       };
 
       if (setCustomSounds) {
@@ -542,9 +544,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             const soundToDelete = customSounds.find(s => s.id === soundId);
             if (soundToDelete) {
               try {
-                const fileToDelete = new File(soundToDelete.uri);
-                if (fileToDelete.exists) {
-                  fileToDelete.delete();
+                const info = await FileSystem.getInfoAsync(soundToDelete.uri);
+                if (info.exists) {
+                  await FileSystem.deleteAsync(soundToDelete.uri);
                 }
               } catch (err) {
                 console.warn('Error deleting custom sound file from filesystem', err);
@@ -998,8 +1000,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         const response = await fetch(fileUri);
         csvText = await response.text();
       } else {
-        const sourceFile = new File(fileUri);
-        csvText = await sourceFile.text();
+        csvText = await FileSystem.readAsStringAsync(fileUri, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
       }
 
       if (!csvText || !csvText.trim()) {

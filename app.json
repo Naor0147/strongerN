@@ -58,7 +58,8 @@
         {
           "configureAndroidBackup": true
         }
-      ]
+      ],
+      "expo-localization"
     ]
   }
 }
