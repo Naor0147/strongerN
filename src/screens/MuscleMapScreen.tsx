@@ -124,6 +124,7 @@ const FrontSvgMap: React.FC<{
       height={380}
       viewBox="0 0 660.46 1206.46"
       fill="none"
+      pointerEvents="box-none"
     >
       <Defs>
         <RadialGradient id="jointradial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
@@ -364,6 +365,7 @@ const BackSvgMap: React.FC<{
       height={380}
       viewBox="0 0 660.46 1206.46"
       fill="none"
+      pointerEvents="box-none"
     >
       <Defs>
         <RadialGradient id="jointradial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
@@ -1026,13 +1028,16 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         </View>
 
         <View style={styles.bodyContainer}>
-          <Animated.View style={[styles.svgCard, { 
-            transform: [
-              { scale: scaleAnim },
-              { translateX: translateXAnim },
-              { translateY: translateYAnim }
-            ] 
-          }]}>
+          <Animated.View
+            pointerEvents="box-none"
+            style={[styles.svgCard, { 
+              transform: [
+                { scale: scaleAnim },
+                { translateX: translateXAnim },
+                { translateY: translateYAnim }
+              ] 
+            }]}
+          >
             {view === 'front' ? (
               <FrontSvgMap 
                 muscleSets={weeklyMuscleSets} 

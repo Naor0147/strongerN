@@ -1,5 +1,6 @@
 // theme.ts — Central Design Token System (Premium Dark / AMOLED-first)
 import { Platform, StyleSheet } from 'react-native';
+import i18n from './utils/i18n';
 
 // ─────────────────────────────────────────────────────────────────
 // STYLESHEET INTERCEPTION & DYNAMIC THEMES
@@ -365,6 +366,19 @@ export const getCustomThemeColors = (accentColor: string): ThemeColors => {
 };
 
 export const updateRegisteredStyles = () => {
+  // Update mutable font definitions in font dynamically based on locale
+  if (i18n.locale === 'he') {
+    font.regular = 'Rubik_400Regular';
+    font.medium = 'Rubik_500Medium';
+    font.semibold = 'Rubik_600SemiBold';
+    font.bold = 'Rubik_700Bold';
+  } else {
+    font.regular = 'Inter_400Regular';
+    font.medium = 'Inter_500Medium';
+    font.semibold = 'Inter_600SemiBold';
+    font.bold = 'Inter_700Bold';
+  }
+
   const getNestedValue = (obj: any, path: string): any => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
   };
@@ -378,12 +392,20 @@ export const updateRegisteredStyles = () => {
       if (typeof originalValue === 'object' && originalValue !== null) {
         updateObject(originalValue, resultValue);
       } else if (typeof originalValue === 'string') {
-        const cleanVal = originalValue.toLowerCase().trim();
-        const tokenPath = hexToKeyMap[cleanVal];
-        if (tokenPath) {
-          const newValue = getNestedValue(colors, tokenPath);
-          if (newValue) {
-            resultObj[key] = newValue;
+        if (key === 'fontFamily') {
+          if (i18n.locale === 'he') {
+            resultObj[key] = originalValue.replace('Inter_', 'Rubik_');
+          } else {
+            resultObj[key] = originalValue.replace('Rubik_', 'Inter_');
+          }
+        } else {
+          const cleanVal = originalValue.toLowerCase().trim();
+          const tokenPath = hexToKeyMap[cleanVal];
+          if (tokenPath) {
+            const newValue = getNestedValue(colors, tokenPath);
+            if (newValue) {
+              resultObj[key] = newValue;
+            }
           }
         }
       }
@@ -432,6 +454,10 @@ export const applyTheme = (themeName: AppThemeName, customAccent?: string, overr
   if (ripple.accent) {
     ripple.accent.color = `${colors.accent}30`;
   }
+
+  // Sync icon colors
+  colors.iconActive = colors.accent;
+  colors.iconInactive = colors.textMuted || '#4E5A6E';
 
   // Re-evaluate all stylesheets
   updateRegisteredStyles();

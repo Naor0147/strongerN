@@ -1,16 +1,18 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, I18nManager } from 'react-native';
 import { NavigationContainer }      from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { Rubik_400Regular, Rubik_500Medium, Rubik_600SemiBold, Rubik_700Bold } from '@expo-google-fonts/rubik';
+import * as Notifications from 'expo-notifications';
 import { Ionicons }                 from '@expo/vector-icons';
 import * as googleDrive             from './utils/googleDrive';
-import { initDb, saveToDb, loadFromDb } from './utils/db';
+import { initDb, saveToDb, loadFromDb, deleteFromDb, clearDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
+import { isUnilateralExercise } from './utils/workout';
 import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureStore';
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
 import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
@@ -28,6 +30,7 @@ import BottomTabBar      from './components/layout/BottomTabBar';
 import ActiveWorkoutBar  from './components/layout/ActiveWorkoutBar';
 import ActiveWorkoutModal from './components/layout/ActiveWorkoutModal';
 import { soundConfig } from './utils/soundPlayer';
+import i18n from './utils/i18n';
 
 // Simulators
 import { WatchCompanionSimulator } from './components/ui/WatchCompanionSimulator';
@@ -78,6 +81,9 @@ export default function App() {
 
   // Guard to prevent overwriting stored data with defaults on mount
   const [isDataLoaded, setIsDataLoaded] = React.useState(false);
+
+  const [useRirMode, setUseRirMode] = React.useState(false);
+  const [locale, setLocale] = React.useState(i18n.locale);
 
   // Load auth state from DB on mount
   React.useEffect(() => {
@@ -354,9 +360,39 @@ export default function App() {
             if (parsed.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(parsed.showWeeklyTonnage);
             if (parsed.showWorkoutsChart !== undefined) setShowWorkoutsChart(parsed.showWorkoutsChart);
             if (parsed.showHighlights !== undefined) setShowHighlights(parsed.showHighlights);
+            if (parsed.useRirMode !== undefined) setUseRirMode(parsed.useRirMode);
+            if (parsed.locale !== undefined) {
+              setLocale(parsed.locale);
+              i18n.locale = parsed.locale;
+              // Re-apply theme since font family might change based on locale
+              const { applyTheme } = require('./theme');
+              applyTheme(parsed.appTheme || 'default', parsed.customAccentColor || '#4F8EF7', parsedOverrides);
+            }
           } else {
             const { applyTheme } = require('./theme');
             applyTheme('default', '#4F8EF7', parsedOverrides);
+          }
+          
+          // Request notifications permission on mount
+          try {
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            let finalStatus = existingStatus;
+            if (existingStatus !== 'granted') {
+              const { status } = await Notifications.requestPermissionsAsync();
+              finalStatus = status;
+            }
+          } catch (e) {
+            console.warn('Notification permission request failed', e);
+          }
+
+          // Load active workout state from SQLite DB
+          const activeWorkout = await loadFromDb('strongern_active_workout_state');
+          if (activeWorkout) {
+            setIsWorkoutActive(true);
+            setWorkoutName(activeWorkout.workoutName || 'Active Workout');
+            setStartTime(new Date(activeWorkout.startTime));
+            setWorkoutExercises(activeWorkout.workoutExercises || []);
+            setIsWorkoutModalVisible(activeWorkout.isWorkoutModalVisible ?? false);
           }
         }
       } catch (e) {
@@ -418,12 +454,14 @@ export default function App() {
         isKeyboardDismissOnNextEnabled,
         appTheme,
         customAccentColor,
+        useRirMode,
+        locale,
       };
       saveToDb(STORAGE_KEY, data);
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, appTheme, customAccentColor]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, appTheme, customAccentColor, useRirMode, locale]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -1220,9 +1258,7 @@ export default function App() {
     setLastSynced(null);
     deleteSecureItem('google_oauth_token');
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
+      clearDb();
     } catch (e) {
       console.warn(e);
     }
@@ -1419,8 +1455,17 @@ export default function App() {
           };
         }
         const setsArray: any[] = ex.sets || [];
-        const bestWeight = setsArray.reduce((max, s) => Math.max(max, parseFloat(s.weight) || 0), 0);
-        const bestReps = setsArray.reduce((max, s) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
+        const isUnilateral = isUnilateralExercise(ex.name);
+        const bestWeight = setsArray.reduce((max, s) => {
+          const wL = parseFloat(s.weight) || 0;
+          const wR = s.weightR !== undefined ? (parseFloat(s.weightR) || 0) : wL;
+          return Math.max(max, wL, wR);
+        }, 0);
+        const bestReps = setsArray.reduce((max, s) => {
+          const rL = parseInt(s.reps, 10) || 0;
+          const rR = s.repsR !== undefined ? (parseInt(s.repsR, 10) || 0) : rL;
+          return Math.max(max, rL, rR);
+        }, 0);
         return {
           name: ex.name,
           sets: setsArray.length,
@@ -1432,6 +1477,11 @@ export default function App() {
             completed: s.completed || false,
             rpe: s.rpe ? parseFloat(s.rpe) : undefined,
             category: s.category || 'S',
+            ...(isUnilateral ? {
+              weightR: s.weightR !== undefined ? (parseFloat(s.weightR) || 0) : (parseFloat(s.weight) || 0),
+              repsR: s.repsR !== undefined ? (parseInt(s.repsR, 10) || 0) : (parseInt(s.reps, 10) || 0),
+              rpeR: s.rpeR ? parseFloat(s.rpeR) : undefined,
+            } : {}),
           })),
         };
       });
@@ -1494,24 +1544,23 @@ export default function App() {
 
   // Persist active workout state on changes
   React.useEffect(() => {
+    if (!isDataLoaded) return;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        if (isWorkoutActive) {
-          const activeState = {
-            workoutName,
-            startTime: startTime.toISOString(),
-            workoutExercises,
-            isWorkoutModalVisible,
-          };
-          window.localStorage.setItem('strongern_active_workout_state', JSON.stringify(activeState));
-        } else {
-          window.localStorage.removeItem('strongern_active_workout_state');
-        }
+      if (isWorkoutActive) {
+        const activeState = {
+          workoutName,
+          startTime: startTime.toISOString(),
+          workoutExercises,
+          isWorkoutModalVisible,
+        };
+        saveToDb('strongern_active_workout_state', activeState);
+      } else {
+        deleteFromDb('strongern_active_workout_state');
       }
     } catch (e) {
       console.warn('Error persisting active workout state', e);
     }
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible]);
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, isDataLoaded]);
 
   // Auto-close safety timer (3 hours)
   React.useEffect(() => {
@@ -1578,7 +1627,7 @@ export default function App() {
           onRestoreBackup={handleRestoreBackup}
         />
       ) : (
-        <NavigationContainer>
+        <NavigationContainer key={locale}>
         <View style={styles.root}>
           <Tab.Navigator
             initialRouteName="Profile"
@@ -1704,6 +1753,19 @@ export default function App() {
                   setIsAutoFinishSetEnabled={setIsAutoFinishSetEnabled}
                   isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
                   setIsKeyboardDismissOnNextEnabled={setIsKeyboardDismissOnNextEnabled}
+                  useRirMode={useRirMode}
+                  setUseRirMode={setUseRirMode}
+                  locale={locale}
+                  onLanguageChange={async (newLocale: string) => {
+                    setLocale(newLocale);
+                    i18n.locale = newLocale;
+                    if (I18nManager && typeof I18nManager.forceRTL === 'function') {
+                      I18nManager.forceRTL(newLocale === 'he');
+                    }
+                    // Trigger theme reload to update fonts dynamically
+                    const { applyTheme } = require('./theme');
+                    applyTheme(appTheme, customAccentColor, themeOverrides);
+                  }}
                 />
               )}
             </Tab.Screen>
@@ -1797,6 +1859,7 @@ export default function App() {
             isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
             isAutoFinishSetEnabled={isAutoFinishSetEnabled}
             isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+            useRirMode={useRirMode}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}

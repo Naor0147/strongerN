@@ -80,6 +80,11 @@ function playWebSound(soundKey: string) {
         const audio = new Audio(custom.uri);
         audio.volume = soundConfig.volume ?? 1.0;
         audio.play().catch(err => console.warn('[Web Custom Audio Play Error]', err));
+        setTimeout(() => {
+          try {
+            audio.pause();
+          } catch (e) {}
+        }, 3000);
       } catch (err) {
         console.warn('[Web Custom Audio Init Error]', err);
       }
@@ -124,8 +129,22 @@ async function playNativeSound(soundKey: string) {
       player.volume = soundConfig.volume ?? 1.0;
       player.play();
 
+      const timeoutId = setTimeout(() => {
+        try {
+          if (player && typeof player.pause === 'function') {
+            player.pause();
+          }
+          if (player && typeof player.release === 'function') {
+            player.release();
+          }
+        } catch (e) {
+          console.warn('[SoundPlayer 3s safeguard error]', e);
+        }
+      }, 3000);
+
       const listener = player.addListener('playbackStatusUpdate', (status) => {
         if (status.playbackState === 'ended') {
+          clearTimeout(timeoutId);
           player.release();
           listener.remove();
         }

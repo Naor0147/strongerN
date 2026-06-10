@@ -16,6 +16,7 @@ import {
   PanResponder,
   Vibration,
   Alert,
+  LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import { Exercise } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
+import { translateExerciseName } from '../../utils/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SetRecord {
@@ -198,6 +200,16 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const itemLayouts   = useRef<{ [key: string]: { y: number; height: number } }>({});
 
+  const slotYRef      = useRef<number[]>([]);
+  const initialYRef   = useRef<number>(0);
+  const indicesRef    = useRef<{ [id: string]: number }>({});
+  const panRespondersRef = useRef<{ [id: string]: any }>({});
+
+  const editorExercisesRef = useRef(editorExercises);
+  useEffect(() => {
+    editorExercisesRef.current = editorExercises;
+  }, [editorExercises]);
+
   // Exercise context menu
   const [exMenuIdx,     setExMenuIdx]     = useState<number | null>(null);
   const [isExMenuVisible, setIsExMenuVisible] = useState(false);
@@ -319,6 +331,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
       if (targetIndex !== hoverIdx.current) {
         hoverIdx.current = targetIndex;
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         const reordered = [...current];
         const [movedItem] = reordered.splice(dragIdx.current, 1);
         reordered.splice(targetIndex, 0, movedItem);
@@ -330,36 +343,61 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     });
   }, [activeId]);
 
-  const getDragHandlers = useCallback((itemKey: string, index: number) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: () => {
-        setActiveId(itemKey);
-        dragIdx.current   = index;
-        hoverIdx.current  = index;
-        dragY.setValue(0);
-        if (Platform.OS !== 'web') Vibration.vibrate(20);
-      },
-      onPanResponderMove: (_, gs) => {
-        dragY.setValue(gs.dy);
-        handleMove(gs.dy);
-      },
-      onPanResponderRelease: () => {
-        setActiveId(null);
-        dragIdx.current  = -1;
-        hoverIdx.current = -1;
-        dragY.setValue(0);
-      },
-      onPanResponderTerminate: () => {
-        setActiveId(null);
-        dragIdx.current  = -1;
-        hoverIdx.current = -1;
-        dragY.setValue(0);
-      },
-    }).panHandlers;
-  }, [handleMove, dragY]);
+  // Ref to hold the latest drag move callback to avoid stale closure in PanResponder
+  const handleMoveRef = useRef(handleMove);
+  useEffect(() => {
+    handleMoveRef.current = handleMove;
+  }, [handleMove]);
 
+  // Static PanResponder map for reordering exercises (cached per item ID)
+  const getDragHandlers = useCallback((itemKey: string) => {
+    if (!panRespondersRef.current[itemKey]) {
+      panRespondersRef.current[itemKey] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder:  () => true,
+        onPanResponderGrant: () => {
+          const currentIndex = indicesRef.current[itemKey];
+          if (currentIndex !== undefined && currentIndex !== -1) {
+            // Capture initial slot layout positions
+            const initialSlots: number[] = [];
+            editorExercisesRef.current.forEach((ex) => {
+              const layout = itemLayouts.current[ex.id];
+              initialSlots.push(layout ? layout.y : 0);
+            });
+            slotYRef.current = initialSlots;
+            initialYRef.current = itemLayouts.current[itemKey]?.y || 0;
+
+            setActiveId(itemKey);
+            dragIdx.current   = currentIndex;
+            hoverIdx.current  = currentIndex;
+            dragY.setValue(0);
+            if (Platform.OS !== 'web') Vibration.vibrate(20);
+          }
+        },
+        onPanResponderMove: (_, gs) => {
+          const yInitial = initialYRef.current;
+          const currentIdx = dragIdx.current;
+          const yCurrent = slotYRef.current[currentIdx] !== undefined ? slotYRef.current[currentIdx] : yInitial;
+          const translation = gs.dy + (yInitial - yCurrent);
+          dragY.setValue(translation);
+          handleMoveRef.current(gs.dy);
+        },
+        onPanResponderRelease: () => {
+          setActiveId(null);
+          dragIdx.current  = -1;
+          hoverIdx.current = -1;
+          dragY.setValue(0);
+        },
+        onPanResponderTerminate: () => {
+          setActiveId(null);
+          dragIdx.current  = -1;
+          hoverIdx.current = -1;
+          dragY.setValue(0);
+        },
+      }).panHandlers;
+    }
+    return panRespondersRef.current[itemKey];
+  }, []);
   // ── Add exercises callback ────────────────────────────────────────────────────
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps') => {
     setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
@@ -509,9 +547,10 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
                 {/* Exercise List */}
                 {editorExercises.map((exercise, exIdx) => {
+                  indicesRef.current[exercise.id] = exIdx;
                   const itemKey = exercise.id;
                   const isActive = activeId === itemKey;
-                  const dragHandlers = getDragHandlers(itemKey, exIdx);
+                  const dragHandlers = getDragHandlers(itemKey);
 
                   return (
                     <Animated.View
@@ -543,7 +582,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         onDelete={() => {
                           Alert.alert(
                             'Remove Exercise',
-                            `Remove "${exercise.name}" from this routine?`,
+                            `Remove "${translateExerciseName(exercise.name)}" from this routine?`,
                             [
                               { text: 'Cancel', style: 'cancel' },
                               { text: 'Remove', style: 'destructive', onPress: () =>
@@ -557,7 +596,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                           {/* Exercise Header */}
                           <View style={edStyles.exerciseHeader}>
                             <Text style={edStyles.exerciseName} numberOfLines={1}>
-                              {exercise.name}
+                              {translateExerciseName(exercise.name)}
                             </Text>
 
                             <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm }}>
