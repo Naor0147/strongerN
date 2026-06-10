@@ -24,7 +24,6 @@ import ScreenHeader from '../components/layout/ScreenHeader';
 import PressableRow from '../components/ui/PressableRow';
 import IconButton   from '../components/ui/IconButton';
 import { sectionListGetItemLayout } from '../utils/listLayout';
-import { translateExerciseName } from '../utils/i18n';
 
 const ITEM_HEIGHT   = 72;
 const HEADER_HEIGHT = 48;
@@ -116,7 +115,7 @@ const ExerciseRow: React.FC<{
         </View>
 
         <View style={styles.rowCenter}>
-          <Text style={styles.exerciseName} numberOfLines={1}>{translateExerciseName(exercise.name)}</Text>
+          <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
           <View style={styles.badgeContainer}>
             <Text style={[styles.muscleGroup, { color: muscleColor }]}>
               {exercise.muscleGroup.toUpperCase()}
@@ -429,38 +428,16 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   const keyExtractor = useCallback((item: Exercise) => item.id, []);
 
-  const layoutCache = useMemo(() => {
-    const cache: { length: number; offset: number; index: number }[] = [];
-    let offset = 0;
-    let flatIndex = 0;
-
-    for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-      // 1. Section Header
-      const headerHeight = 48;
-      cache[flatIndex] = { length: headerHeight, offset, index: flatIndex };
-      offset += headerHeight;
-      flatIndex++;
-
-      // 2. Section Items
-      const section = sections[sectionIndex];
-      const itemsCount = section.data ? section.data.length : 0;
-      for (let itemIndex = 0; itemIndex < itemsCount; itemIndex++) {
-        const item = section.data[itemIndex];
-        const itemHeight = item?.notes ? 72 + 32 : 72;
-        cache[flatIndex] = { length: itemHeight, offset, index: flatIndex };
-        offset += itemHeight;
-        flatIndex++;
-      }
-    }
-    return cache;
-  }, [sections]);
-
-  const getItemLayout = useCallback((data: any, index: number) => {
-    if (layoutCache[index]) {
-      return layoutCache[index];
-    }
-    return { length: 0, offset: 0, index };
-  }, [layoutCache]);
+  const getItemLayout = useMemo(() =>
+    sectionListGetItemLayout({
+      getItemHeight: (sectionIndex, itemIndex) => {
+        const item = sections[sectionIndex]?.data[itemIndex];
+        return item?.notes ? 72 + 32 : 72;
+      },
+      getSectionHeaderHeight: () => 48,
+    }),
+    [sections]
+  );
 
   const handleAddSubmit = () => {
     if (!newExName.trim()) {
@@ -798,7 +775,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     <Ionicons name="barbell" size={40} color={getMuscleColor(selectedExercise.muscleGroup)} />
                   </View>
 
-                  <Text style={styles.detailsName}>{translateExerciseName(selectedExercise.name)}</Text>
+                  <Text style={styles.detailsName}>{selectedExercise.name}</Text>
                   
                   <View style={styles.badgesRow}>
                     <View style={[
@@ -978,7 +955,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           >
             <Pressable style={[styles.modalCard, { paddingVertical: spacing.md }]} onPress={(e) => e.stopPropagation()}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle} numberOfLines={1}>{translateExerciseName(contextMenuExercise.name).toUpperCase()}</Text>
+                <Text style={styles.modalTitle} numberOfLines={1}>{contextMenuExercise.name.toUpperCase()}</Text>
                 <IconButton
                   name="close"
                   size={22}
@@ -1072,7 +1049,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
               </View>
 
               <ScrollView contentContainerStyle={styles.modalScroll}>
-                <Text style={styles.noteModalHeader}>{translateExerciseName(noteEditExercise.name)}</Text>
+                <Text style={styles.noteModalHeader}>{noteEditExercise.name}</Text>
                 <TextInput
                   style={[styles.textInput, { minHeight: 100, textAlignVertical: 'top' }]}
                   placeholder="Enter workout cue, seat height, or custom setting notes..."

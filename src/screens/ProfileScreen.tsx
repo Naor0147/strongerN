@@ -70,10 +70,6 @@ interface ProfileScreenProps {
   setIsAutoFinishSetEnabled?: (val: boolean) => void;
   isKeyboardDismissOnNextEnabled?: boolean;
   setIsKeyboardDismissOnNextEnabled?: (val: boolean) => void;
-  useRirMode?:           boolean;
-  setUseRirMode?:        (val: boolean) => void;
-  locale?:               string;
-  onLanguageChange?:     (newLocale: string) => void;
   onGoogleLogin:         (email: string, name: string, accessToken?: string, fileId?: string, avatarUri?: string) => Promise<boolean> | boolean;
   onGoogleLogout:        () => void;
   onCloudSync:           () => Promise<boolean> | boolean;
@@ -375,10 +371,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setIsAutoFinishSetEnabled,
   isKeyboardDismissOnNextEnabled = true,
   setIsKeyboardDismissOnNextEnabled,
-  useRirMode = false,
-  setUseRirMode,
-  locale = 'en',
-  onLanguageChange,
   onGoogleLogin,
   onGoogleLogout,
   onCloudSync,
@@ -1211,44 +1203,46 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </Card>
 
         {/* ── Smart Quick Start Card ───────────────────────────── */}
-        <Pressable
-          onPress={() => {
-            if (onStartWorkout) {
-              onStartWorkout(nextWorkout.name, nextWorkout.exercises);
-            }
-          }}
-          android_ripple={{ color: colors.surface2, borderless: false }}
-          style={({ pressed }) => [
-            pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }
-          ]}
-          accessibilityLabel={`Start ${nextWorkout.name} workout`}
+        <Card 
+          padding={spacing.lg} 
+          style={styles.quickStartCard} 
           testID="profile.quick-start-card"
         >
-          <Card 
-            padding={spacing.lg} 
-            style={[styles.quickStartCard, { backgroundColor: colors.surface }]}
-          >
-            <View style={styles.quickStartHeader}>
-              <View style={styles.quickStartTitleContainer}>
-                <Ionicons name="flash" size={16} color={nextWorkout.badgeColor} style={{ marginRight: spacing.xs }} />
-                <Text style={styles.quickStartLabel}>UP NEXT</Text>
-              </View>
-              <Badge 
-                label={nextWorkout.type.toUpperCase()} 
-                color={nextWorkout.badgeColor} 
-                textColor={nextWorkout.badgeColor}
-              />
+          <View style={styles.quickStartHeader}>
+            <View style={styles.quickStartTitleContainer}>
+              <Ionicons name="flash" size={16} color={nextWorkout.badgeColor} style={{ marginRight: spacing.xs }} />
+              <Text style={styles.quickStartLabel}>UP NEXT</Text>
             </View>
-            
-            <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
-            
-            {nextWorkout.exercises && nextWorkout.exercises.length > 0 && (
-              <Text style={[styles.quickStartExercises, { marginBottom: 0 }]} numberOfLines={2}>
-                {nextWorkout.exercises.join('  ·  ')}
-              </Text>
-            )}
-          </Card>
-        </Pressable>
+            <Badge 
+              label={nextWorkout.type.toUpperCase()} 
+              color={nextWorkout.badgeColor} 
+              textColor={nextWorkout.badgeColor}
+            />
+          </View>
+          
+          <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
+          
+          {nextWorkout.exercises && nextWorkout.exercises.length > 0 && (
+            <Text style={styles.quickStartExercises} numberOfLines={2}>
+              {nextWorkout.exercises.join('  ·  ')}
+            </Text>
+          )}
+
+          <Pressable
+            style={styles.quickStartBtn}
+            onPress={() => {
+              if (onStartWorkout) {
+                onStartWorkout(nextWorkout.name, nextWorkout.exercises);
+              }
+            }}
+            android_ripple={rippleTokens.accent}
+            accessibilityLabel={`Start ${nextWorkout.name}`}
+            testID="profile.quick-start-button"
+          >
+            <Ionicons name="play" size={16} color="#0D0F14" style={{ marginRight: spacing.xs }} />
+            <Text style={styles.quickStartBtnText}>Start Workout</Text>
+          </Pressable>
+        </Card>
 
         {/* ── Dashboard ────────────────────────────────────────── */}
 
@@ -1993,36 +1987,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               <View style={styles.settingDivider} />
 
-              {/* RIR Mode Toggle */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Ionicons name="analytics-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingTitle}>Reps in Reserve (RIR) Mode</Text>
-                    <Text style={styles.settingSubtitle} numberOfLines={2}>
-                      Toggle between RPE (Rate of Perceived Exertion) and RIR (Reps in Reserve) display in workouts
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  style={[
-                    styles.togglePill,
-                    useRirMode && styles.togglePillActive
-                  ]}
-                  onPress={() => setUseRirMode && setUseRirMode(!useRirMode)}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[
-                    styles.togglePillText,
-                    useRirMode && styles.togglePillTextActive
-                  ]}>
-                    {useRirMode ? 'RIR' : 'RPE'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.settingDivider} />
-
               {/* Features & Modules Toggles */}
               <View style={{ marginTop: spacing.md }}>
                 <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginBottom: spacing.xs, color: colors.textSecondary }]}>Enabled Modules</Text>
@@ -2614,53 +2578,32 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             ))}
                           </View>
 
-                          <Text style={{ color: colors.textSecondary, fontSize: font.sizes.xs, fontFamily: font.bold, marginBottom: spacing.xs, letterSpacing: 0.5 }}>
-                            SELECT ACCENT COLOR
-                          </Text>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md }}>
-                            {[
-                              '#4F8EF7', // Electric Blue
-                              '#7C5CFC', // Electric Violet
-                              '#EC4899', // Neon Pink
-                              '#10B981', // Emerald
-                              '#F59E0B', // Gold
-                              '#EF4444', // Crimson Red
-                              '#0EA5E9', // Sky Blue
-                              '#F97316', // Coral
-                              '#14B8A6', // Mint
-                              '#6366F1', // Indigo
-                              '#FFFFFF', // White
-                            ].map((c) => {
-                              const isSelected = customAccentColor.toLowerCase() === c.toLowerCase();
-                              return (
-                                <Pressable
-                                  key={c}
-                                  onPress={() => {
-                                    if (setCustomAccentColor) {
-                                      setCustomAccentColor(c);
-                                    }
-                                  }}
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 18,
-                                    backgroundColor: c,
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    borderWidth: 2,
-                                    borderColor: isSelected ? colors.textPrimary : colors.border,
-                                    shadowColor: c,
-                                    shadowOpacity: isSelected ? 0.6 : 0,
-                                    shadowRadius: 6,
-                                    elevation: isSelected ? 4 : 0,
-                                  }}
-                                >
-                                  {isSelected && (
-                                    <Ionicons name="checkmark" size={18} color={c === '#FFFFFF' ? '#000' : '#FFF'} />
-                                  )}
-                                </Pressable>
-                              );
-                            })}
+                          <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                            <TextInput
+                              style={{
+                                flex: 1,
+                                backgroundColor: colors.surface2,
+                                borderColor: colors.border,
+                                borderWidth: 1,
+                                borderRadius: radius.sm,
+                                paddingVertical: spacing.sm,
+                                paddingHorizontal: spacing.md,
+                                color: colors.textPrimary,
+                                fontFamily: font.medium,
+                                fontSize: font.sizes.sm,
+                              }}
+                              placeholder="#HEX Code (e.g. #4F8EF7)"
+                              placeholderTextColor={colors.textMuted}
+                              value={customAccentColor}
+                              onChangeText={(text) => {
+                                const cleanHex = text.replace(/[^#0-9A-Fa-f]/g, '');
+                                if (setCustomAccentColor) {
+                                  setCustomAccentColor(cleanHex);
+                                }
+                              }}
+                              maxLength={7}
+                            />
+                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: customAccentColor.startsWith('#') && customAccentColor.length === 7 ? customAccentColor : colors.accent, borderColor: colors.border, borderWidth: 1 }} />
                           </View>
                         </View>
                       )}

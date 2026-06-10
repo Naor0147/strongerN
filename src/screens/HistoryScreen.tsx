@@ -65,13 +65,11 @@ const Chip: React.FC<ChipProps> = ({ icon, label, color = colors.textSecondary }
 );
 
 // ─── Exercise Row ─────────────────────────────────────────────────
-import { translateExerciseName } from '../utils/i18n';
-
 const ExerciseRow: React.FC<{ exercise: ExerciseSet }> = React.memo(({ exercise }) => (
   <View style={styles.exRow}>
     <Text style={styles.exSets} numberOfLines={1}>
       {exercise.sets}
-      <Text style={styles.exX}>×</Text> {translateExerciseName(exercise.name)}
+      <Text style={styles.exX}>×</Text> {exercise.name}
     </Text>
     <Text style={styles.exBest}>
       {exercise.bestWeight}kg × {exercise.bestReps}

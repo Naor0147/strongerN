@@ -1,3 +1,11 @@
+# Auto-Load Agent Rules
+
+At the start of every session, read the `.agents` folder and load all rule files from `.agents/rules/` to understand project-specific behaviors and constraints.
+
+# Graphify Auto-Update
+
+After modifying any code files in a session, always run `graphify update .` to keep the knowledge graph current.
+
 # Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.

@@ -95,22 +95,3 @@ export const getNextWorkout = (
     badgeColor: colors.highlight,
   };
 };
-
-export function isUnilateralExercise(name: string): boolean {
-  if (!name) return false;
-  const n = name.toLowerCase();
-  return (
-    n.includes('single-arm') ||
-    n.includes('single-leg') ||
-    n.includes('one-arm') ||
-    n.includes('one-leg') ||
-    n.includes('unilateral') ||
-    n.includes('concentration') ||
-    n.includes('pistol') ||
-    n.includes('bulgarian') ||
-    n.includes('lunges') ||
-    n.includes('lunge') ||
-    n.includes('step-up') ||
-    n.includes('stepup')
-  );
-}

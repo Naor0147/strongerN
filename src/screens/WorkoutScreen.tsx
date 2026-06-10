@@ -26,7 +26,6 @@ import PressableRow  from '../components/ui/PressableRow';
 import { RoutineSharingModal } from '../components/ui/RoutineSharingModal';
 import { DraggableList } from '../components/ui/DraggableList';
 import RoutineEditorModal from '../components/layout/RoutineEditorModal';
-import { translateExerciseName } from '../utils/i18n';
 
 interface WorkoutScreenProps {
   templates:         Template[];
@@ -107,7 +106,7 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
           {template.exercises.length} exercises
         </Text>
         <Text style={styles.tplExList} numberOfLines={2}>
-          {template.exercises.map(translateExerciseName).join(' · ')}
+          {template.exercises.join(' · ')}
         </Text>
 
         <View style={styles.tplFooter}>
@@ -873,7 +872,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                           <View style={{ flex: 1 }}>
                             <Text style={styles.calendarWorkoutName}>{day.workout.workoutName}</Text>
                             <Text style={styles.calendarWorkoutExList} numberOfLines={1}>
-                              {day.workout.exercises.map(translateExerciseName).join(' · ')}
+                              {day.workout.exercises.join(' · ')}
                             </Text>
                           </View>
                           <Pressable

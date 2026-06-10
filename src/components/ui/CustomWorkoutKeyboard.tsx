@@ -22,13 +22,11 @@ interface CustomWorkoutKeyboardProps {
   onClose: () => void;
   placeholder?: string;
   title?: string;
-  fieldName?: 'weight' | 'reps' | 'weightR' | 'repsR';
+  fieldName?: 'weight' | 'reps';
   inputKey?: string;
-  useRirMode?: boolean;
 }
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
-const RIR_OPTIONS = ['0', '0.5', '1', '1.5', '2', '2.5', '3', '4', '5'];
 
 export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   visible,
@@ -41,7 +39,6 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   title = '',
   fieldName = 'weight',
   inputKey,
-  useRirMode = false,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
   const [lastInputKey, setLastInputKey] = useState<string | undefined>(undefined);
@@ -118,9 +115,6 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
     ['.', '0', '⌫'],
   ];
 
-  const currentOptions = useRirMode ? RIR_OPTIONS : RPE_OPTIONS;
-  const targetLabel = useRirMode ? 'RIR' : 'RPE';
-
   return (
     <View style={styles.container}>
       {/* ── Top Bar / Header ── */}
@@ -149,7 +143,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
       {/* ── RPE Selector Bar (Expands above key pad) ── */}
       {showRpeBar && (
         <View style={styles.rpeBar}>
-          <Text style={styles.rpeBarLabel}>SELECT {targetLabel}</Text>
+          <Text style={styles.rpeBarLabel}>SELECT RPE</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -164,7 +158,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 NONE
               </Text>
             </Pressable>
-            {currentOptions.map((val) => {
+            {RPE_OPTIONS.map((val) => {
               const isActive = rpeValue === val;
               return (
                 <Pressable
@@ -228,7 +222,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 color={showRpeBar ? colors.violet : colors.textSecondary}
               />
               <Text style={[styles.actionKeyText, showRpeBar && { color: colors.violet }]}>
-                {targetLabel}
+                RPE
               </Text>
             </Pressable>
           ) : (

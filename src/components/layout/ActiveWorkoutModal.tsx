@@ -30,8 +30,6 @@ import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
-import { isUnilateralExercise } from '../../utils/workout';
-import { translateExerciseName } from '../../utils/i18n';
 import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
 import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound } from '../../utils/soundPlayer';
@@ -44,9 +42,6 @@ interface SetRecord {
   completed: boolean;
   rpe?:      string;
   category?: 'W' | 'S' | 'D' | 'F';
-  weightR?:  string;
-  repsR?:    string;
-  rpeR?:     string;
 }
 
 interface ActiveExercise {
@@ -77,7 +72,6 @@ interface ActiveWorkoutModalProps {
   isProgressiveOverloadEnabled?: boolean;
   isAutoFinishSetEnabled?: boolean;
   isKeyboardDismissOnNextEnabled?: boolean;
-  useRirMode?: boolean;
 }
 
 function formatElapsed(startTime: Date): string {
@@ -245,7 +239,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isProgressiveOverloadEnabled = false,
   isAutoFinishSetEnabled = true,
   isKeyboardDismissOnNextEnabled = true,
-  useRirMode = false,
 }) => {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
@@ -257,7 +250,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [activeInput, setActiveInput] = useState<{
     exIdx: number;
     setIdx: number;
-    fieldName: 'weight' | 'reps' | 'weightR' | 'repsR';
+    fieldName: 'weight' | 'reps';
     focusTime?: number;
   } | null>(null);
 
@@ -285,7 +278,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Auto rest timer countdown states
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
-  const [showTimerMenu, setShowTimerMenu] = useState(false);
   const restTimerEndTarget = useRef<number | null>(null);
 
   // Exercise library selector modal states
@@ -401,9 +393,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 completed: s.completed || false,
                 rpe:       s.rpe ? s.rpe.toString() : '',
                 category:  s.category || 'S',
-                weightR:   s.weightR !== undefined ? s.weightR.toString() : '',
-                repsR:     s.repsR !== undefined ? s.repsR.toString() : '',
-                rpeR:      s.rpeR ? s.rpeR.toString() : '',
               })),
               superSetGroupId: (ex as any).superSetGroupId,
             };
@@ -471,28 +460,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (onUpdateActiveExercises) {
       const mapped = activeExercises.map(ex => {
         const completedSets = ex.sets.filter(s => s.completed);
-        const isUnilateral = isUnilateralExercise(ex.name);
-        
-        let bestWeight = 0;
-        let bestReps = 0;
-        if (completedSets.length > 0) {
-          bestWeight = Math.max(...completedSets.map(s => {
-            const wL = parseFloat(s.weight) || 0;
-            const wR = s.weightR !== undefined ? (parseFloat(s.weightR) || 0) : wL;
-            return Math.max(wL, wR);
-          }), 0);
-          bestReps = Math.max(...completedSets.map(s => {
-            const rL = parseInt(s.reps, 10) || 0;
-            const rR = s.repsR !== undefined ? (parseInt(s.repsR, 10) || 0) : rL;
-            return Math.max(rL, rR);
-          }), 0);
-        }
-
         return {
           name: ex.name,
           sets: completedSets.length,
-          bestWeight,
-          bestReps,
+          bestWeight: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseFloat(s.weight) || 0), 0) : 0,
+          bestReps: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseInt(s.reps, 10) || 0), 0) : 0,
           superSetGroupId: ex.superSetGroupId,
           setsDetails: ex.sets.map(s => ({
             weight: parseFloat(s.weight) || 0,
@@ -500,11 +472,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             completed: s.completed,
             rpe: s.rpe ? parseFloat(s.rpe) : undefined,
             category: s.category || 'S',
-            ...(isUnilateral ? {
-              weightR: s.weightR !== undefined ? (parseFloat(s.weightR) || 0) : (parseFloat(s.weight) || 0),
-              repsR: s.repsR !== undefined ? (parseInt(s.repsR, 10) || 0) : (parseInt(s.reps, 10) || 0),
-              rpeR: s.rpeR ? parseFloat(s.rpeR) : undefined,
-            } : {}),
           })),
         };
       });
@@ -532,96 +499,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   }, []);
 
-  // Ref tracking for background interval updates
-  const latestExercises = useRef(activeExercises);
-  const latestWorkoutName = useRef(localWorkoutName);
-  const latestStartTime = useRef(startTime);
-  const latestIsTimerActive = useRef(isTimerActive);
-  const latestRestTimeRemaining = useRef(restTimeRemaining);
-
+  // Background and Foreground Time Sync
   useEffect(() => {
-    latestExercises.current = activeExercises;
-  }, [activeExercises]);
-
-  useEffect(() => {
-    latestWorkoutName.current = localWorkoutName;
-  }, [localWorkoutName]);
-
-  useEffect(() => {
-    latestStartTime.current = startTime;
-  }, [startTime]);
-
-  useEffect(() => {
-    latestIsTimerActive.current = isTimerActive;
-  }, [isTimerActive]);
-
-  useEffect(() => {
-    latestRestTimeRemaining.current = restTimeRemaining;
-  }, [restTimeRemaining]);
-
-  // Background and Foreground Time Sync & Persistent Notifications
-  useEffect(() => {
-    let bgIntervalId: any = null;
-
-    const startBgTimer = () => {
-      bgIntervalId = setInterval(async () => {
-        // Calculate latest time string
-        let timeString = '';
-        if (restTimerEndTarget.current) {
-          const rem = Math.ceil((restTimerEndTarget.current - Date.now()) / 1000);
-          timeString = rem > 0 ? `Rest: ${rem}s` : 'Rest completed!';
-        } else {
-          timeString = `Elapsed: ${formatElapsed(latestStartTime.current)}`;
-        }
-
-        // Get current exercise name
-        let currentExName = 'Workout Session';
-        if (latestExercises.current.length > 0) {
-          const incompleteEx = latestExercises.current.find(ex => ex.sets.some(s => !s.completed));
-          currentExName = incompleteEx ? incompleteEx.name : latestExercises.current[0].name;
-        }
-
-        try {
-          await Notifications.scheduleNotificationAsync({
-            identifier: 'active_workout_timer',
-            content: {
-              title: `Workout: ${latestWorkoutName.current || 'Active Workout'}`,
-              body: `Exercise: ${currentExName} | ${timeString}`,
-              sticky: true,
-              ongoing: true,
-              sound: false,
-              priority: 'max',
-              android: {
-                sticky: true,
-                ongoing: true,
-              }
-            } as any,
-            trigger: null,
-          });
-        } catch (e) {
-          console.warn('[Background notification update error]', e);
-        }
-      }, 1000);
-    };
-
-    const stopBgTimer = async () => {
-      if (bgIntervalId) {
-        clearInterval(bgIntervalId);
-        bgIntervalId = null;
-      }
-      try {
-        await Notifications.dismissNotificationAsync('active_workout_timer');
-      } catch (e) {}
-    };
-
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (nextAppState === 'active') {
-        stopBgTimer();
         // Sync total elapsed
-        setElapsed(formatElapsed(latestStartTime.current));
+        setElapsed(formatElapsed(startTime));
 
         // Sync rest timer
-        if (latestIsTimerActive.current && restTimerEndTarget.current) {
+        if (isTimerActive && restTimerEndTarget.current) {
           const now = Date.now();
           if (now >= restTimerEndTarget.current) {
             setRestTimeRemaining(0);
@@ -630,20 +516,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             setRestTimeRemaining(Math.ceil((restTimerEndTarget.current - now) / 1000));
           }
         }
-      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (visible) {
-          startBgTimer();
-        }
       }
     });
-
-    return () => {
-      subscription.remove();
-      if (bgIntervalId) {
-        clearInterval(bgIntervalId);
-      }
-    };
-  }, [visible]);
+    return () => subscription.remove();
+  }, [isTimerActive, startTime]);
 
   // Rest Timer Countdown Interval
   useEffect(() => {
@@ -694,34 +570,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       });
     }
   };
-
-  const handleStopTimer = useCallback(() => {
-    setIsTimerActive(false);
-    setShowTimerMenu(false);
-    restTimerEndTarget.current = null;
-    setRestTimeRemaining(0);
-    Notifications.cancelAllScheduledNotificationsAsync();
-  }, []);
-
-  const handleAdjustTimer = useCallback((seconds: number) => {
-    if (!restTimerEndTarget.current) return;
-    const now = Date.now();
-    const currentRemainingMs = restTimerEndTarget.current - now;
-    const newRemainingMs = currentRemainingMs + (seconds * 1000);
-    const newRemainingSec = Math.ceil(newRemainingMs / 1000);
-
-    if (newRemainingSec <= 0) {
-      setIsTimerActive(false);
-      setShowTimerMenu(false);
-      restTimerEndTarget.current = null;
-      setRestTimeRemaining(0);
-      Notifications.cancelAllScheduledNotificationsAsync();
-    } else {
-      restTimerEndTarget.current = now + newRemainingMs;
-      setRestTimeRemaining(newRemainingSec);
-      scheduleRestNotification(newRemainingSec);
-    }
-  }, []);
 
   const timerPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -781,8 +629,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   }, [activeExercises, isAutoTimerEnabled, defaultRestDuration]);
 
-  // Set weight/reps/rpe/category/R equivalents updater
-  const updateSetField = useCallback((exIdx: number, setIdx: number, field: string, value: string) => {
+  // Set weight/reps/rpe/category updater
+  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category', value: string) => {
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -798,7 +646,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, []);
 
   // Stable input focus handler (must NOT be inside .map())
-  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'weightR' | 'repsR') => {
+  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps') => {
     setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
   }, []);
 
@@ -817,9 +665,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           completed: false,
           rpe:       '',
           category:  lastSet?.category ?? 'S',
-          weightR:   lastSet?.weightR ?? lastSet?.weight ?? '',
-          repsR:     lastSet?.repsR ?? lastSet?.reps ?? '',
-          rpeR:      '',
         };
         return {
           ...ex,
@@ -847,14 +692,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const handleNextField = useCallback(() => {
     if (!activeInput) return;
     const { exIdx, setIdx, fieldName } = activeInput;
-    const currentEx = activeExercises[exIdx];
-    if (!currentEx) return;
-    const isUnilateral = isUnilateralExercise(currentEx.name);
 
-    // 1. Auto-Finish Set: When pressing "Next" inside the final Reps box of the set
-    const isFinalRepsField = isUnilateral ? fieldName === 'repsR' : fieldName === 'reps';
-    if (isFinalRepsField && isAutoFinishSetEnabled) {
-      const targetSet = currentEx.sets[setIdx];
+    // 1. Auto-Finish Set: When pressing "Next" inside Reps box
+    if (fieldName === 'reps' && isAutoFinishSetEnabled) {
+      const targetSet = activeExercises[exIdx]?.sets[setIdx];
       if (targetSet && !targetSet.completed) {
         playSetCheckedSound();
         if (isAutoTimerEnabled) {
@@ -879,13 +720,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
     }
 
-    // 2. Keyboard Dismiss on Next: When pressing "Next" inside the final Reps box of the set
-    if (isFinalRepsField && isKeyboardDismissOnNextEnabled) {
+    // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box
+    if (fieldName === 'reps' && isKeyboardDismissOnNextEnabled) {
       setActiveInput(null);
       return;
     }
 
-    // 3. Jump to the next field within the same set
+    // 3. Default Jumps: If currently weight, move to reps in the same set
     if (fieldName === 'weight') {
       const nextKey = `${exIdx}-${setIdx}-reps`;
       setActiveInput({ exIdx, setIdx, fieldName: 'reps', focusTime: Date.now() });
@@ -895,26 +736,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
 
-    if (isUnilateral && fieldName === 'reps') {
-      const nextKey = `${exIdx}-${setIdx}-weightR`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'weightR', focusTime: Date.now() });
-      if (inputRefs.current[nextKey]) {
-        inputRefs.current[nextKey].focus();
-      }
-      return;
-    }
-
-    if (isUnilateral && fieldName === 'weightR') {
-      const nextKey = `${exIdx}-${setIdx}-repsR`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'repsR', focusTime: Date.now() });
-      if (inputRefs.current[nextKey]) {
-        inputRefs.current[nextKey].focus();
-      }
-      return;
-    }
-
-    // 4. Jump to the next set of the same exercise
-    if (setIdx < currentEx.sets.length - 1) {
+    // 4. Default Jumps: If reps, check if there's a next set in the same exercise
+    const currentEx = activeExercises[exIdx];
+    if (currentEx && setIdx < currentEx.sets.length - 1) {
       const nextKey = `${exIdx}-${setIdx + 1}-weight`;
       setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
@@ -923,7 +747,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
 
-    // 5. Jump to the first set of the next exercise
+    // 5. Default Jumps: If last set of this exercise, check if there is a next exercise
     if (exIdx < activeExercises.length - 1) {
       const nextKey = `${exIdx + 1}-0-weight`;
       setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight', focusTime: Date.now() });
@@ -1318,7 +1142,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   onPress={() => {
                     if (isTimerActive) {
-                      setShowTimerMenu(!showTimerMenu);
+                      setIsTimerActive(false);
+                      restTimerEndTarget.current = null;
+                      Notifications.cancelAllScheduledNotificationsAsync();
                     } else {
                       restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
                       setRestTimeRemaining(defaultRestDuration);
@@ -1381,47 +1207,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               </View>
             </View>
-
-            {/* ── Timer Sub-menu ── */}
-            {isTimerActive && showTimerMenu && (
-              <View style={styles.timerSubMenu}>
-                <Pressable
-                  onPress={() => handleAdjustTimer(-30)}
-                  style={styles.timerSubMenuBtn}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={styles.timerSubMenuBtnText}>-30</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleAdjustTimer(-10)}
-                  style={styles.timerSubMenuBtn}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={styles.timerSubMenuBtnText}>-10</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleStopTimer}
-                  style={[styles.timerSubMenuBtn, styles.timerSubMenuStopBtn]}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={[styles.timerSubMenuBtnText, { color: colors.error }]}>STOP</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleAdjustTimer(10)}
-                  style={styles.timerSubMenuBtn}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={styles.timerSubMenuBtnText}>+10</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleAdjustTimer(30)}
-                  style={styles.timerSubMenuBtn}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Text style={styles.timerSubMenuBtnText}>+30</Text>
-                </Pressable>
-              </View>
-            )}
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
             <ScrollView
@@ -1557,7 +1342,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       ]}>
                         <View style={styles.exerciseHeader}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
-                            <Text style={styles.exerciseName} numberOfLines={1}>{translateExerciseName(exercise.name)}</Text>
+                            <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
                             {isSuperSet && (
                               <View style={[styles.superSetBadge, { borderColor: superSetColor, backgroundColor: superSetColor + '20' }]}>
                                 <Text style={[styles.superSetBadgeText, { color: superSetColor }]}>SUPER SET</Text>
@@ -1607,31 +1392,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         </View>
 
                         {/* Sets Row List */}
-                        {(() => {
-                          const isUnilateral = isUnilateralExercise(exercise.name);
-                          return exercise.sets.map((set, setIdx) => {
-                            const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
-                            const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
-                            return (
-                              <ActiveSetRowItem
-                                key={set.id}
-                                set={set}
-                                setIdx={setIdx}
-                                exIdx={exIdx}
-                                activeInput={activeInput as any}
-                                onFocus={handleSetFocus as any}
-                                updateSetField={updateSetField}
-                                deleteSet={deleteSet}
-                                toggleSetComplete={toggleSetComplete}
-                                inputRefs={inputRefs}
-                                isPrevCompleted={isPrevCompleted}
-                                isNextCompleted={isNextCompleted}
-                                isUnilateral={isUnilateral}
-                                useRirMode={useRirMode}
-                              />
-                            );
-                          });
-                        })()}
+                        {exercise.sets.map((set, setIdx) => {
+                          const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
+                          const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
+                          return (
+                            <ActiveSetRowItem
+                              key={set.id}
+                              set={set}
+                              setIdx={setIdx}
+                              exIdx={exIdx}
+                              activeInput={activeInput}
+                              onFocus={handleSetFocus}
+                              updateSetField={updateSetField}
+                              deleteSet={deleteSet}
+                              toggleSetComplete={toggleSetComplete}
+                              inputRefs={inputRefs}
+                              isPrevCompleted={isPrevCompleted}
+                              isNextCompleted={isNextCompleted}
+                            />
+                          );
+                        })}
 
                         {/* Add Set Button */}
                         <Pressable
@@ -2010,22 +1790,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               }}
               rpeValue={
                 activeInput
-                  ? (activeInput.fieldName === 'weightR' || activeInput.fieldName === 'repsR'
-                      ? activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.rpeR || ''
-                      : activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.rpe || '')
+                  ? activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.rpe || ''
                   : ''
               }
               onChangeRpe={(newRpe) => {
                 if (activeInput) {
-                  const targetRpeField = activeInput.fieldName === 'weightR' || activeInput.fieldName === 'repsR' ? 'rpeR' : 'rpe';
-                  updateSetField(activeInput.exIdx, activeInput.setIdx, targetRpeField, newRpe);
+                  updateSetField(activeInput.exIdx, activeInput.setIdx, 'rpe', newRpe);
                 }
               }}
               fieldName={activeInput?.fieldName}
               title={activeInput ? activeExercises[activeInput.exIdx]?.name : ''}
               onNext={handleNextField}
               onClose={() => setActiveInput(null)}
-              useRirMode={useRirMode}
             />
           </View>
         </View>
@@ -2048,16 +1824,14 @@ interface ActiveSetRowItemProps {
   set: SetRecord;
   setIdx: number;
   exIdx: number;
-  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' | 'weightR' | 'repsR'; focusTime?: number } | null;
-  onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'weightR' | 'repsR') => void;
-  updateSetField: (exIdx: number, setIdx: number, fieldName: string, value: string) => void;
+  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps'; focusTime?: number } | null;
+  onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps') => void;
+  updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'rpe' | 'category', value: string) => void;
   deleteSet: (exIdx: number, setIdx: number) => void;
   toggleSetComplete: (exIdx: number, setIdx: number) => void;
   inputRefs: React.MutableRefObject<{ [key: string]: any }>;
   isPrevCompleted: boolean;
   isNextCompleted: boolean;
-  isUnilateral?: boolean;
-  useRirMode?: boolean;
 }
 
 const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
@@ -2072,13 +1846,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   inputRefs,
   isPrevCompleted,
   isNextCompleted,
-  isUnilateral = false,
-  useRirMode = false,
 }) => {
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
-  const isWeightRFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === ('weightR' as any);
-  const isRepsRFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === ('repsR' as any);
 
   const isCompleted = set.completed;
   const showPrevConnected = isCompleted && isPrevCompleted;
@@ -2090,9 +1860,6 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
     borderBottomLeftRadius: showNextConnected ? 0 : radius.xs,
     borderBottomRightRadius: showNextConnected ? 0 : radius.xs,
   };
-
-  const rpeSuffix = useRirMode ? ' RIR' : '';
-  const rpePrefix = useRirMode ? '' : '@';
 
   return (
     <SwipeableRow
@@ -2108,7 +1875,6 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           styles.setRow,
           set.completed && styles.setRowCompleted,
           rowStyle,
-          isUnilateral && { height: 74, paddingVertical: 4 },
         ]}
       >
         {/* Set Number / Category Cycle */}
@@ -2116,7 +1882,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           style={[
             styles.colSet,
             styles.setNumCol,
-            { height: '100%', justifyContent: 'center', alignItems: 'center' }
+            { justifyContent: 'center', alignItems: 'center' }
           ]}
           onPress={() => {
             if (set.completed) return;
@@ -2150,177 +1916,59 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           </View>
         </Pressable>
 
-        {isUnilateral ? (
-          /* Unilateral Dual-Row Layout */
-          <View style={{ flex: 1, flexDirection: 'column', rowGap: 4, height: '100%', justifyContent: 'center' }}>
-            {/* Left Row */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', height: 32 }}>
-              <Text style={{ width: 14, color: colors.textSecondary, fontSize: 10, fontFamily: font.bold, textAlign: 'center', marginRight: 4 }}>L</Text>
-              
-              {/* Left Weight */}
-              <View style={[styles.colWeight, styles.inputWrapper, { flex: 1, marginRight: 8 }]}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
-                  style={[
-                    styles.input,
-                    set.completed && styles.inputCompleted,
-                    isWeightFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={set.weight}
-                  onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
+        {/* Weight Input */}
+        <View style={[styles.colWeight, styles.inputWrapper]}>
+          <TextInput
+            ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
+            style={[
+              styles.input,
+              set.completed && styles.inputCompleted,
+              isWeightFocused && { borderColor: colors.accent },
+            ]}
+            showSoftInputOnFocus={false}
+            value={set.weight}
+            onFocus={() => onFocus(exIdx, setIdx, 'weight')}
+            placeholder="0"
+            placeholderTextColor={colors.textMuted}
+            editable={!set.completed}
+            selectTextOnFocus
+          />
+        </View>
 
-              {/* Left Reps & RPE */}
-              <View style={[styles.colReps, styles.inputWrapper, { flex: 1.5 }]}>
-                <View
-                  style={[
-                    styles.repsRpeContainer,
-                    set.completed && styles.inputCompleted,
-                    isRepsFocused && { borderColor: colors.accent },
-                  ]}
-                >
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
-                    style={[
-                      styles.repsInput,
-                      set.completed && styles.textCompleted,
-                    ]}
-                    showSoftInputOnFocus={false}
-                    value={set.reps}
-                    onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
-                  />
-                  {set.rpe ? (
-                    <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
-                      {`${rpePrefix}${set.rpe}${rpeSuffix}`}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-
-            {/* Right Row */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', height: 32 }}>
-              <Text style={{ width: 14, color: colors.textSecondary, fontSize: 10, fontFamily: font.bold, textAlign: 'center', marginRight: 4 }}>R</Text>
-              
-              {/* Right Weight */}
-              <View style={[styles.colWeight, styles.inputWrapper, { flex: 1, marginRight: 8 }]}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weightR`] = r; }}
-                  style={[
-                    styles.input,
-                    set.completed && styles.inputCompleted,
-                    isWeightRFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={set.weightR || ''}
-                  onFocus={() => onFocus(exIdx, setIdx, 'weightR' as any)}
-                  placeholder={set.weight || '0'}
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
-
-              {/* Right Reps & RPE */}
-              <View style={[styles.colReps, styles.inputWrapper, { flex: 1.5 }]}>
-                <View
-                  style={[
-                    styles.repsRpeContainer,
-                    set.completed && styles.inputCompleted,
-                    isRepsRFocused && { borderColor: colors.accent },
-                  ]}
-                >
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-repsR`] = r; }}
-                    style={[
-                      styles.repsInput,
-                      set.completed && styles.textCompleted,
-                    ]}
-                    showSoftInputOnFocus={false}
-                    value={set.repsR || ''}
-                    onFocus={() => onFocus(exIdx, setIdx, 'repsR' as any)}
-                    placeholder={set.reps || '0'}
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
-                  />
-                  {set.rpeR ? (
-                    <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
-                      {`${rpePrefix}${set.rpeR}${rpeSuffix}`}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            </View>
+        {/* Reps & RPE Container (Combined UI block) */}
+        <View style={[styles.colReps, styles.inputWrapper]}>
+          <View
+            style={[
+              styles.repsRpeContainer,
+              set.completed && styles.inputCompleted,
+              isRepsFocused && { borderColor: colors.accent },
+            ]}
+          >
+            <TextInput
+              ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
+              style={[
+                styles.repsInput,
+                set.completed && styles.textCompleted,
+              ]}
+              showSoftInputOnFocus={false}
+              value={set.reps}
+              onFocus={() => onFocus(exIdx, setIdx, 'reps')}
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              editable={!set.completed}
+              selectTextOnFocus
+            />
+            {set.rpe ? (
+              <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
+                {`@${set.rpe}`}
+              </Text>
+            ) : null}
           </View>
-        ) : (
-          /* Normal Single-Row Layout */
-          <>
-            {/* Weight Input */}
-            <View style={[styles.colWeight, styles.inputWrapper]}>
-              <TextInput
-                ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
-                style={[
-                  styles.input,
-                  set.completed && styles.inputCompleted,
-                  isWeightFocused && { borderColor: colors.accent },
-                ]}
-                showSoftInputOnFocus={false}
-                value={set.weight}
-                onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-                editable={!set.completed}
-                selectTextOnFocus
-              />
-            </View>
-
-            {/* Reps & RPE Container */}
-            <View style={[styles.colReps, styles.inputWrapper]}>
-              <View
-                style={[
-                  styles.repsRpeContainer,
-                  set.completed && styles.inputCompleted,
-                  isRepsFocused && { borderColor: colors.accent },
-                ]}
-              >
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
-                  style={[
-                    styles.repsInput,
-                    set.completed && styles.textCompleted,
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={set.reps}
-                  onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-                {set.rpe ? (
-                  <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
-                    {`${rpePrefix}${set.rpe}${rpeSuffix}`}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </>
-        )}
+        </View>
 
         {/* Done Button */}
         <Pressable
-          style={[styles.colCheck, styles.checkButton, isUnilateral && { height: '100%', justifyContent: 'center' }]}
+          style={[styles.colCheck, styles.checkButton]}
           onPress={() => toggleSetComplete(exIdx, setIdx)}
         >
           <View
@@ -2582,7 +2230,7 @@ const styles = StyleSheet.create({
     padding:         0,
   },
   inputCompleted: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(22, 27, 36, 0.3)',
     borderColor:     colors.border,
     color:           colors.textMuted,
     textDecorationLine: 'line-through',
@@ -2600,7 +2248,7 @@ const styles = StyleSheet.create({
   checkCircle: {
     width:           20,
     height:          20,
-    borderRadius:    6,
+    borderRadius:    10,
     borderWidth:     1.5,
     borderColor:     colors.borderStrong,
     alignItems:      'center',
@@ -3220,36 +2868,6 @@ const styles = StyleSheet.create({
     color: colors.violet,
     fontSize: 10,
     fontFamily: font.bold,
-  },
-  timerSubMenu: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#0D0F14',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  timerSubMenuBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  timerSubMenuStopBtn: {
-    borderColor: colors.error + '40',
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-  },
-  timerSubMenuBtnText: {
-    color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.sm,
   },
 });
 
