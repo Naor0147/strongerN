@@ -1,6 +1,6 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState } from 'react-native';
 import { NavigationContainer }      from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { Rubik_400Regular, Rubik_500Medium, Rubik_600SemiBold, Rubik_700Bold } from '@expo-google-fonts/rubik';
 import { Ionicons }                 from '@expo/vector-icons';
 import * as googleDrive             from './utils/googleDrive';
-import { initDb, saveToDb, loadFromDb } from './utils/db';
+import { initDb, saveToDb, loadFromDb, deleteFromDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
 import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureStore';
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
@@ -78,6 +78,7 @@ export default function App() {
 
   // Guard to prevent overwriting stored data with defaults on mount
   const [isDataLoaded, setIsDataLoaded] = React.useState(false);
+  const [isWorkoutRestored, setIsWorkoutRestored] = React.useState(false);
 
   // Load auth state from DB on mount
   React.useEffect(() => {
@@ -189,6 +190,17 @@ export default function App() {
     };
   }, []);
 
+  // Language Change Listener
+  React.useEffect(() => {
+    const { setLanguageChangeListener } = require('./utils/i18n');
+    setLanguageChangeListener(() => {
+      setLanguageVersion(v => v + 1);
+    });
+    return () => {
+      setLanguageChangeListener(null);
+    };
+  }, []);
+
   // Modular Toggles and Custom Sound Settings
   const [isPlateCalculatorEnabled, setIsPlateCalculatorEnabled] = React.useState(false);
   const [isProgramsEnabled, setIsProgramsEnabled] = React.useState(false);
@@ -200,11 +212,13 @@ export default function App() {
   const [customAccentColor, setCustomAccentColor] = React.useState('#4F8EF7');
   const [themeVersion, setThemeVersion] = React.useState(0);
   const [themeOverrides, setThemeOverrides] = React.useState<any>({});
+  const [languageVersion, setLanguageVersion] = React.useState(0); // Increment to trigger re-render on language change
 
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
   const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
   const [isKeyboardDismissOnNextEnabled, setIsKeyboardDismissOnNextEnabled] = React.useState(true);
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
+  const [isRpeMode, setIsRpeMode] = React.useState(true); // true = RPE, false = RIR
 
 
   const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('chime');
@@ -343,6 +357,7 @@ export default function App() {
             if (parsed.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(parsed.isProgressiveOverloadEnabled);
             if (parsed.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(parsed.isAutoFinishSetEnabled);
             if (parsed.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(parsed.isKeyboardDismissOnNextEnabled);
+            if (parsed.isRpeMode !== undefined) setIsRpeMode(parsed.isRpeMode);
             if (parsed.soundSetCompleted !== undefined) setSoundSetCompleted(parsed.soundSetCompleted);
             if (parsed.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(parsed.soundWorkoutFinished);
             if (parsed.soundTimerCompleted !== undefined) setSoundTimerCompleted(parsed.soundTimerCompleted);
@@ -358,6 +373,25 @@ export default function App() {
             const { applyTheme } = require('./theme');
             applyTheme('default', '#4F8EF7', parsedOverrides);
           }
+
+          // Restore active workout state from DB (cross-platform)
+          try {
+            const savedWorkout = await loadFromDb('strongern_active_workout_state');
+            console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
+            if (savedWorkout && savedWorkout.workoutExercises && savedWorkout.workoutExercises.length > 0) {
+              console.log('[RESTORE] Restoring', savedWorkout.workoutExercises.length, 'exercises');
+              setIsWorkoutActive(true);
+              if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
+              if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
+              setWorkoutExercises(savedWorkout.workoutExercises);
+              if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
+            } else {
+              console.log('[RESTORE] No workout exercises found in saved state');
+            }
+          } catch (e) {
+            console.warn('Error restoring active workout state', e);
+          }
+          setIsWorkoutRestored(true);
         }
       } catch (e) {
         console.warn('Error loading persisted state', e);
@@ -416,6 +450,7 @@ export default function App() {
         isProgressiveOverloadEnabled,
         isAutoFinishSetEnabled,
         isKeyboardDismissOnNextEnabled,
+        isRpeMode,
         appTheme,
         customAccentColor,
       };
@@ -423,7 +458,7 @@ export default function App() {
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, appTheme, customAccentColor]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, appTheme, customAccentColor]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -878,6 +913,7 @@ export default function App() {
       isProgressiveOverloadEnabled,
       isAutoFinishSetEnabled,
       isKeyboardDismissOnNextEnabled,
+      isRpeMode,
     };
     const backupData = buildBackupData({
       username: user.name,
@@ -960,6 +996,7 @@ export default function App() {
       if (s.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(s.isProgressiveOverloadEnabled);
       if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
       if (s.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(s.isKeyboardDismissOnNextEnabled);
+      if (s.isRpeMode !== undefined) setIsRpeMode(s.isRpeMode);
       return true;
     } catch (e) {
       console.warn('Error applying backup data', e);
@@ -1365,9 +1402,16 @@ export default function App() {
         sets,
         bestWeight,
         bestReps,
+        setsDetails: Array.from({ length: typeof sets === 'number' ? sets : 3 }).map(() => ({
+          weight: bestWeight,
+          reps: bestReps,
+          completed: false,
+          category: 'S' as const,
+        })),
       };
     });
 
+    console.log('[START WORKOUT] Creating', mappedExercises.length, 'exercises');
     setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
@@ -1492,10 +1536,29 @@ export default function App() {
     setEditingSessionId(null);
   };
 
-  // Persist active workout state on changes
+  // Persist active workout state on changes (cross-platform via db.ts)
   React.useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+    if (!isDataLoaded || !isWorkoutRestored) return;
+    console.log('[SAVE EFFECT] isWorkoutActive:', isWorkoutActive, 'exercises:', workoutExercises.length);
+    if (isWorkoutActive) {
+      const activeState = {
+        workoutName,
+        startTime: startTime.toISOString(),
+        workoutExercises,
+        isWorkoutModalVisible,
+      };
+      console.log('[SAVE] Saving workout state, exercises count:', workoutExercises.length);
+      saveToDb('strongern_active_workout_state', activeState);
+    } else {
+      console.log('[SAVE] Deleting workout state (not active)');
+      deleteFromDb('strongern_active_workout_state');
+    }
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, isDataLoaded, isWorkoutRestored]);
+
+  // Save workout state when app goes to background (native)
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') {
         if (isWorkoutActive) {
           const activeState = {
             workoutName,
@@ -1503,14 +1566,11 @@ export default function App() {
             workoutExercises,
             isWorkoutModalVisible,
           };
-          window.localStorage.setItem('strongern_active_workout_state', JSON.stringify(activeState));
-        } else {
-          window.localStorage.removeItem('strongern_active_workout_state');
+          saveToDb('strongern_active_workout_state', activeState);
         }
       }
-    } catch (e) {
-      console.warn('Error persisting active workout state', e);
-    }
+    });
+    return () => sub.remove();
   }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible]);
 
   // Auto-close safety timer (3 hours)
@@ -1528,7 +1588,15 @@ export default function App() {
           if (ex.setsDetails) {
             ex.setsDetails.forEach((set: any) => {
               if (set.completed) {
-                totalVolume += (set.weight || 0) * (set.reps || 0);
+                if (set.isUnilateral) {
+                  const leftW = parseFloat(set.leftWeight || set.weight) || 0;
+                  const leftR = parseInt(set.leftReps || set.reps, 10) || 0;
+                  const rightW = parseFloat(set.rightWeight || set.weight) || 0;
+                  const rightR = parseInt(set.rightReps || set.reps, 10) || 0;
+                  totalVolume += (leftW * leftR) + (rightW * rightR);
+                } else {
+                  totalVolume += (set.weight || 0) * (set.reps || 0);
+                }
                 totalSets += 1;
               }
             });
@@ -1704,6 +1772,8 @@ export default function App() {
                   setIsAutoFinishSetEnabled={setIsAutoFinishSetEnabled}
                   isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
                   setIsKeyboardDismissOnNextEnabled={setIsKeyboardDismissOnNextEnabled}
+                  isRpeMode={isRpeMode}
+                  setIsRpeMode={setIsRpeMode}
                 />
               )}
             </Tab.Screen>
@@ -1797,6 +1867,7 @@ export default function App() {
             isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
             isAutoFinishSetEnabled={isAutoFinishSetEnabled}
             isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+            isRpeMode={isRpeMode}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}

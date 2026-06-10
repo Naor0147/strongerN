@@ -42,6 +42,11 @@ interface SetRecord {
   completed: boolean;
   rpe?:      string;
   category?: 'W' | 'S' | 'D' | 'F';
+  isUnilateral?:   boolean;
+  leftWeight?:     string;
+  leftReps?:       string;
+  rightWeight?:    string;
+  rightReps?:      string;
 }
 
 interface ActiveExercise {
@@ -72,6 +77,7 @@ interface ActiveWorkoutModalProps {
   isProgressiveOverloadEnabled?: boolean;
   isAutoFinishSetEnabled?: boolean;
   isKeyboardDismissOnNextEnabled?: boolean;
+  isRpeMode?: boolean;
 }
 
 function formatElapsed(startTime: Date): string {
@@ -239,10 +245,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isProgressiveOverloadEnabled = false,
   isAutoFinishSetEnabled = true,
   isKeyboardDismissOnNextEnabled = true,
+  isRpeMode = true,
 }) => {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
+  const hasSyncedPropsRef = useRef(false);
   const [workoutFinished, setWorkoutFinished] = useState(false);
   const [heartRate, setHeartRate] = useState(132);
 
@@ -250,7 +258,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [activeInput, setActiveInput] = useState<{
     exIdx: number;
     setIdx: number;
-    fieldName: 'weight' | 'reps';
+    fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
     focusTime?: number;
   } | null>(null);
 
@@ -279,6 +287,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const restTimerEndTarget = useRef<number | null>(null);
+  const [isTimerSubMenuVisible, setIsTimerSubMenuVisible] = useState(false);
 
   // Exercise library selector modal states
   const [isLibraryVisible, setIsLibraryVisible] = useState(false);
@@ -387,12 +396,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
               sets: existingDetails.map((s: any, sIdx: number) => ({
-                id:        `set-${exIdx}-${sIdx}-${Date.now()}`,
-                weight:    s.weight.toString(),
-                reps:      s.reps.toString(),
-                completed: s.completed || false,
-                rpe:       s.rpe ? s.rpe.toString() : '',
-                category:  s.category || 'S',
+                id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
+                weight:       s.weight.toString(),
+                reps:         s.reps.toString(),
+                completed:    s.completed || false,
+                rpe:          s.rpe ? s.rpe.toString() : '',
+                category:     s.category || 'S',
+                isUnilateral: s.isUnilateral || false,
+                leftWeight:   s.leftWeight ? s.leftWeight.toString() : undefined,
+                leftReps:     s.leftReps ? s.leftReps.toString() : undefined,
+                rightWeight:  s.rightWeight ? s.rightWeight.toString() : undefined,
+                rightReps:    s.rightReps ? s.rightReps.toString() : undefined,
               })),
               superSetGroupId: (ex as any).superSetGroupId,
             };
@@ -449,6 +463,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           };
         });
         setActiveExercises(initial);
+        hasSyncedPropsRef.current = true;
         setWorkoutFinished(false);
         setIsTimerActive(false);
       }
@@ -457,14 +472,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Sync active exercises back to parent App state so they are stored
   useEffect(() => {
+    if (!hasSyncedPropsRef.current) return;
     if (onUpdateActiveExercises) {
       const mapped = activeExercises.map(ex => {
         const completedSets = ex.sets.filter(s => s.completed);
+        const allWeights = completedSets.flatMap(s => {
+          if (s.isUnilateral) {
+            return [parseFloat(s.leftWeight || s.weight) || 0, parseFloat(s.rightWeight || s.weight) || 0];
+          }
+          return [parseFloat(s.weight) || 0];
+        });
+        const allReps = completedSets.flatMap(s => {
+          if (s.isUnilateral) {
+            return [parseInt(s.leftReps || s.reps, 10) || 0, parseInt(s.rightReps || s.reps, 10) || 0];
+          }
+          return [parseInt(s.reps, 10) || 0];
+        });
         return {
           name: ex.name,
           sets: completedSets.length,
-          bestWeight: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseFloat(s.weight) || 0), 0) : 0,
-          bestReps: completedSets.length > 0 ? Math.max(...completedSets.map(s => parseInt(s.reps, 10) || 0), 0) : 0,
+          bestWeight: allWeights.length > 0 ? Math.max(...allWeights, 0) : 0,
+          bestReps: allReps.length > 0 ? Math.max(...allReps, 0) : 0,
           superSetGroupId: ex.superSetGroupId,
           setsDetails: ex.sets.map(s => ({
             weight: parseFloat(s.weight) || 0,
@@ -472,6 +500,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             completed: s.completed,
             rpe: s.rpe ? parseFloat(s.rpe) : undefined,
             category: s.category || 'S',
+            isUnilateral: s.isUnilateral || false,
+            leftWeight: s.leftWeight ? parseFloat(s.leftWeight) : undefined,
+            leftReps: s.leftReps ? parseInt(s.leftReps, 10) : undefined,
+            rightWeight: s.rightWeight ? parseFloat(s.rightWeight) : undefined,
+            rightReps: s.rightReps ? parseInt(s.rightReps, 10) : undefined,
           })),
         };
       });
@@ -499,9 +532,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   }, []);
 
-  // Background and Foreground Time Sync
+  // Background and Foreground Time Sync + Persistent Notification
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
+    let backgroundNotificationId: string | null = null;
+
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState === 'active') {
         // Sync total elapsed
         setElapsed(formatElapsed(startTime));
@@ -516,16 +551,51 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             setRestTimeRemaining(Math.ceil((restTimerEndTarget.current - now) / 1000));
           }
         }
+
+        // Cancel background notification when returning to app
+        if (backgroundNotificationId) {
+          try {
+            await Notifications.dismissNotificationAsync(backgroundNotificationId);
+          } catch (e) {
+            // Ignore errors
+          }
+          backgroundNotificationId = null;
+        }
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // Show persistent notification when app goes to background during active workout
+        if (visible) {
+          const currentExerciseName = activeExercises.length > 0
+            ? activeExercises[0].name
+            : 'Workout in Progress';
+          const elapsedStr = formatElapsed(startTime);
+
+          try {
+            const notifId = await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `${localWorkoutName || 'Workout'}`,
+                body: `${currentExerciseName} • ${elapsedStr}${isTimerActive ? ` • Rest: ${restTimeRemaining}s` : ''}`,
+                sticky: true,
+                autoDismiss: false,
+                sound: false,
+              },
+              trigger: null, // Show immediately
+            });
+            backgroundNotificationId = notifId;
+          } catch (e) {
+            console.warn('Error showing background notification', e);
+          }
+        }
       }
     });
     return () => subscription.remove();
-  }, [isTimerActive, startTime]);
+  }, [isTimerActive, startTime, visible, activeExercises, localWorkoutName, restTimeRemaining]);
 
   // Rest Timer Countdown Interval
   useEffect(() => {
     if (!isTimerActive || restTimeRemaining <= 0) {
       if (isTimerActive && restTimeRemaining === 0) {
         setIsTimerActive(false);
+        setIsTimerSubMenuVisible(false);
         restTimerEndTarget.current = null;
       }
       return;
@@ -544,6 +614,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       if (remaining <= 0) {
         setRestTimeRemaining(0);
         setIsTimerActive(false);
+        setIsTimerSubMenuVisible(false);
         restTimerEndTarget.current = null;
         playTimerCompletedSound();
       } else {
@@ -630,7 +701,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [activeExercises, isAutoTimerEnabled, defaultRestDuration]);
 
   // Set weight/reps/rpe/category updater
-  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category', value: string) => {
+  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -646,12 +717,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, []);
 
   // Stable input focus handler (must NOT be inside .map())
-  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps') => {
+  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
     setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
   }, []);
 
   // Add a set
-  const addSet = useCallback((exIdx: number) => {
+  const addSet = useCallback((exIdx: number, isUnilateral: boolean = false) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
@@ -665,6 +736,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           completed: false,
           rpe:       '',
           category:  lastSet?.category ?? 'S',
+          isUnilateral: isUnilateral,
+          leftWeight:   isUnilateral ? (lastSet?.leftWeight ?? lastSet?.weight ?? '60') : undefined,
+          leftReps:     isUnilateral ? (lastSet?.leftReps ?? lastSet?.reps ?? '10') : undefined,
+          rightWeight:  isUnilateral ? (lastSet?.rightWeight ?? lastSet?.weight ?? '60') : undefined,
+          rightReps:    isUnilateral ? (lastSet?.rightReps ?? lastSet?.reps ?? '10') : undefined,
         };
         return {
           ...ex,
@@ -693,8 +769,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!activeInput) return;
     const { exIdx, setIdx, fieldName } = activeInput;
 
-    // 1. Auto-Finish Set: When pressing "Next" inside Reps box
-    if (fieldName === 'reps' && isAutoFinishSetEnabled) {
+    // 1. Auto-Finish Set: When pressing "Next" inside Reps box (bilateral) or rightReps (unilateral)
+    if ((fieldName === 'reps' || fieldName === 'rightReps') && isAutoFinishSetEnabled) {
       const targetSet = activeExercises[exIdx]?.sets[setIdx];
       if (targetSet && !targetSet.completed) {
         playSetCheckedSound();
@@ -720,13 +796,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
     }
 
-    // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box
-    if (fieldName === 'reps' && isKeyboardDismissOnNextEnabled) {
+    // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box (bilateral) or rightReps (unilateral)
+    if ((fieldName === 'reps' || fieldName === 'rightReps') && isKeyboardDismissOnNextEnabled) {
       setActiveInput(null);
       return;
     }
 
-    // 3. Default Jumps: If currently weight, move to reps in the same set
+    // 3. Default Jumps for bilateral sets
     if (fieldName === 'weight') {
       const nextKey = `${exIdx}-${setIdx}-reps`;
       setActiveInput({ exIdx, setIdx, fieldName: 'reps', focusTime: Date.now() });
@@ -736,11 +812,39 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
 
-    // 4. Default Jumps: If reps, check if there's a next set in the same exercise
+    // 4. Default Jumps for unilateral sets: leftWeight -> leftReps -> rightWeight -> rightReps
+    if (fieldName === 'leftWeight') {
+      const nextKey = `${exIdx}-${setIdx}-leftReps`;
+      setActiveInput({ exIdx, setIdx, fieldName: 'leftReps', focusTime: Date.now() });
+      if (inputRefs.current[nextKey]) {
+        inputRefs.current[nextKey].focus();
+      }
+      return;
+    }
+    if (fieldName === 'leftReps') {
+      const nextKey = `${exIdx}-${setIdx}-rightWeight`;
+      setActiveInput({ exIdx, setIdx, fieldName: 'rightWeight', focusTime: Date.now() });
+      if (inputRefs.current[nextKey]) {
+        inputRefs.current[nextKey].focus();
+      }
+      return;
+    }
+    if (fieldName === 'rightWeight') {
+      const nextKey = `${exIdx}-${setIdx}-rightReps`;
+      setActiveInput({ exIdx, setIdx, fieldName: 'rightReps', focusTime: Date.now() });
+      if (inputRefs.current[nextKey]) {
+        inputRefs.current[nextKey].focus();
+      }
+      return;
+    }
+
+    // 5. Default Jumps: If reps (bilateral) or rightReps (unilateral), check if there's a next set in the same exercise
     const currentEx = activeExercises[exIdx];
     if (currentEx && setIdx < currentEx.sets.length - 1) {
-      const nextKey = `${exIdx}-${setIdx + 1}-weight`;
-      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: 'weight', focusTime: Date.now() });
+      const nextSet = currentEx.sets[setIdx + 1];
+      const nextFieldName = nextSet?.isUnilateral ? 'leftWeight' : 'weight';
+      const nextKey = `${exIdx}-${setIdx + 1}-${nextFieldName}`;
+      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: nextFieldName, focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -749,8 +853,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     // 5. Default Jumps: If last set of this exercise, check if there is a next exercise
     if (exIdx < activeExercises.length - 1) {
-      const nextKey = `${exIdx + 1}-0-weight`;
-      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: 'weight', focusTime: Date.now() });
+      const nextEx = activeExercises[exIdx + 1];
+      const nextFieldName = nextEx?.sets[0]?.isUnilateral ? 'leftWeight' : 'weight';
+      const nextKey = `${exIdx + 1}-0-${nextFieldName}`;
+      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: nextFieldName, focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -769,9 +875,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     activeExercises.forEach(ex => {
       ex.sets.forEach(set => {
         if (set.completed) {
-          const w = parseFloat(set.weight) || 0;
-          const r = parseInt(set.reps, 10) || 0;
-          totalVolume += w * r;
+          if (set.isUnilateral) {
+            // For unilateral sets, calculate volume from both sides
+            const leftW = parseFloat(set.leftWeight || set.weight) || 0;
+            const leftR = parseInt(set.leftReps || set.reps, 10) || 0;
+            const rightW = parseFloat(set.rightWeight || set.weight) || 0;
+            const rightR = parseInt(set.rightReps || set.reps, 10) || 0;
+            totalVolume += (leftW * leftR) + (rightW * rightR);
+          } else {
+            const w = parseFloat(set.weight) || 0;
+            const r = parseInt(set.reps, 10) || 0;
+            totalVolume += w * r;
+          }
           totalSets   += 1;
         }
       });
@@ -1142,9 +1257,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   onPress={() => {
                     if (isTimerActive) {
-                      setIsTimerActive(false);
-                      restTimerEndTarget.current = null;
-                      Notifications.cancelAllScheduledNotificationsAsync();
+                      setIsTimerSubMenuVisible(!isTimerSubMenuVisible);
                     } else {
                       restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
                       setRestTimeRemaining(defaultRestDuration);
@@ -1165,6 +1278,85 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     <Text style={styles.headerRestTimerText}>{restTimeRemaining}s</Text>
                   )}
                 </Pressable>
+
+                {/* Timer Sub-menu */}
+                {isTimerSubMenuVisible && isTimerActive && (
+                  <View style={styles.timerSubMenu}>
+                    <View style={styles.timerSubMenuInner}>
+                      <View style={styles.timerSubMenuTimerDisplay}>
+                        <Ionicons name="timer-outline" size={16} color={colors.accent} />
+                        <Text style={styles.timerSubMenuTimerText}>{restTimeRemaining}s</Text>
+                        <Text style={styles.timerSubMenuTimerLabel}>REST</Text>
+                      </View>
+                      
+                      <View style={styles.timerSubMenuDivider} />
+                      
+                      <View style={styles.timerSubMenuButtons}>
+                        <Pressable
+                          style={styles.timerSubMenuBtn}
+                          onPress={() => {
+                            if (restTimerEndTarget.current) {
+                              restTimerEndTarget.current -= 30000;
+                            }
+                          }}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={styles.timerSubMenuBtnText}>-30</Text>
+                        </Pressable>
+                        
+                        <Pressable
+                          style={styles.timerSubMenuBtn}
+                          onPress={() => {
+                            if (restTimerEndTarget.current) {
+                              restTimerEndTarget.current -= 10000;
+                            }
+                          }}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={styles.timerSubMenuBtnText}>-10</Text>
+                        </Pressable>
+                        
+                        <Pressable
+                          style={[styles.timerSubMenuBtn, styles.timerSubMenuStopBtn]}
+                          onPress={() => {
+                            setIsTimerActive(false);
+                            setIsTimerSubMenuVisible(false);
+                            restTimerEndTarget.current = null;
+                            Notifications.cancelAllScheduledNotificationsAsync();
+                          }}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Ionicons name="stop" size={16} color="#fff" style={{ marginRight: 4 }} />
+                          <Text style={[styles.timerSubMenuBtnText, styles.timerSubMenuStopBtnText]}>Stop</Text>
+                        </Pressable>
+                        
+                        <Pressable
+                          style={styles.timerSubMenuBtn}
+                          onPress={() => {
+                            if (restTimerEndTarget.current) {
+                              restTimerEndTarget.current += 10000;
+                            }
+                          }}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={styles.timerSubMenuBtnText}>+10</Text>
+                        </Pressable>
+                        
+                        <Pressable
+                          style={styles.timerSubMenuBtn}
+                          onPress={() => {
+                            if (restTimerEndTarget.current) {
+                              restTimerEndTarget.current += 30000;
+                            }
+                          }}
+                          android_ripple={rippleTokens.surface}
+                        >
+                          <Text style={styles.timerSubMenuBtnText}>+30</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                )}
 
                 {isPlateCalculatorEnabled && (
                   <Pressable
@@ -1409,6 +1601,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               inputRefs={inputRefs}
                               isPrevCompleted={isPrevCompleted}
                               isNextCompleted={isNextCompleted}
+                              isRpeMode={isRpeMode}
                             />
                           );
                         })}
@@ -1417,7 +1610,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         <Pressable
                           style={styles.addSetRow}
                           onPress={() => addSet(exIdx)}
+                          onLongPress={() => addSet(exIdx, true)}
                           android_ripple={rippleTokens.surface}
+                          accessibilityLabel="Add set, long press for unilateral set"
                         >
                           <Ionicons name="add" size={16} color={colors.accent} />
                           <Text style={styles.addSetText}>ADD SET</Text>
@@ -1800,6 +1995,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               }}
               fieldName={activeInput?.fieldName}
               title={activeInput ? activeExercises[activeInput.exIdx]?.name : ''}
+              isRpeMode={isRpeMode}
               onNext={handleNextField}
               onClose={() => setActiveInput(null)}
             />
@@ -1824,14 +2020,15 @@ interface ActiveSetRowItemProps {
   set: SetRecord;
   setIdx: number;
   exIdx: number;
-  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps'; focusTime?: number } | null;
-  onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps') => void;
-  updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'rpe' | 'category', value: string) => void;
+  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps'; focusTime?: number } | null;
+  onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => void;
+  updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => void;
   deleteSet: (exIdx: number, setIdx: number) => void;
   toggleSetComplete: (exIdx: number, setIdx: number) => void;
   inputRefs: React.MutableRefObject<{ [key: string]: any }>;
   isPrevCompleted: boolean;
   isNextCompleted: boolean;
+  isRpeMode?: boolean;
 }
 
 const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
@@ -1846,6 +2043,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   inputRefs,
   isPrevCompleted,
   isNextCompleted,
+  isRpeMode = true,
 }) => {
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
@@ -1861,6 +2059,163 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
     borderBottomRightRadius: showNextConnected ? 0 : radius.xs,
   };
 
+  // Unilateral set rendering
+  if (set.isUnilateral) {
+    return (
+      <SwipeableRow
+        onDelete={() => deleteSet(exIdx, setIdx)}
+        borderRadius={radius.xs}
+        style={{
+          marginBottom: showNextConnected ? 0 : 4,
+          ...rowStyle,
+        }}
+      >
+        <View
+          style={[
+            styles.setRow,
+            styles.unilateralSetRow,
+            set.completed && styles.setRowCompleted,
+            rowStyle,
+          ]}
+        >
+          {/* Set Number / Category Cycle */}
+          <Pressable
+            style={[
+              styles.colSet,
+              styles.setNumCol,
+              { justifyContent: 'center', alignItems: 'center' }
+            ]}
+            onPress={() => {
+              if (set.completed) return;
+              const categories: ('S' | 'W' | 'D' | 'F')[] = ['S', 'W', 'D', 'F'];
+              const currIdx = categories.indexOf(set.category || 'S');
+              const nextIdx = (currIdx + 1) % categories.length;
+              updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
+            }}
+            onLongPress={() => deleteSet(exIdx, setIdx)}
+            accessibilityLabel={`Cycle set category, long press to delete set ${setIdx + 1}`}
+          >
+            <View
+              style={[
+                styles.categoryCircle,
+                set.category === 'W' && styles.categoryWarmup,
+                set.category === 'D' && styles.categoryDrop,
+                set.category === 'F' && styles.categoryFailure,
+                set.completed && styles.categoryCompleted,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.setNumText,
+                  (set.category && set.category !== 'S') && styles.categoryLabelText,
+                  (set.category && set.category !== 'S') && { color: set.category === 'W' ? colors.gold : set.category === 'D' ? colors.highlight : colors.error },
+                  set.completed && styles.textCompleted,
+                ]}
+              >
+                {set.category && set.category !== 'S' ? set.category : (setIdx + 1)}
+              </Text>
+            </View>
+          </Pressable>
+
+          {/* Left/Right Rows Container */}
+          <View style={styles.unilateralContainer}>
+            {/* Left Row */}
+            <View style={styles.unilateralRow}>
+              <Text style={styles.unilateralLabel}>L</Text>
+              <View style={[styles.unilateralInputWrapper]}>
+                <TextInput
+                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
+                  style={[
+                    styles.unilateralInput,
+                    set.completed && styles.inputCompleted,
+                  ]}
+                  showSoftInputOnFocus={false}
+                  value={set.leftWeight || set.weight}
+                  onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  editable={!set.completed}
+                  selectTextOnFocus
+                />
+              </View>
+              <View style={[styles.unilateralInputWrapper]}>
+                <TextInput
+                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
+                  style={[
+                    styles.unilateralInput,
+                    set.completed && styles.textCompleted,
+                  ]}
+                  showSoftInputOnFocus={false}
+                  value={set.leftReps || set.reps}
+                  onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  editable={!set.completed}
+                  selectTextOnFocus
+                />
+              </View>
+            </View>
+
+            {/* Right Row */}
+            <View style={styles.unilateralRow}>
+              <Text style={styles.unilateralLabel}>R</Text>
+              <View style={[styles.unilateralInputWrapper]}>
+                <TextInput
+                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
+                  style={[
+                    styles.unilateralInput,
+                    set.completed && styles.inputCompleted,
+                  ]}
+                  showSoftInputOnFocus={false}
+                  value={set.rightWeight || set.weight}
+                  onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  editable={!set.completed}
+                  selectTextOnFocus
+                />
+              </View>
+              <View style={[styles.unilateralInputWrapper]}>
+                <TextInput
+                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
+                  style={[
+                    styles.unilateralInput,
+                    set.completed && styles.textCompleted,
+                  ]}
+                  showSoftInputOnFocus={false}
+                  value={set.rightReps || set.reps}
+                  onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  editable={!set.completed}
+                  selectTextOnFocus
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Done Button */}
+          <Pressable
+            style={[styles.colCheck, styles.checkButton]}
+            onPress={() => toggleSetComplete(exIdx, setIdx)}
+          >
+            <View
+              style={[
+                styles.checkCircle,
+                set.completed && styles.checkCircleCompleted,
+              ]}
+            >
+              {set.completed && (
+                <Ionicons name="checkmark" size={14} color="#0D0F14" />
+              )}
+            </View>
+          </Pressable>
+        </View>
+      </SwipeableRow>
+    );
+  }
+
+  // Standard bilateral set rendering
   return (
     <SwipeableRow
       onDelete={() => deleteSet(exIdx, setIdx)}
@@ -1960,7 +2315,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
             />
             {set.rpe ? (
               <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
-                {`@${set.rpe}`}
+                {isRpeMode ? `@${set.rpe}` : `${set.rpe}RIR`}
               </Text>
             ) : null}
           </View>
@@ -2039,6 +2394,74 @@ const styles = StyleSheet.create({
     color:           colors.accent,
     fontSize:        font.sizes.xs,
     fontFamily:      font.bold,
+  },
+  timerSubMenu: {
+    position:        'absolute',
+    top:             44,
+    left:            -16,
+    right:           -16,
+    zIndex:          1000,
+    ...(shadow.card as object),
+  },
+  timerSubMenuInner: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: colors.surface2,
+    borderTopWidth:  1,
+    borderTopColor:  colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  timerSubMenuTimerDisplay: {
+    flexDirection:   'column',
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minWidth:        70,
+  },
+  timerSubMenuTimerText: {
+    color:           colors.accent,
+    fontSize:        font.sizes.xl,
+    fontFamily:      font.bold,
+    lineHeight:      24,
+  },
+  timerSubMenuTimerLabel: {
+    color:           colors.textMuted,
+    fontSize:        9,
+    fontFamily:      font.bold,
+    letterSpacing:   1.5,
+    marginTop:       2,
+  },
+  timerSubMenuDivider: {
+    width:           1,
+    height:          40,
+    backgroundColor: colors.border,
+  },
+  timerSubMenuButtons: {
+    flex:            1,
+    flexDirection:   'row',
+    alignItems:      'stretch',
+  },
+  timerSubMenuBtn: {
+    flex:            1,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    paddingVertical: 14,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  timerSubMenuBtnText: {
+    color:           colors.textPrimary,
+    fontSize:        font.sizes.base,
+    fontFamily:      font.bold,
+  },
+  timerSubMenuStopBtn: {
+    backgroundColor: colors.error,
+  },
+  timerSubMenuStopBtnText: {
+    color:           '#FFFFFF',
   },
   minimizeBtn: {
     padding: spacing.xs,
@@ -2204,6 +2627,47 @@ const styles = StyleSheet.create({
   setRowCompleted: {
     backgroundColor: '#111A2E',
   },
+  unilateralSetRow: {
+    flexDirection:   'row',
+    alignItems:      'stretch',
+    paddingVertical: 0,
+    borderRadius:    radius.xs,
+    backgroundColor: colors.surface,
+  },
+  unilateralContainer: {
+    flex:            1,
+    flexDirection:   'column',
+    gap:             2,
+    paddingVertical: 4,
+  },
+  unilateralRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             4,
+  },
+  unilateralLabel: {
+    width:           20,
+    color:           colors.textSecondary,
+    fontSize:        font.sizes.xs,
+    fontFamily:      font.bold,
+    textAlign:       'center',
+  },
+  unilateralInputWrapper: {
+    flex:            1,
+    height:          28,
+  },
+  unilateralInput: {
+    flex:            1,
+    backgroundColor: colors.surface2,
+    borderColor:     colors.border,
+    borderWidth:     1,
+    borderRadius:    radius.xs,
+    color:           colors.textPrimary,
+    textAlign:       'center',
+    fontSize:        font.sizes.sm,
+    fontFamily:      'monospace',
+    padding:         0,
+  },
   setNumCol: {
     height:         32,
     justifyContent: 'center',
@@ -2248,7 +2712,7 @@ const styles = StyleSheet.create({
   checkCircle: {
     width:           20,
     height:          20,
-    borderRadius:    10,
+    borderRadius:    6,
     borderWidth:     1.5,
     borderColor:     colors.borderStrong,
     alignItems:      'center',
@@ -2508,7 +2972,7 @@ const styles = StyleSheet.create({
     borderColor:     colors.highlight,
   },
   categoryFailure: {
-    backgroundColor: colors.error + '20',
+    backgroundColor: colors.errorGlow,
     borderColor:     colors.error,
   },
   categoryCompleted: {

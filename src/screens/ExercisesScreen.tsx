@@ -89,12 +89,16 @@ const ExerciseRow: React.FC<{
   onPress: (ex: Exercise) => void;
   onMenuPress: (ex: Exercise) => void;
 }> = React.memo(({ exercise, onPress, onMenuPress }) => {
-  const muscleColor = getMuscleColor(exercise.muscleGroup);
+  const muscleColor = useMemo(() => getMuscleColor(exercise.muscleGroup), [exercise.muscleGroup]);
   const [expanded, setExpanded] = useState(false);
+
+  const handlePress = useCallback(() => onPress(exercise), [exercise, onPress]);
+  const handleMenuPress = useCallback(() => onMenuPress(exercise), [exercise, onMenuPress]);
+  const handleToggleExpand = useCallback(() => setExpanded(prev => !prev), []);
 
   return (
     <PressableRow
-      onPress={() => onPress(exercise)}
+      onPress={handlePress}
       style={styles.rowContainer}
       padding={{ vertical: spacing.md, horizontal: spacing.lg }}
       testID={`exercises.exercise.${exercise.id}`}
@@ -126,7 +130,7 @@ const ExerciseRow: React.FC<{
             </Text>
           </View>
           {exercise.notes ? (
-            <Pressable onPress={() => setExpanded(!expanded)} style={{ marginTop: spacing.xs }}>
+            <Pressable onPress={handleToggleExpand} style={{ marginTop: spacing.xs }}>
               <Text style={styles.noteSubtitle} numberOfLines={expanded ? undefined : 2}>
                 {exercise.notes}
               </Text>
@@ -144,7 +148,7 @@ const ExerciseRow: React.FC<{
               name="ellipsis-horizontal"
               size={18}
               color={colors.textSecondary}
-              onPress={() => onMenuPress(exercise)}
+              onPress={handleMenuPress}
               accessibilityLabel="Exercise options"
               style={{ padding: spacing.xs }}
             />
@@ -303,29 +307,29 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   }, [exerciseHistory]);
 
   // Toggle muscle filter
-  const handleToggleMuscle = (muscle: string) => {
+  const handleToggleMuscle = useCallback((muscle: string) => {
     setSelectedMuscles(prev =>
       prev.includes(muscle)
         ? prev.filter(m => m !== muscle)
         : [...prev, muscle]
     );
-  };
+  }, []);
 
   // Toggle equipment filter
-  const handleToggleEquipment = (eq: string) => {
+  const handleToggleEquipment = useCallback((eq: string) => {
     setSelectedEquipment(prev =>
       prev.includes(eq)
         ? prev.filter(e => e !== eq)
         : [...prev, eq]
     );
-  };
+  }, []);
 
   // Clear all filters
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     setSelectedMuscles([]);
     setSelectedEquipment([]);
     setSearchQuery('');
-  };
+  }, []);
 
   // 1. Filter exercises based on search query, active muscles, and active equipment
   const filteredExercises = useMemo(() => {

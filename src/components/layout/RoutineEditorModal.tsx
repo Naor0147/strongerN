@@ -528,12 +528,13 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         isActive && {
                           transform:       [{ translateY: dragY }],
                           zIndex:          999,
-                          opacity:         0.88,
+                          opacity:         0.85,
+                          backgroundColor: '#1E2633',
                           shadowColor:     '#000',
-                          shadowOffset:    { width: 0, height: 8 },
-                          shadowOpacity:   0.55,
-                          shadowRadius:    16,
-                          elevation:       14,
+                          shadowOffset:    { width: 0, height: 4 },
+                          shadowOpacity:   0.45,
+                          shadowRadius:    10,
+                          elevation:       8,
                         },
                       ]}
                     >
@@ -995,7 +996,12 @@ const edStyles = StyleSheet.create({
     marginRight: -4,
   },
   dragHandle: {
-    padding: spacing.xs,
+    padding: 8,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -4,
+    marginRight: -4,
   },
 
   // Table

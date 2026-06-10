@@ -1026,7 +1026,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         </View>
 
         <View style={styles.bodyContainer}>
-          <Animated.View style={[styles.svgCard, { 
+          <Animated.View 
+            collapsable={false}
+            style={[styles.svgCard, { 
             transform: [
               { scale: scaleAnim },
               { translateX: translateXAnim },
@@ -1329,6 +1331,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 8,
     position: 'relative',
+    overflow: 'hidden',
   },
 
   // Intensity scale

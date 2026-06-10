@@ -46,6 +46,7 @@ const styles = StyleSheet.create({
     borderRadius:    radius.md,
     borderWidth:     1,
     borderColor:     colors.border,
+    overflow:        'hidden',
     ...(shadow.card as object),
   },
 });

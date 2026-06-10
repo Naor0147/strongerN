@@ -1,5 +1,5 @@
 // theme.ts — Central Design Token System (Premium Dark / AMOLED-first)
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, I18nManager } from 'react-native';
 
 // ─────────────────────────────────────────────────────────────────
 // STYLESHEET INTERCEPTION & DYNAMIC THEMES
@@ -74,6 +74,7 @@ export const colors = {
   gold:           '#6366F1', // Sporty Indigo Blue (replaced Warm Gold)
   goldGlow:       '#6366F120',
   error:          '#F0506E',
+  errorGlow:      '#F0506E20',
   success:        '#22D97A',
   successGlow:    '#22D97A20',
 
@@ -123,6 +124,11 @@ export const font = {
   medium:   'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold:     'Inter_700Bold',
+  // Hebrew (Rubik) font variants for RTL support
+  heRegular:  'Rubik_400Regular',
+  heMedium:   'Rubik_500Medium',
+  heSemibold: 'Rubik_600SemiBold',
+  heBold:     'Rubik_700Bold',
   sizes: {
     xs:   11,
     sm:   13,
@@ -134,6 +140,21 @@ export const font = {
     hero: 38,
   },
 };
+
+/**
+ * Get the appropriate font family based on RTL mode.
+ * Usage: getRTLFont(font.semibold) returns Rubik for Hebrew, Inter for English.
+ */
+export function getRTLFont(englishFont: string): string {
+  if (!I18nManager.isRTL) return englishFont;
+  switch (englishFont) {
+    case font.regular:  return font.heRegular;
+    case font.medium:   return font.heMedium;
+    case font.semibold: return font.heSemibold;
+    case font.bold:     return font.heBold;
+    default:            return font.heRegular;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────
 // SPACING — 4pt grid

@@ -76,6 +76,7 @@ function playWebSound(soundKey: string) {
       const audio = new Audio(require('../../assets/sounds/bell1.mp3'));
       audio.volume = soundConfig.volume ?? 1.0;
       audio.play().catch(err => console.warn('[Web bell1 Audio Play Error]', err));
+      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
     } catch (err) {
       console.warn('[Web bell1 Audio Init Error]', err);
     }
@@ -84,6 +85,7 @@ function playWebSound(soundKey: string) {
       const audio = new Audio(require('../../assets/sounds/bell2.mp3'));
       audio.volume = soundConfig.volume ?? 1.0;
       audio.play().catch(err => console.warn('[Web bell2 Audio Play Error]', err));
+      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
     } catch (err) {
       console.warn('[Web bell2 Audio Init Error]', err);
     }
@@ -92,6 +94,7 @@ function playWebSound(soundKey: string) {
       const audio = new Audio(require('../../assets/sounds/boxing-bell.mp3'));
       audio.volume = soundConfig.volume ?? 1.0;
       audio.play().catch(err => console.warn('[Web boxing-bell Audio Play Error]', err));
+      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
     } catch (err) {
       console.warn('[Web boxing-bell Audio Init Error]', err);
     }
@@ -103,6 +106,7 @@ function playWebSound(soundKey: string) {
         const audio = new Audio(custom.uri);
         audio.volume = soundConfig.volume ?? 1.0;
         audio.play().catch(err => console.warn('[Web Custom Audio Play Error]', err));
+        setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
       } catch (err) {
         console.warn('[Web Custom Audio Init Error]', err);
       }

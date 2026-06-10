@@ -90,6 +90,7 @@ function playWebSound(soundKey: string) {
 /**
  * Native audio player using expo-audio. 
  * Loads locally-bundled synthesized sound files for offline reliability.
+ * Limits playback to a maximum of 3 seconds.
  */
 async function playNativeSound(soundKey: string) {
   try {
@@ -124,8 +125,20 @@ async function playNativeSound(soundKey: string) {
       player.volume = soundConfig.volume ?? 1.0;
       player.play();
 
+      // Stop playback after 3 seconds max
+      const timeoutId = setTimeout(() => {
+        try {
+          player.pause();
+          player.seekTo(0);
+          player.release();
+        } catch (e) {
+          // Ignore errors if player was already released
+        }
+      }, 3000);
+
       const listener = player.addListener('playbackStatusUpdate', (status) => {
         if (status.playbackState === 'ended') {
+          clearTimeout(timeoutId);
           player.release();
           listener.remove();
         }

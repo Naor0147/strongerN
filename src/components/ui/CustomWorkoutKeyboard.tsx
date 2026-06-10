@@ -22,11 +22,13 @@ interface CustomWorkoutKeyboardProps {
   onClose: () => void;
   placeholder?: string;
   title?: string;
-  fieldName?: 'weight' | 'reps';
+  fieldName?: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
   inputKey?: string;
+  isRpeMode?: boolean;
 }
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
+const RIR_OPTIONS = ['0', '1', '2', '3', '4', '5'];
 
 export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   visible,
@@ -39,6 +41,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   title = '',
   fieldName = 'weight',
   inputKey,
+  isRpeMode = true,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
   const [lastInputKey, setLastInputKey] = useState<string | undefined>(undefined);
@@ -140,10 +143,10 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
         </Pressable>
       </View>
 
-      {/* ── RPE Selector Bar (Expands above key pad) ── */}
+      {/* ── RPE/RIR Selector Bar (Expands above key pad) ── */}
       {showRpeBar && (
         <View style={styles.rpeBar}>
-          <Text style={styles.rpeBarLabel}>SELECT RPE</Text>
+          <Text style={styles.rpeBarLabel}>{isRpeMode ? 'SELECT RPE' : 'SELECT RIR'}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -158,7 +161,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 NONE
               </Text>
             </Pressable>
-            {RPE_OPTIONS.map((val) => {
+            {(isRpeMode ? RPE_OPTIONS : RIR_OPTIONS).map((val) => {
               const isActive = rpeValue === val;
               return (
                 <Pressable
@@ -206,7 +209,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
 
         {/* Right Side: Quick Action Columns */}
         <View style={styles.actionColumn}>
-          {/* RPE Toggle Button */}
+          {/* RPE/RIR Toggle Button */}
           {onChangeRpe ? (
             <Pressable
               style={[styles.actionKey, showRpeBar && styles.rpeKeyActive]}
@@ -222,7 +225,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 color={showRpeBar ? colors.violet : colors.textSecondary}
               />
               <Text style={[styles.actionKeyText, showRpeBar && { color: colors.violet }]}>
-                RPE
+                {isRpeMode ? 'RPE' : 'RIR'}
               </Text>
             </Pressable>
           ) : (

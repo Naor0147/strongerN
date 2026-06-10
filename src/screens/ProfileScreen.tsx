@@ -26,7 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as DocumentPicker from 'expo-document-picker';
-import i18n from '../utils/i18n';
+import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { pickAndReadBackupFile } from '../utils/backupManager';
@@ -70,6 +70,8 @@ interface ProfileScreenProps {
   setIsAutoFinishSetEnabled?: (val: boolean) => void;
   isKeyboardDismissOnNextEnabled?: boolean;
   setIsKeyboardDismissOnNextEnabled?: (val: boolean) => void;
+  isRpeMode?: boolean;
+  setIsRpeMode?: (val: boolean) => void;
   onGoogleLogin:         (email: string, name: string, accessToken?: string, fileId?: string, avatarUri?: string) => Promise<boolean> | boolean;
   onGoogleLogout:        () => void;
   onCloudSync:           () => Promise<boolean> | boolean;
@@ -371,6 +373,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setIsAutoFinishSetEnabled,
   isKeyboardDismissOnNextEnabled = true,
   setIsKeyboardDismissOnNextEnabled,
+  isRpeMode = true,
+  setIsRpeMode,
   onGoogleLogin,
   onGoogleLogout,
   onCloudSync,
@@ -1203,46 +1207,50 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </Card>
 
         {/* ── Smart Quick Start Card ───────────────────────────── */}
-        <Card 
-          padding={spacing.lg} 
-          style={styles.quickStartCard} 
+        <Pressable
+          onPress={() => {
+            if (onStartWorkout) {
+              onStartWorkout(nextWorkout.name, nextWorkout.exercises);
+            }
+          }}
+          android_ripple={rippleTokens.accent}
+          accessibilityLabel={`Start ${nextWorkout.name}`}
           testID="profile.quick-start-card"
+          style={({ pressed }) => [
+            styles.quickStartCard,
+            pressed && { opacity: 0.85 },
+          ]}
         >
-          <View style={styles.quickStartHeader}>
-            <View style={styles.quickStartTitleContainer}>
-              <Ionicons name="flash" size={16} color={nextWorkout.badgeColor} style={{ marginRight: spacing.xs }} />
-              <Text style={styles.quickStartLabel}>UP NEXT</Text>
-            </View>
-            <Badge 
-              label={nextWorkout.type.toUpperCase()} 
-              color={nextWorkout.badgeColor} 
-              textColor={nextWorkout.badgeColor}
-            />
-          </View>
-          
-          <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
-          
-          {nextWorkout.exercises && nextWorkout.exercises.length > 0 && (
-            <Text style={styles.quickStartExercises} numberOfLines={2}>
-              {nextWorkout.exercises.join('  ·  ')}
-            </Text>
-          )}
-
-          <Pressable
-            style={styles.quickStartBtn}
-            onPress={() => {
-              if (onStartWorkout) {
-                onStartWorkout(nextWorkout.name, nextWorkout.exercises);
-              }
-            }}
-            android_ripple={rippleTokens.accent}
-            accessibilityLabel={`Start ${nextWorkout.name}`}
-            testID="profile.quick-start-button"
+          <Card 
+            padding={spacing.lg} 
+            style={{ backgroundColor: 'transparent', borderWidth: 0, marginBottom: 0 }}
           >
-            <Ionicons name="play" size={16} color="#0D0F14" style={{ marginRight: spacing.xs }} />
-            <Text style={styles.quickStartBtnText}>Start Workout</Text>
-          </Pressable>
-        </Card>
+            <View style={styles.quickStartHeader}>
+              <View style={styles.quickStartTitleContainer}>
+                <Ionicons name="flash" size={16} color={nextWorkout.badgeColor} style={{ marginRight: spacing.xs }} />
+                <Text style={styles.quickStartLabel}>UP NEXT</Text>
+              </View>
+              <Badge 
+                label={nextWorkout.type.toUpperCase()} 
+                color={nextWorkout.badgeColor} 
+                textColor={nextWorkout.badgeColor}
+              />
+            </View>
+            
+            <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
+            
+            {nextWorkout.exercises && nextWorkout.exercises.length > 0 && (
+              <Text style={styles.quickStartExercises} numberOfLines={2}>
+                {nextWorkout.exercises.join('  ·  ')}
+              </Text>
+            )}
+
+            <View style={styles.quickStartBtn}>
+              <Ionicons name="play" size={16} color="#0D0F14" style={{ marginRight: spacing.xs }} />
+              <Text style={styles.quickStartBtnText}>Start Workout</Text>
+            </View>
+          </Card>
+        </Pressable>
 
         {/* ── Dashboard ────────────────────────────────────────── */}
 
@@ -1987,6 +1995,52 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               <View style={styles.settingDivider} />
 
+              {/* RPE / RIR Toggle */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="speedometer-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingTitle}>RPE / RIR Mode</Text>
+                    <Text style={styles.settingSubtitle} numberOfLines={2}>
+                      {isRpeMode ? 'Showing Rate of Perceived Exertion (RPE)' : 'Showing Reps in Reserve (RIR)'}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={[
+                    styles.togglePill,
+                    styles.togglePillSegmented,
+                  ]}
+                  onPress={() => setIsRpeMode && setIsRpeMode(!isRpeMode)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <View style={[
+                    styles.togglePillSegment,
+                    isRpeMode && styles.togglePillSegmentActive,
+                  ]}>
+                    <Text style={[
+                      styles.togglePillText,
+                      isRpeMode && styles.togglePillTextActive,
+                    ]}>
+                      RPE
+                    </Text>
+                  </View>
+                  <View style={[
+                    styles.togglePillSegment,
+                    !isRpeMode && styles.togglePillSegmentActive,
+                  ]}>
+                    <Text style={[
+                      styles.togglePillText,
+                      !isRpeMode && styles.togglePillTextActive,
+                    ]}>
+                      RIR
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+
+              <View style={styles.settingDivider} />
+
               {/* Features & Modules Toggles */}
               <View style={{ marginTop: spacing.md }}>
                 <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginBottom: spacing.xs, color: colors.textSecondary }]}>Enabled Modules</Text>
@@ -2123,18 +2177,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Pressable
                   style={styles.togglePill}
                   onPress={() => {
-                    Alert.alert(
-                      i18n.t('settings.restartRequired'),
-                      i18n.t('settings.restartMessage'),
-                      [
-                        {
-                          text: i18n.t('settings.ok'),
-                          onPress: () => {
-                            I18nManager.forceRTL(!I18nManager.isRTL);
-                          }
-                        }
-                      ]
-                    );
+                    const newLocale = I18nManager.isRTL ? 'en' : 'he';
+                    switchLanguage(newLocale);
                   }}
                   android_ripple={rippleTokens.surface}
                 >
@@ -2578,6 +2622,42 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             ))}
                           </View>
 
+                          {/* Visual Color Picker Grid */}
+                          <Text style={[styles.settingTitle, { fontSize: font.sizes.xs, fontFamily: font.semibold, color: colors.textSecondary, marginBottom: spacing.sm }]}>
+                            PICK A COLOR
+                          </Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md }}>
+                            {[
+                              '#4F8EF7', '#38BDF8', '#06B6D4', '#10B981',
+                              '#22C55E', '#84CC16', '#EAB308', '#F59E0B',
+                              '#F97316', '#EF4444', '#EC4899', '#D946EF',
+                              '#A855F7', '#7C5CFC', '#6366F1', '#8B5CF6',
+                              '#F43F5E', '#E11D48', '#BE123C', '#9F1239',
+                              '#FFFFFF', '#E2E8F0', '#94A3B8', '#64748B',
+                            ].map((color) => {
+                              const isSelected = customAccentColor === color;
+                              return (
+                                <Pressable
+                                  key={color}
+                                  style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 8,
+                                    backgroundColor: color,
+                                    borderWidth: isSelected ? 3 : 1,
+                                    borderColor: isSelected ? colors.textPrimary : colors.border,
+                                  }}
+                                  onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    if (setCustomAccentColor) setCustomAccentColor(color);
+                                  }}
+                                  android_ripple={rippleTokens.borderless}
+                                />
+                              );
+                            })}
+                          </View>
+
+                          {/* Hex Input (collapsible) */}
                           <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
                             <TextInput
                               style={{
@@ -2603,7 +2683,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                               }}
                               maxLength={7}
                             />
-                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: customAccentColor.startsWith('#') && customAccentColor.length === 7 ? customAccentColor : colors.accent, borderColor: colors.border, borderWidth: 1 }} />
+                            <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: customAccentColor.startsWith('#') && customAccentColor.length === 7 ? customAccentColor : colors.accent, borderColor: colors.border, borderWidth: 1 }} />
                           </View>
                         </View>
                       )}
@@ -3248,6 +3328,21 @@ const styles = StyleSheet.create({
   },
   togglePillTextActive: {
     color: colors.textInverse,
+  },
+  togglePillSegmented: {
+    flexDirection: 'row',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    overflow: 'hidden',
+  },
+  togglePillSegment: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  togglePillSegmentActive: {
+    backgroundColor: colors.accent,
   },
   themeCard: {
     flex: 1,
@@ -3937,8 +4032,10 @@ const styles = StyleSheet.create({
   quickStartCard: {
     borderColor: colors.border,
     borderWidth: 1,
-    backgroundColor: 'transparent',
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     marginBottom: spacing.lg,
+    overflow: 'hidden',
   },
   quickStartHeader: {
     flexDirection: 'row',
