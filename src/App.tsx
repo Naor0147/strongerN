@@ -1064,13 +1064,14 @@ export default function App() {
   };
 
   // Dynamic state modifiers
-  const handleAddExercise = (name: string, muscleGroup: string, equipment?: string) => {
+  const handleAddExercise = (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => {
     const newEx = {
       id: `ex-custom-${Date.now()}`,
       name,
       muscleGroup,
       weeklySets: 0,
       equipment: equipment || 'Other',
+      isUnilateral: isUnilateral || false,
     };
     setExercisesList(prev => [newEx, ...prev]);
     return newEx;
@@ -1084,11 +1085,16 @@ export default function App() {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, notes } : e));
   };
 
-  const handleAddTemplate = (name: string, exerciseNames: string[], folder?: string) => {
+  const handleUpdateExercise = (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => {
+    setExercisesList(prev => prev.map(e => e.id === id ? { ...e, name, muscleGroup, equipment, isUnilateral } : e));
+  };
+
+  const handleAddTemplate = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
     const newTpl = {
       id: `tpl-custom-${Date.now()}`,
       name,
       exercises: exerciseNames,
+      exercisesDetails,
       lastUsed: new Date(),
       folder,
     };
@@ -1099,8 +1105,8 @@ export default function App() {
     setTemplatesList(prev => prev.filter(t => t.id !== id));
   };
 
-  const handleUpdateTemplate = (id: string, name: string, exerciseNames: string[], folder?: string) => {
-    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder } : t));
+  const handleUpdateTemplate = (id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
+    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails } : t));
   };
 
   const handleReorderTemplates = (newTemplates: any[]) => {
@@ -1375,21 +1381,62 @@ export default function App() {
     name: string;
   } | null>(null);
 
-  const handleStartWorkout = (name: string, exerciseNames: string[]) => {
+  const handleStartWorkout = (name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
     
+    // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
+    let resolvedDetails = exercisesDetails;
+    if (!resolvedDetails || resolvedDetails.length === 0) {
+      const matchingTemplate = templatesList.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
+      if (matchingTemplate && matchingTemplate.exercisesDetails && matchingTemplate.exercisesDetails.length > 0) {
+        resolvedDetails = matchingTemplate.exercisesDetails;
+      }
+    }
+    
     // Map exercise names to exercise set objects
-    const mappedExercises = exerciseNames.map(exName => {
+    const mappedExercises = exerciseNames.map((exName, index) => {
+      const libraryEx = exercisesList.find(e => e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+      const isExUnilateral = libraryEx?.isUnilateral || false;
+
+      // Find the corresponding detail, preferably by index first, fallback to name lookup
+      const detail = (resolvedDetails?.[index] && resolvedDetails[index].name.toLowerCase().trim() === exName.toLowerCase().trim())
+        ? resolvedDetails[index]
+        : resolvedDetails?.find(d => d.name.toLowerCase().trim() === exName.toLowerCase().trim());
+      
+      if (detail && detail.sets && detail.sets.length > 0) {
+        return {
+          name: exName,
+          sets: detail.sets.length,
+          bestWeight: 60,
+          bestReps: 10,
+          superSetGroupId: detail.superSetGroupId,
+          setsDetails: detail.sets.map((s: any) => {
+            const unilateral = s.isUnilateral || isExUnilateral;
+            return {
+              weight: (s.weight ?? '0').toString(),
+              reps: (s.reps ?? '10').toString(),
+              completed: false,
+              category: s.category || 'S',
+              isUnilateral: unilateral,
+              leftWeight: unilateral ? (s.leftWeight !== undefined ? s.leftWeight.toString() : (s.weight ?? '60').toString()) : undefined,
+              leftReps: unilateral ? (s.leftReps !== undefined ? s.leftReps.toString() : (s.reps ?? '10').toString()) : undefined,
+              rightWeight: unilateral ? (s.rightWeight !== undefined ? s.rightWeight.toString() : (s.weight ?? '60').toString()) : undefined,
+              rightReps: unilateral ? (s.rightReps !== undefined ? s.rightReps.toString() : (s.reps ?? '10').toString()) : undefined,
+            };
+          }),
+        };
+      }
+
       let bestWeight = 60;
       let bestReps = 10;
       let sets: any = 3;
 
       const previousSession = sessionsList.find((s: any) => 
-        s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
+        s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim())
       );
       if (previousSession) {
-        const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+        const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
         if (found) {
           bestWeight = found.bestWeight || 60;
           bestReps = found.bestReps || 10;
@@ -1403,10 +1450,15 @@ export default function App() {
         bestWeight,
         bestReps,
         setsDetails: Array.from({ length: typeof sets === 'number' ? sets : 3 }).map(() => ({
-          weight: bestWeight,
-          reps: bestReps,
+          weight: bestWeight.toString(),
+          reps: bestReps.toString(),
           completed: false,
           category: 'S' as const,
+          isUnilateral: isExUnilateral,
+          leftWeight: isExUnilateral ? bestWeight.toString() : undefined,
+          leftReps: isExUnilateral ? bestReps.toString() : undefined,
+          rightWeight: isExUnilateral ? bestWeight.toString() : undefined,
+          rightReps: isExUnilateral ? bestReps.toString() : undefined,
         })),
       };
     });
@@ -1815,6 +1867,7 @@ export default function App() {
                   onAddExercise={handleAddExercise}
                   onDeleteExercise={handleDeleteExercise}
                   onUpdateExerciseNotes={handleUpdateExerciseNotes}
+                  onUpdateExercise={handleUpdateExercise}
                   sessions={sessionsList}
                 />
               )}

@@ -48,6 +48,20 @@ export interface Template {
   id: string;
   name: string;
   exercises: string[];
+  exercisesDetails?: {
+    name: string;
+    superSetGroupId?: string;
+    sets: {
+      weight: string;
+      reps: string;
+      category?: 'W' | 'S' | 'D' | 'F';
+      isUnilateral?: boolean;
+      leftWeight?: string;
+      leftReps?: string;
+      rightWeight?: string;
+      rightReps?: string;
+    }[];
+  }[];
   lastUsed: Date;
   folder?: string;
 }
@@ -60,6 +74,7 @@ export interface Exercise {
   weeklySets: number;
   notes?: string;
   equipment?: string;
+  isUnilateral?: boolean;
 }
 
 export interface MeasureHistoryEntry {

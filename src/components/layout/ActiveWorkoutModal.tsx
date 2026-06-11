@@ -1279,85 +1279,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   )}
                 </Pressable>
 
-                {/* Timer Sub-menu */}
-                {isTimerSubMenuVisible && isTimerActive && (
-                  <View style={styles.timerSubMenu}>
-                    <View style={styles.timerSubMenuInner}>
-                      <View style={styles.timerSubMenuTimerDisplay}>
-                        <Ionicons name="timer-outline" size={16} color={colors.accent} />
-                        <Text style={styles.timerSubMenuTimerText}>{restTimeRemaining}s</Text>
-                        <Text style={styles.timerSubMenuTimerLabel}>REST</Text>
-                      </View>
-                      
-                      <View style={styles.timerSubMenuDivider} />
-                      
-                      <View style={styles.timerSubMenuButtons}>
-                        <Pressable
-                          style={styles.timerSubMenuBtn}
-                          onPress={() => {
-                            if (restTimerEndTarget.current) {
-                              restTimerEndTarget.current -= 30000;
-                            }
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Text style={styles.timerSubMenuBtnText}>-30</Text>
-                        </Pressable>
-                        
-                        <Pressable
-                          style={styles.timerSubMenuBtn}
-                          onPress={() => {
-                            if (restTimerEndTarget.current) {
-                              restTimerEndTarget.current -= 10000;
-                            }
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Text style={styles.timerSubMenuBtnText}>-10</Text>
-                        </Pressable>
-                        
-                        <Pressable
-                          style={[styles.timerSubMenuBtn, styles.timerSubMenuStopBtn]}
-                          onPress={() => {
-                            setIsTimerActive(false);
-                            setIsTimerSubMenuVisible(false);
-                            restTimerEndTarget.current = null;
-                            Notifications.cancelAllScheduledNotificationsAsync();
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Ionicons name="stop" size={16} color="#fff" style={{ marginRight: 4 }} />
-                          <Text style={[styles.timerSubMenuBtnText, styles.timerSubMenuStopBtnText]}>Stop</Text>
-                        </Pressable>
-                        
-                        <Pressable
-                          style={styles.timerSubMenuBtn}
-                          onPress={() => {
-                            if (restTimerEndTarget.current) {
-                              restTimerEndTarget.current += 10000;
-                            }
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Text style={styles.timerSubMenuBtnText}>+10</Text>
-                        </Pressable>
-                        
-                        <Pressable
-                          style={styles.timerSubMenuBtn}
-                          onPress={() => {
-                            if (restTimerEndTarget.current) {
-                              restTimerEndTarget.current += 30000;
-                            }
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Text style={styles.timerSubMenuBtnText}>+30</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-                )}
-
                 {isPlateCalculatorEnabled && (
                   <Pressable
                     onPress={() => setIsPlateCalcVisible(true)}
@@ -1399,6 +1320,76 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               </View>
             </View>
+
+            {/* Timer Sub-menu */}
+            {isTimerSubMenuVisible && isTimerActive && (
+              <View style={styles.timerSubMenu}>
+                <View style={styles.timerSubMenuInner}>
+                  <View style={styles.timerSubMenuButtons}>
+                    <Pressable
+                      style={styles.timerSubMenuBtn}
+                      onPress={() => {
+                        if (restTimerEndTarget.current) {
+                          restTimerEndTarget.current -= 30000;
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={styles.timerSubMenuBtnText}>-30</Text>
+                    </Pressable>
+                    
+                    <Pressable
+                      style={styles.timerSubMenuBtn}
+                      onPress={() => {
+                        if (restTimerEndTarget.current) {
+                          restTimerEndTarget.current -= 10000;
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={styles.timerSubMenuBtnText}>-10</Text>
+                    </Pressable>
+                    
+                    <Pressable
+                      style={[styles.timerSubMenuBtn, styles.timerSubMenuStopBtn]}
+                      onPress={() => {
+                        setIsTimerActive(false);
+                        setIsTimerSubMenuVisible(false);
+                        restTimerEndTarget.current = null;
+                        Notifications.cancelAllScheduledNotificationsAsync();
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Ionicons name="stop" size={22} color="#fff" />
+                    </Pressable>
+                    
+                    <Pressable
+                      style={styles.timerSubMenuBtn}
+                      onPress={() => {
+                        if (restTimerEndTarget.current) {
+                          restTimerEndTarget.current += 10000;
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={styles.timerSubMenuBtnText}>+10</Text>
+                    </Pressable>
+                    
+                    <Pressable
+                      style={styles.timerSubMenuBtn}
+                      onPress={() => {
+                        if (restTimerEndTarget.current) {
+                          restTimerEndTarget.current += 30000;
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={styles.timerSubMenuBtnText}>+30</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
             <ScrollView
@@ -2130,7 +2121,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.inputCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={set.leftWeight || set.weight}
+                  value={String(set.leftWeight || set.weight || '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
@@ -2146,7 +2137,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.textCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={set.leftReps || set.reps}
+                  value={String(set.leftReps || set.reps || '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
@@ -2167,7 +2158,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.inputCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={set.rightWeight || set.weight}
+                  value={String(set.rightWeight || set.weight || '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
@@ -2183,7 +2174,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.textCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={set.rightReps || set.reps}
+                  value={String(set.rightReps || set.reps || '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
@@ -2281,7 +2272,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               isWeightFocused && { borderColor: colors.accent },
             ]}
             showSoftInputOnFocus={false}
-            value={set.weight}
+            value={String(set.weight || '')}
             onFocus={() => onFocus(exIdx, setIdx, 'weight')}
             placeholder="0"
             placeholderTextColor={colors.textMuted}
@@ -2306,7 +2297,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 set.completed && styles.textCompleted,
               ]}
               showSoftInputOnFocus={false}
-              value={set.reps}
+              value={String(set.reps || '')}
               onFocus={() => onFocus(exIdx, setIdx, 'reps')}
               placeholder="0"
               placeholderTextColor={colors.textMuted}
@@ -2397,71 +2388,47 @@ const styles = StyleSheet.create({
   },
   timerSubMenu: {
     position:        'absolute',
-    top:             44,
-    left:            -16,
-    right:           -16,
+    top:             56,
+    left:            0,
+    right:           0,
     zIndex:          1000,
     ...(shadow.card as object),
   },
   timerSubMenuInner: {
     flexDirection:   'row',
     alignItems:      'center',
-    backgroundColor: colors.surface2,
-    borderTopWidth:  1,
-    borderTopColor:  colors.border,
+    backgroundColor: colors.bg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  timerSubMenuTimerDisplay: {
-    flexDirection:   'column',
-    alignItems:      'center',
-    justifyContent:  'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    minWidth:        70,
-  },
-  timerSubMenuTimerText: {
-    color:           colors.accent,
-    fontSize:        font.sizes.xl,
-    fontFamily:      font.bold,
-    lineHeight:      24,
-  },
-  timerSubMenuTimerLabel: {
-    color:           colors.textMuted,
-    fontSize:        9,
-    fontFamily:      font.bold,
-    letterSpacing:   1.5,
-    marginTop:       2,
-  },
-  timerSubMenuDivider: {
-    width:           1,
-    height:          40,
-    backgroundColor: colors.border,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   timerSubMenuButtons: {
     flex:            1,
     flexDirection:   'row',
-    alignItems:      'stretch',
+    alignItems:      'center',
+    justifyContent:  'space-between',
+    gap:             spacing.sm,
   },
   timerSubMenuBtn: {
     flex:            1,
-    flexDirection:   'row',
+    height:          64,
+    borderRadius:    radius.sm,
+    backgroundColor: colors.surface,
+    borderWidth:     1,
+    borderColor:     colors.border,
     alignItems:      'center',
     justifyContent:  'center',
-    paddingVertical: 14,
-    borderRightWidth: 1,
-    borderRightColor: colors.border,
   },
   timerSubMenuBtnText: {
     color:           colors.textPrimary,
-    fontSize:        font.sizes.base,
+    fontSize:        font.sizes.md,
     fontFamily:      font.bold,
   },
   timerSubMenuStopBtn: {
     backgroundColor: colors.error,
-  },
-  timerSubMenuStopBtnText: {
-    color:           '#FFFFFF',
+    borderColor:     colors.error,
+    borderRadius:    radius.sm,
   },
   minimizeBtn: {
     padding: spacing.xs,

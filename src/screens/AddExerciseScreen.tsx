@@ -50,7 +50,7 @@ export interface AddExerciseScreenProps {
   exercises: Exercise[];
   onConfirm: (exerciseNames: string[]) => void;
   onClose: () => void;
-  onAddCustomExercise?: (name: string, muscle: string, equipment: string) => any;
+  onAddCustomExercise?: (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   /** If provided (replace mode), single-tap selects immediately */
   singleSelect?: boolean;
   title?: string;
@@ -79,6 +79,8 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   const [customName, setCustomName]     = useState('');
   const [customMuscle, setCustomMuscle] = useState('Chest');
   const [customEquip, setCustomEquip]   = useState('Barbell');
+  const [isUnilateral, setIsUnilateral] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Reset state when opened
   React.useEffect(() => {
@@ -89,6 +91,8 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
       setSelectedNames([]);
       setIsCreatingCustom(false);
       setIsFilterVisible(false);
+      setIsUnilateral(false);
+      setShowAdvanced(false);
     }
   }, [visible]);
 
@@ -181,7 +185,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     if (!customName.trim()) return;
     let newExName = customName.trim();
     if (onAddCustomExercise) {
-      const newEx = onAddCustomExercise(newExName, customMuscle, customEquip);
+      const newEx = onAddCustomExercise(newExName, customMuscle, customEquip, isUnilateral);
       if (newEx) newExName = newEx.name;
     }
     if (singleSelect) {
@@ -191,6 +195,8 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     setSelectedNames(prev => [...prev, newExName]);
     setIsCreatingCustom(false);
     setCustomName('');
+    setIsUnilateral(false);
+    setShowAdvanced(false);
   };
 
   const hasFilters = selectedMuscles.length > 0 || selectedEquipment.length > 0;
@@ -389,6 +395,50 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   );
                 })}
               </View>
+
+              {/* Advanced Settings Section */}
+              <Pressable
+                onPress={() => setShowAdvanced(v => !v)}
+                style={styles.advancedHeader}
+                android_ripple={rippleTokens.surface}
+              >
+                <Text style={styles.advancedHeaderTitle}>ADVANCED SETTINGS</Text>
+                <Ionicons
+                  name={showAdvanced ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+
+              {showAdvanced && (
+                <View style={styles.advancedContent}>
+                  <Text style={styles.formLabel}>EXERCISE MODE</Text>
+                  <View style={styles.chipGrid}>
+                    <Pressable
+                      onPress={() => setIsUnilateral(false)}
+                      style={[
+                        styles.gridChip,
+                        !isUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                      ]}
+                    >
+                      <Text style={[styles.gridChipText, !isUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                        BILATERAL (DEFAULT)
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setIsUnilateral(true)}
+                      style={[
+                        styles.gridChip,
+                        isUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                      ]}
+                    >
+                      <Text style={[styles.gridChipText, isUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                        UNILATERAL (SINGLE SIDE)
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
 
               <View style={styles.formBtnRow}>
                 <Pressable
@@ -840,5 +890,27 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.sm,
     fontFamily: font.bold,
     letterSpacing: 0.8,
+  },
+  advancedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  advancedHeaderTitle: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  advancedContent: {
+    paddingVertical: spacing.md,
+    rowGap: spacing.sm,
   },
 });

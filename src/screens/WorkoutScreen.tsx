@@ -30,10 +30,10 @@ import RoutineEditorModal from '../components/layout/RoutineEditorModal';
 interface WorkoutScreenProps {
   templates:         Template[];
   exercises:         Exercise[];
-  onStartWorkout?:   (name: string, exercises: string[]) => void;
-  onAddTemplate?:    (name: string, exercises: string[], folder?: string) => void;
+  onStartWorkout?:   (name: string, exercises: string[], exercisesDetails?: any[]) => void;
+  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[]) => void;
   onDeleteTemplate?: (id: string) => void;
-  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string) => void;
+  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[]) => void;
   onReorderTemplates?: (newTemplates: Template[]) => void;
   folders?:          string[];
   onAddFolder?:      (name: string) => void;
@@ -61,7 +61,7 @@ function timeAgo(date: Date): string {
 // ─── Template Card ────────────────────────────────────────────────
 interface TemplateCardProps {
   template: Template;
-  onStart?: (name: string, exercises: string[]) => void;
+  onStart?: (name: string, exercises: string[], exercisesDetails?: any[]) => void;
   onMenuPress: (template: Template) => void;
   dragHandlers?: any;
 }
@@ -69,7 +69,7 @@ interface TemplateCardProps {
 const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStart, onMenuPress, dragHandlers }) => (
   <Card style={styles.tplCard} padding={0} testID={`workout.template.${template.id}`}>
     <PressableRow
-      onPress={() => onStart && onStart(template.name, template.exercises)}
+      onPress={() => onStart && onStart(template.name, template.exercises, template.exercisesDetails)}
       padding={{ vertical: spacing.md, horizontal: spacing.md }}
       ripple={rippleTokens.surface}
       accessibilityLabel={`Start ${template.name}`}
@@ -199,9 +199,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   const [routineEditorInitial, setRoutineEditorInitial] = useState<{
     name: string;
     exercises: string[];
+    exercisesDetails?: any[];
     folder: string;
     editingId: string | null;
-  }>({ name: '', exercises: [], folder: '', editingId: null });
+  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null });
 
   // Filter templates list by folder and search
   const filteredTemplates = useMemo(() => {
@@ -274,19 +275,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, []);
 
   const handleOpenCreator = () => {
-    setRoutineEditorInitial({ name: '', exercises: [], folder: '', editingId: null });
+    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null });
     setIsRoutineEditorVisible(true);
   };
 
-  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string) => {
+  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
     const folderVal = folder || undefined;
     if (routineEditorInitial.editingId) {
       if (onUpdateTemplate) {
-        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal);
+        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails);
       }
     } else {
       if (onAddTemplate) {
-        onAddTemplate(name, exerciseNames, folderVal);
+        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails);
       }
     }
   };
@@ -323,6 +324,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     setRoutineEditorInitial({
       name: tpl.name,
       exercises: tpl.exercises,
+      exercisesDetails: tpl.exercisesDetails || [],
       folder: tpl.folder || '',
       editingId: tpl.id,
     });
@@ -935,6 +937,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         visible={isRoutineEditorVisible}
         initialName={routineEditorInitial.name}
         initialExercises={routineEditorInitial.exercises}
+        initialExercisesDetails={routineEditorInitial.exercisesDetails}
         initialFolder={routineEditorInitial.folder}
         editingId={routineEditorInitial.editingId}
         exercises={exercises}
@@ -1109,10 +1112,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   );
 };
 
-const QuickStartCard: React.FC<{ template: Template; onStart?: (name: string, exercises: string[]) => void }> = React.memo(({ template, onStart }) => (
+const QuickStartCard: React.FC<{ template: Template; onStart?: (name: string, exercises: string[], exercisesDetails?: any[]) => void }> = React.memo(({ template, onStart }) => (
   <Card padding={0} variant="active" style={styles.quickCard} testID="workout.quick-start">
     <PressableRow
-      onPress={() => onStart && onStart(template.name, template.exercises)}
+      onPress={() => onStart && onStart(template.name, template.exercises, template.exercisesDetails)}
       padding={{ vertical: spacing.md, horizontal: spacing.lg }}
       ripple={rippleTokens.accent}
       accessibilityLabel={`Quick start ${template.name}`}

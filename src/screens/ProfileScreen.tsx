@@ -92,7 +92,7 @@ interface ProfileScreenProps {
   setIsHealthSyncEnabled:    (val: boolean) => void;
   isLiveHeartRateEnabled:     boolean;
   setIsLiveHeartRateEnabled: (val: boolean) => void;
-  onStartWorkout?:            (name: string, exerciseNames: string[]) => void;
+  onStartWorkout?:            (name: string, exerciseNames: string[], exercisesDetails?: any[]) => void;
   templates?:                 Template[];
   activeProgramId?:           string | null;
   isPlateCalculatorEnabled?:  boolean;
@@ -1210,7 +1210,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <Pressable
           onPress={() => {
             if (onStartWorkout) {
-              onStartWorkout(nextWorkout.name, nextWorkout.exercises);
+              onStartWorkout(nextWorkout.name, nextWorkout.exercises, nextWorkout.exercisesDetails);
             }
           }}
           android_ripple={rippleTokens.accent}

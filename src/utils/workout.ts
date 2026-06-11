@@ -3,6 +3,7 @@ import { mockPrograms, Template } from '../data/mockData';
 export interface NextWorkoutSelection {
   name: string;
   exercises: string[];
+  exercisesDetails?: any[];
   type: 'Active Program' | 'Routine Split' | 'Quick Start';
   badgeColor: string;
 }
@@ -82,6 +83,7 @@ export const getNextWorkout = (
     return {
       name: selectedTemplate.name,
       exercises: selectedTemplate.exercises,
+      exercisesDetails: selectedTemplate.exercisesDetails,
       type: 'Routine Split',
       badgeColor: colors.highlight,
     };

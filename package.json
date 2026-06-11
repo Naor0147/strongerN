@@ -50,7 +50,13 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "jest"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "health-check": "node scripts/health-check.js",
+    "self-check": "npm run typecheck && npm test && echo '✅ All checks passed!'"
   },
   "private": true
 }

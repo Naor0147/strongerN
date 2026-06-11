@@ -26,6 +26,7 @@ exports[`UI Primitives Snapshot Tests Badge Component renders customized badge c
       undefined,
     ]
   }
+  testID="Anonymous-0-Badge"
 >
   <Text
     style={
@@ -40,6 +41,7 @@ exports[`UI Primitives Snapshot Tests Badge Component renders customized badge c
         },
       ]
     }
+    testID="Badge-0-Text"
   >
     PR
   </Text>
@@ -72,6 +74,7 @@ exports[`UI Primitives Snapshot Tests Badge Component renders default badge corr
       undefined,
     ]
   }
+  testID="Anonymous-0-Badge"
 >
   <Text
     style={
@@ -86,6 +89,7 @@ exports[`UI Primitives Snapshot Tests Badge Component renders default badge corr
         },
       ]
     }
+    testID="Badge-0-Text"
   >
     WORKOUT
   </Text>
@@ -106,6 +110,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
       },
     ]
   }
+  testID="BarChart-0-View"
 >
   <View
     style={
@@ -120,6 +125,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
         },
       ]
     }
+    testID="BarChart-1-View"
   >
     <Text
       style={
@@ -131,6 +137,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "width": 22,
         }
       }
+      testID="val-0-Text-0"
     >
       6
     </Text>
@@ -144,6 +151,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "width": 22,
         }
       }
+      testID="val-0-Text-1"
     >
       3
     </Text>
@@ -157,6 +165,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "width": 22,
         }
       }
+      testID="val-0-Text-2"
     >
       0
     </Text>
@@ -175,6 +184,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
         },
       ]
     }
+    testID="BarChart-2-View"
   >
     <View
       style={
@@ -185,6 +195,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "marginHorizontal": 3,
         }
       }
+      testID="item-0-View-Mon"
     >
       <View
         style={
@@ -205,6 +216,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             },
           ]
         }
+        testID="item-1-View"
       >
         <View
           style={
@@ -227,6 +239,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-0"
         >
           <LinearGradient
             colors={
@@ -247,6 +260,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -270,6 +284,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-1"
         >
           <LinearGradient
             colors={
@@ -290,6 +305,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -313,6 +329,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-2"
         >
           <LinearGradient
             colors={
@@ -333,6 +350,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
       </View>
@@ -347,6 +365,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             "width": "100%",
           }
         }
+        testID="item-2-Text"
       >
         Mon
       </Text>
@@ -360,6 +379,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "marginHorizontal": 3,
         }
       }
+      testID="item-0-View-Tue"
     >
       <View
         style={
@@ -380,6 +400,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             },
           ]
         }
+        testID="item-1-View"
       >
         <View
           style={
@@ -402,6 +423,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-0"
         >
           <LinearGradient
             colors={
@@ -422,6 +444,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -445,6 +468,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-1"
         >
           <LinearGradient
             colors={
@@ -465,6 +489,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -488,6 +513,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-2"
         >
           <LinearGradient
             colors={
@@ -508,6 +534,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -531,6 +558,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-3"
         >
           <LinearGradient
             colors={
@@ -551,6 +579,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -574,6 +603,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-4"
         >
           <LinearGradient
             colors={
@@ -594,6 +624,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
       </View>
@@ -608,6 +639,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             "width": "100%",
           }
         }
+        testID="item-2-Text"
       >
         Tue
       </Text>
@@ -621,6 +653,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
           "marginHorizontal": 3,
         }
       }
+      testID="item-0-View-Wed"
     >
       <View
         style={
@@ -641,6 +674,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             },
           ]
         }
+        testID="item-1-View"
       >
         <View
           style={
@@ -663,6 +697,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-0"
         >
           <LinearGradient
             colors={
@@ -683,6 +718,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
         <View
@@ -706,6 +742,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               },
             ]
           }
+          testID="_-0-Animated.View-1"
         >
           <LinearGradient
             colors={
@@ -726,6 +763,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
                 "y": 0,
               }
             }
+            testID="_-1-LinearGradient"
           />
         </View>
       </View>
@@ -740,6 +778,7 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
             "width": "100%",
           }
         }
+        testID="item-2-Text"
       >
         Wed
       </Text>
@@ -757,6 +796,7 @@ exports[`UI Primitives Snapshot Tests Card Component renders active variant card
         "borderColor": "#252D3A",
         "borderRadius": 16,
         "borderWidth": 1,
+        "overflow": "hidden",
         "shadowColor": "#000",
         "shadowOffset": {
           "height": 4,
@@ -775,8 +815,11 @@ exports[`UI Primitives Snapshot Tests Card Component renders active variant card
       undefined,
     ]
   }
+  testID="Anonymous-0-Card"
 >
-  <View />
+  <View
+    testID="Anonymous-1-View"
+  />
 </View>
 `;
 
@@ -789,6 +832,7 @@ exports[`UI Primitives Snapshot Tests Card Component renders default variant car
         "borderColor": "#252D3A",
         "borderRadius": 16,
         "borderWidth": 1,
+        "overflow": "hidden",
         "shadowColor": "#000",
         "shadowOffset": {
           "height": 4,
@@ -804,8 +848,11 @@ exports[`UI Primitives Snapshot Tests Card Component renders default variant car
       undefined,
     ]
   }
+  testID="Anonymous-0-Card"
 >
-  <View />
+  <View
+    testID="Anonymous-1-View"
+  />
 </View>
 `;
 
@@ -818,6 +865,7 @@ exports[`UI Primitives Snapshot Tests Card Component renders highlight variant c
         "borderColor": "#252D3A",
         "borderRadius": 16,
         "borderWidth": 1,
+        "overflow": "hidden",
         "shadowColor": "#000",
         "shadowOffset": {
           "height": 4,
@@ -836,7 +884,10 @@ exports[`UI Primitives Snapshot Tests Card Component renders highlight variant c
       undefined,
     ]
   }
+  testID="Anonymous-0-Card"
 >
-  <View />
+  <View
+    testID="Anonymous-1-View"
+  />
 </View>
 `;

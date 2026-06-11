@@ -30,9 +30,10 @@ const HEADER_HEIGHT = 48;
 
 interface ExercisesScreenProps {
   exercises: Exercise[];
-  onAddExercise?: (name: string, muscleGroup: string, equipment: string) => void;
+  onAddExercise?: (name: string, muscleGroup: string, equipment: string, isUnilateral?: boolean) => void;
   onDeleteExercise?: (id: string) => void;
   onUpdateExerciseNotes?: (id: string, notes?: string) => void;
+  onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
   sessions?: any[];
 }
 
@@ -164,6 +165,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   onAddExercise, 
   onDeleteExercise, 
   onUpdateExerciseNotes,
+  onUpdateExercise,
   sessions = [] 
 }) => {
   const insets = useSafeAreaInsets();
@@ -260,6 +262,17 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState('Chest');
   const [newExEquipment, setNewExEquipment] = useState('Barbell');
+  const [newExUnilateral, setNewExUnilateral] = useState(false);
+  const [newExShowAdvanced, setNewExShowAdvanced] = useState(false);
+
+  // Edit Exercise Form States
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editExId, setEditExId] = useState('');
+  const [editExName, setEditExName] = useState('');
+  const [editExMuscle, setEditExMuscle] = useState('Chest');
+  const [editExEquipment, setEditExEquipment] = useState('Barbell');
+  const [editExUnilateral, setEditExUnilateral] = useState(false);
+  const [editExShowAdvanced, setEditExShowAdvanced] = useState(false);
 
   // Exercise history and PRs memos
   const exerciseHistory = useMemo(() => {
@@ -449,12 +462,26 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       return;
     }
     if (onAddExercise) {
-      onAddExercise(newExName.trim(), newExMuscle, newExEquipment);
+      onAddExercise(newExName.trim(), newExMuscle, newExEquipment, newExUnilateral);
       setNewExName('');
       setNewExMuscle('Chest');
       setNewExEquipment('Barbell');
+      setNewExUnilateral(false);
+      setNewExShowAdvanced(false);
       setIsAddModalVisible(false);
       Alert.alert('Success', `Custom exercise "${newExName.trim()}" added!`);
+    }
+  };
+
+  const handleEditSubmit = () => {
+    if (!editExName.trim()) {
+      Alert.alert('Error', 'Please enter an exercise name.');
+      return;
+    }
+    if (onUpdateExercise) {
+      onUpdateExercise(editExId, editExName.trim(), editExMuscle, editExEquipment, editExUnilateral);
+      setIsEditModalVisible(false);
+      Alert.alert('Success', `Exercise "${editExName.trim()}" updated successfully!`);
     }
   };
 
@@ -735,6 +762,50 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                 })}
               </View>
 
+              {/* Advanced Settings Section */}
+              <Pressable
+                onPress={() => setNewExShowAdvanced(v => !v)}
+                style={styles.advancedHeader}
+                android_ripple={rippleTokens.surface}
+              >
+                <Text style={styles.advancedHeaderTitle}>ADVANCED SETTINGS</Text>
+                <Ionicons
+                  name={newExShowAdvanced ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+
+              {newExShowAdvanced && (
+                <View style={styles.advancedContent}>
+                  <Text style={styles.inputLabel}>EXERCISE MODE</Text>
+                  <View style={styles.gridContainer}>
+                    <Pressable
+                      onPress={() => setNewExUnilateral(false)}
+                      style={[
+                        styles.gridItem,
+                        !newExUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                      ]}
+                    >
+                      <Text style={[styles.gridItemText, !newExUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                        BILATERAL (DEFAULT)
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setNewExUnilateral(true)}
+                      style={[
+                        styles.gridItem,
+                        newExUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                      ]}
+                    >
+                      <Text style={[styles.gridItemText, newExUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                        UNILATERAL (SINGLE SIDE)
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
               <Pressable
                 style={styles.submitBtn}
                 onPress={handleAddSubmit}
@@ -746,6 +817,144 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Modal: Edit Custom Exercise */}
+      {isEditModalVisible && (
+        <Modal
+          visible={isEditModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setIsEditModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>EDIT EXERCISE</Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
+                  onPress={() => setIsEditModalVisible(false)}
+                />
+              </View>
+
+              <ScrollView contentContainerStyle={styles.modalScroll}>
+                <Text style={styles.inputLabel}>EXERCISE NAME</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Incline Dumbbell Press"
+                  placeholderTextColor={colors.textMuted}
+                  value={editExName}
+                  onChangeText={setEditExName}
+                  keyboardAppearance="dark"
+                  maxLength={40}
+                />
+
+                <Text style={styles.inputLabel}>PRIMARY MUSCLE GROUP</Text>
+                <View style={styles.gridContainer}>
+                  {MUSCLE_GROUPS.map(muscle => {
+                    const isSelected = editExMuscle === muscle;
+                    const muscleColor = getMuscleColor(muscle);
+                    return (
+                      <Pressable
+                        key={muscle}
+                        onPress={() => setEditExMuscle(muscle)}
+                        style={[
+                          styles.gridItem,
+                          isSelected && {
+                            backgroundColor: muscleColor + '20',
+                            borderColor: muscleColor,
+                          }
+                        ]}
+                      >
+                        <Text style={[styles.gridItemText, isSelected && { color: colors.textPrimary, fontFamily: font.bold }]}>
+                          {muscle.toUpperCase()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.inputLabel}>EQUIPMENT TYPE</Text>
+                <View style={styles.gridContainer}>
+                  {EQUIPMENT_TYPES.map(eq => {
+                    const isSelected = editExEquipment === eq;
+                    return (
+                      <Pressable
+                        key={eq}
+                        onPress={() => setEditExEquipment(eq)}
+                        style={[
+                          styles.gridItem,
+                          isSelected && {
+                            backgroundColor: colors.accent + '20',
+                            borderColor: colors.accent,
+                          }
+                        ]}
+                      >
+                        <Text style={[styles.gridItemText, isSelected && { color: colors.textPrimary, fontFamily: font.bold }]}>
+                          {eq.toUpperCase()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Advanced Settings Section */}
+                <Pressable
+                  onPress={() => setEditExShowAdvanced(v => !v)}
+                  style={styles.advancedHeader}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={styles.advancedHeaderTitle}>ADVANCED SETTINGS</Text>
+                  <Ionicons
+                    name={editExShowAdvanced ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </Pressable>
+
+                {editExShowAdvanced && (
+                  <View style={styles.advancedContent}>
+                    <Text style={styles.inputLabel}>EXERCISE MODE</Text>
+                    <View style={styles.gridContainer}>
+                      <Pressable
+                        onPress={() => setEditExUnilateral(false)}
+                        style={[
+                          styles.gridItem,
+                          !editExUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                        ]}
+                      >
+                        <Text style={[styles.gridItemText, !editExUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                          BILATERAL (DEFAULT)
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setEditExUnilateral(true)}
+                        style={[
+                          styles.gridItem,
+                          editExUnilateral && { backgroundColor: colors.accentGlow, borderColor: colors.accent },
+                        ]}
+                      >
+                        <Text style={[styles.gridItemText, editExUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
+                          UNILATERAL (SINGLE SIDE)
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                <Pressable
+                  style={styles.submitBtn}
+                  onPress={handleEditSubmit}
+                  android_ripple={rippleTokens.accent}
+                >
+                  <Text style={styles.submitBtnText}>SAVE CHANGES</Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Modal 2: Exercise Details */}
       {selectedExercise && (
@@ -1013,16 +1222,35 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                 ) : null}
 
                 {contextMenuExercise.id.startsWith('ex-custom-') ? (
-                  <Pressable
-                    style={styles.menuItem}
-                    onPress={() => {
-                      setIsContextMenuVisible(false);
-                      handleDeletePress(contextMenuExercise);
-                    }}
-                  >
-                    <Ionicons name="trash-bin-outline" size={20} color={colors.error} />
-                    <Text style={[styles.menuItemText, { color: colors.error }]}>Delete Custom Exercise</Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        setEditExId(contextMenuExercise.id);
+                        setEditExName(contextMenuExercise.name);
+                        setEditExMuscle(contextMenuExercise.muscleGroup);
+                        setEditExEquipment(contextMenuExercise.equipment || 'Other');
+                        setEditExUnilateral(contextMenuExercise.isUnilateral || false);
+                        setEditExShowAdvanced(false);
+                        setIsContextMenuVisible(false);
+                        setIsEditModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="settings-outline" size={20} color={colors.accent} />
+                      <Text style={styles.menuItemText}>Edit Exercise Config</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        setIsContextMenuVisible(false);
+                        handleDeletePress(contextMenuExercise);
+                      }}
+                    >
+                      <Ionicons name="trash-bin-outline" size={20} color={colors.error} />
+                      <Text style={[styles.menuItemText, { color: colors.error }]}>Delete Custom Exercise</Text>
+                    </Pressable>
+                  </>
                 ) : null}
               </View>
             </Pressable>
@@ -1416,6 +1644,28 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.sm,
     fontFamily: font.bold,
     letterSpacing: 1,
+  },
+  advancedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  advancedHeaderTitle: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 1,
+  },
+  advancedContent: {
+    paddingVertical: spacing.md,
+    rowGap: spacing.sm,
   },
 
   // Details Modal
