@@ -614,17 +614,7 @@ export default function App() {
         if (backupData) {
           backupFoundAndMerged = true;
 
-          // 1. Merge User Profile details (keep highest total workouts)
-          const mergedUser = {
-            ...user,
-            name: name || user.name,
-            avatarUri: avatarUri || user.avatarUri,
-            totalWorkouts: Math.max(user.totalWorkouts || 0, backupData.user?.totalWorkouts || 0),
-            isPro: user.isPro || backupData.user?.isPro || false,
-          };
-          setUser(mergedUser);
-
-          // 2. Merge Sessions (deduplicating by ID)
+          // 1. Merge Sessions (deduplicating by ID)
           const localSessions = sessionsList || [];
           const remoteSessions = backupData.sessionsList || [];
           const mergedSessions = [...localSessions];
@@ -638,6 +628,16 @@ export default function App() {
           });
           mergedSessions.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
           setSessionsList(mergedSessions);
+
+          // 2. Merge User Profile details
+          const mergedUser = {
+            ...user,
+            name: name || user.name,
+            avatarUri: avatarUri || user.avatarUri,
+            totalWorkouts: mergedSessions.length,
+            isPro: user.isPro || backupData.user?.isPro || false,
+          };
+          setUser(mergedUser);
 
           // 3. Merge Templates (deduplicating by ID)
           const localTemplates = templatesList || [];
@@ -957,7 +957,12 @@ export default function App() {
   /** Shared logic to apply any parsed backup object (used by both paste-import and file-restore) */
   const applyBackupData = (parsed: any): boolean => {
     try {
-      if (parsed.user) setUser(parsed.user);
+      if (parsed.user) {
+        setUser({
+          ...parsed.user,
+          totalWorkouts: parsed.sessionsList ? parsed.sessionsList.length : (parsed.user.totalWorkouts || 0)
+        });
+      }
       if (parsed.sessionsList) {
         setSessionsList(parsed.sessionsList.map((s: any) => ({
           ...s,
@@ -1032,7 +1037,7 @@ export default function App() {
         setSessionsList(prev => [...importedSessions, ...prev]);
         setUser(prev => ({
           ...prev,
-          totalWorkouts: prev.totalWorkouts + importedSessions.length
+          totalWorkouts: sessionsList.length + importedSessions.length
         }));
       }
       
@@ -1069,7 +1074,7 @@ export default function App() {
       id: `ex-custom-${Date.now()}`,
       name,
       muscleGroup,
-      weeklySets: 0,
+      allTimeSets: 0,
       equipment: equipment || 'Other',
       isUnilateral: isUnilateral || false,
     };
@@ -1562,7 +1567,7 @@ export default function App() {
         prs: summary.totalVolume > 0 ? 1 : 0,
       };
       updatedSessions = [newSession, ...sessionsList];
-      nextUser.totalWorkouts += 1;
+      nextUser.totalWorkouts = updatedSessions.length;
     }
 
     setSessionsList(updatedSessions);

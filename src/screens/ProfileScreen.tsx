@@ -1158,7 +1158,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], width: '100%' }}>
           {/* ── Welcome Empty State / Load Demo Data Card ────────── */}
-          {user?.totalWorkouts === 0 && !googleUser && authMode === 'guest' && isDeveloperModeEnabled && (
+          {sessions?.length === 0 && !googleUser && authMode === 'guest' && isDeveloperModeEnabled && (
             <Card padding={spacing.lg} style={styles.demoCard}>
               <View style={styles.demoHeader}>
                 <View style={[styles.demoIconCircle, { backgroundColor: colors.accent + '22' }]}>
@@ -1199,7 +1199,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flexWrap: 'wrap' }}>
                 <View style={styles.heroMeta}>
                   <Ionicons name="trophy-outline" size={13} color={colors.accent} />
-                  <Text style={styles.heroMetaText}>{user?.totalWorkouts ?? 0} workouts completed</Text>
+                  <Text style={styles.heroMetaText}>{sessions?.length ?? 0} workouts completed</Text>
                 </View>
               </View>
             </View>
@@ -2901,7 +2901,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             `[Active Profile State]\n` +
                             `• Name: ${user?.name || 'N/A'}\n` +
                             `• Avatar: ${user?.avatarUri ? 'Present' : 'N/A'}\n` +
-                            `• Total Workouts: ${user?.totalWorkouts ?? 0}\n\n` +
+                            `• Total Workouts: ${sessions?.length ?? 0}\n\n` +
                             `[Active Google User]\n` +
                             `• Name: ${googleUser?.name || 'N/A'}\n` +
                             `• Email: ${googleUser?.email || 'N/A'}\n` +

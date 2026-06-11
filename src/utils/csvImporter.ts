@@ -294,7 +294,7 @@ export function importStrongCSV(
           name: rawExName.trim(),
           muscleGroup: guessMuscleGroup(rawExName),
           equipment: guessEquipment(rawExName),
-          weeklySets: 0,
+          allTimeSets: 0,
         };
         currentExercisesPool.push(matchedEx);
         addedExercises.push(matchedEx);
@@ -364,8 +364,8 @@ export function importStrongCSV(
           setsDetails,
         });
         
-        // Accumulate weekly sets statistic onto the matched exercise
-        matchedEx.weeklySets = (matchedEx.weeklySets || 0) + setsDetails.length;
+        // Accumulate all-time sets statistic onto the matched exercise
+        matchedEx.allTimeSets = (matchedEx.allTimeSets || 0) + setsDetails.length;
       }
     }
 

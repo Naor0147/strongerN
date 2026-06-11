@@ -103,7 +103,7 @@ const ExerciseRow: React.FC<{
       style={styles.rowContainer}
       padding={{ vertical: spacing.md, horizontal: spacing.lg }}
       testID={`exercises.exercise.${exercise.id}`}
-      accessibilityLabel={`${exercise.name}, ${exercise.muscleGroup}, ${exercise.weeklySets} sets per week`}
+      accessibilityLabel={`${exercise.name}, ${exercise.muscleGroup}, ${(exercise as any).allTimeSets || 0} total sets`}
     >
       <View style={styles.rowContent}>
         {/* Dynamic color-coded muscle group indicator */}
@@ -142,8 +142,8 @@ const ExerciseRow: React.FC<{
         <View style={styles.rowRight}>
           <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm }}>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.weeklySets}>{exercise.weeklySets}</Text>
-              <Text style={styles.setsLabel}>SETS/WK</Text>
+              <Text style={styles.weeklySets}>{(exercise as any).allTimeSets || 0}</Text>
+              <Text style={styles.setsLabel}>ALL-TIME SETS</Text>
             </View>
             <IconButton
               name="ellipsis-horizontal"
@@ -218,7 +218,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       return {
         ...ex,
         weeklySets: weeklyCounts[exKey] || 0,
-        allTimeSets: allTimeCounts[exKey] || 0,
+        allTimeSets: (allTimeCounts[exKey] || 0) || (ex.allTimeSets || 0),
       };
     });
   }, [exercises, sessions]);
@@ -380,7 +380,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     } else if (sortMode === 'alphabetical-desc') {
       result.sort((a, b) => b.name.localeCompare(a.name));
     } else if (sortMode === 'sets') {
-      result.sort((a, b) => b.weeklySets - a.weeklySets || a.name.localeCompare(b.name));
+      result.sort((a, b) => ((b as any).allTimeSets || 0) - ((a as any).allTimeSets || 0) || a.name.localeCompare(b.name));
     }
     return result;
   }, [filteredExercises, sortMode]);
@@ -388,13 +388,15 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   // 3. Group into sections
   const sections: AlphaSection[] = useMemo(() => {
     if (sortMode === 'sets') {
-      // If sorted by sets, we group by "Weekly Sets Range"
+      // If sorted by sets, we group by "All-time Sets Range"
       const map = new Map<string, Exercise[]>();
       for (const ex of sortedExercises) {
+        const setsCount = (ex as any).allTimeSets || 0;
         let label = '0 Sets';
-        if (ex.weeklySets > 12) label = 'High Volume (13+ sets)';
-        else if (ex.weeklySets > 8) label = 'Moderate Volume (9-12 sets)';
-        else if (ex.weeklySets > 0) label = 'Low Volume (1-8 sets)';
+        if (setsCount > 50) label = 'Century Club (51+ sets)';
+        else if (setsCount > 20) label = 'High Volume (21-50 sets)';
+        else if (setsCount > 5) label = 'Moderate Volume (6-20 sets)';
+        else if (setsCount > 0) label = 'Low Volume (1-5 sets)';
         
         if (!map.has(label)) map.set(label, []);
         map.get(label)!.push(ex);
@@ -1021,15 +1023,15 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
                   <View style={styles.detailsStatsRow}>
                     <View style={styles.detailsStatBox}>
-                      <Text style={styles.detailsStatValue}>{selectedExercise.weeklySets}</Text>
-                      <Text style={styles.detailsStatLabel}>WEEKLY SETS</Text>
-                    </View>
-                    <View style={styles.detailsStatDivider} />
-                    <View style={styles.detailsStatBox}>
                       <Text style={styles.detailsStatValue}>
                         {(selectedExercise as any).allTimeSets || 0}
                       </Text>
                       <Text style={styles.detailsStatLabel}>ALL-TIME SETS</Text>
+                    </View>
+                    <View style={styles.detailsStatDivider} />
+                    <View style={styles.detailsStatBox}>
+                      <Text style={styles.detailsStatValue}>{selectedExercise.weeklySets}</Text>
+                      <Text style={styles.detailsStatLabel}>WEEKLY SETS</Text>
                     </View>
                   </View>
 

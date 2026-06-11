@@ -3,11 +3,11 @@ import { importStrongCSV, normalizeExerciseName, findMatchingExercise, guessMusc
 import { Exercise, WorkoutSession } from '../data/mockData';
 
 const mockExercises: Exercise[] = [
-  { id: 'ex-1', name: 'Back Squat', muscleGroup: 'Quads', weeklySets: 0, equipment: 'Barbell' },
-  { id: 'ex-2', name: 'Bench Press', muscleGroup: 'Chest', weeklySets: 0, equipment: 'Barbell' },
-  { id: 'ex-3', name: 'Pull-ups', muscleGroup: 'Back', weeklySets: 0, equipment: 'Bodyweight' },
-  { id: 'ex-4', name: 'Leg Extension', muscleGroup: 'Quads', weeklySets: 0, equipment: 'Machine' },
-  { id: 'ex-5', name: 'Calf Raises', muscleGroup: 'Calves', weeklySets: 0, equipment: 'Machine' },
+  { id: 'ex-1', name: 'Back Squat', muscleGroup: 'Quads', allTimeSets: 0, equipment: 'Barbell' },
+  { id: 'ex-2', name: 'Bench Press', muscleGroup: 'Chest', allTimeSets: 0, equipment: 'Barbell' },
+  { id: 'ex-3', name: 'Pull-ups', muscleGroup: 'Back', allTimeSets: 0, equipment: 'Bodyweight' },
+  { id: 'ex-4', name: 'Leg Extension', muscleGroup: 'Quads', allTimeSets: 0, equipment: 'Machine' },
+  { id: 'ex-5', name: 'Calf Raises', muscleGroup: 'Calves', allTimeSets: 0, equipment: 'Machine' },
 ];
 
 describe('Strong CSV Importer', () => {
