@@ -1,7 +1,7 @@
 // components/ui/StatCard.tsx
 // Premium stat display card with icon, large animated count-up number, and label.
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, shadow, animation, globalAnimation } from '../../theme';
 
@@ -25,9 +25,8 @@ const StatCard: React.FC<StatCardProps> = ({
   style,
   testID,
 }) => {
-  // Animated count-up using Animated.Value + interpolation
-  const anim   = useRef(new Animated.Value(0)).current;
-  const valRef = useRef(0);
+  const [displayVal, setDisplayVal] = React.useState(0);
+  const prevValRef = useRef(0);
 
   useEffect(() => {
     const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
@@ -35,24 +34,38 @@ const StatCard: React.FC<StatCardProps> = ({
       : 1;
 
     if (speed === 0) {
-      anim.setValue(value);
+      setDisplayVal(value);
+      prevValRef.current = value;
       return;
     }
-    Animated.timing(anim, {
-      toValue:         value,
-      duration:        animation.slow * speed,
-      useNativeDriver: false,
-    }).start();
-  }, [value, anim]);
 
-  // Listen to native value for display
-  const [displayVal, setDisplayVal] = React.useState(0);
-  useEffect(() => {
-    const listener = anim.addListener(({ value: v }) => {
-      setDisplayVal(parseFloat(v.toFixed(decimals)));
-    });
-    return () => anim.removeListener(listener);
-  }, [anim, decimals]);
+    const duration = animation.slow * speed;
+    const startTime = Date.now();
+    const startVal = prevValRef.current;
+    let animId: number;
+
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out quad
+      const easeProgress = progress * (2 - progress);
+      const currentVal = startVal + (value - startVal) * easeProgress;
+      
+      setDisplayVal(parseFloat(currentVal.toFixed(decimals)));
+
+      if (progress < 1) {
+        animId = requestAnimationFrame(tick);
+      } else {
+        prevValRef.current = value;
+      }
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, [value, decimals]);
 
   return (
     <View style={[styles.card, style]} testID={testID}>

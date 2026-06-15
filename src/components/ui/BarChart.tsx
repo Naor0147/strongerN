@@ -5,9 +5,10 @@ import {
   View,
   Text,
   StyleSheet,
-  Animated,
   LayoutChangeEvent,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, spacing, radius, globalAnimation } from '../../theme';
 
@@ -34,7 +35,7 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     [data]
   );
 
-  const animValuesRef = useRef<Animated.Value[]>([]);
+  const animValuesRef = useRef<any[]>([]);
   if (animValuesRef.current.length !== data.length) {
     animValuesRef.current = data.map((_, i) => animValuesRef.current[i] ?? new Animated.Value(0));
   }

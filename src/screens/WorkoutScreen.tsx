@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
+import i18n from '../utils/i18n';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card          from '../components/ui/Card';
@@ -45,17 +46,18 @@ interface WorkoutScreenProps {
   enableRoutineFolders?: boolean;
   onAddCustomExercise?: (name: string, muscle: string, equipment: string) => any;
   sessions?:         any[];
+  exerciseNameLanguage?: 'en' | 'he';
 }
 
 
 function timeAgo(date: Date): string {
   const diffMs   = Date.now() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7)  return `${diffDays}d ago`;
+  if (diffDays === 0) return i18n.t('timeAgo.today');
+  if (diffDays === 1) return i18n.t('timeAgo.yesterday');
+  if (diffDays < 7)  return i18n.t('timeAgo.daysAgo', { count: diffDays });
   const weeks = Math.floor(diffDays / 7);
-  return `${weeks}w ago`;
+  return i18n.t('timeAgo.weeksAgo', { count: weeks });
 }
 
 // ─── Template Card ────────────────────────────────────────────────
@@ -103,7 +105,7 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
         </View>
 
         <Text style={styles.tplExCount}>
-          {template.exercises.length} exercises
+          {i18n.t('workout.exerciseCount', { count: template.exercises.length })}
         </Text>
         <Text style={styles.tplExList} numberOfLines={2}>
           {template.exercises.join(' · ')}
@@ -138,7 +140,7 @@ const FolderCard: React.FC<FolderCardProps> = React.memo(({ name, count, onPress
         <Ionicons name="folder" size={24} color={colors.violet} style={styles.folderIconLeft} />
         <View style={{ flex: 1 }}>
           <Text style={styles.folderCardName} numberOfLines={1}>{name}</Text>
-          <Text style={styles.folderCardCount}>{count} {count === 1 ? 'routine' : 'routines'}</Text>
+          <Text style={styles.folderCardCount}>{i18n.t(count === 1 ? 'workout.routineCount' : 'workout.routinesCount', { count })}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
       </View>
@@ -155,7 +157,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   onDeleteTemplate,
   onUpdateTemplate,
   onReorderTemplates,
-  folders = ['All', 'Bulking Splits', 'Home Workouts', 'Travel'],
+  folders = i18n.t('extras.defaultFolders') as unknown as string[],
   onAddFolder,
   onDeleteFolder,
   activeProgramId = null,
@@ -165,6 +167,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   enableRoutineFolders = false,
   onAddCustomExercise,
   sessions = [],
+  exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'routines' | 'programs'>('routines');
@@ -301,12 +304,12 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const handleDeleteRoutine = (tpl: Template) => {
     Alert.alert(
-      'Delete Routine',
-      `Are you sure you want to delete "${tpl.name}"?`,
+      i18n.t('workout.deleteRoutine'),
+      i18n.t('workout.deleteRoutineMsg', { name: tpl.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: i18n.t('common.delete'),
           style: 'destructive',
           onPress: () => {
             if (onDeleteTemplate) {
@@ -334,7 +337,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const handleSaveFolder = () => {
     if (!newFolderName.trim()) {
-      Alert.alert('Error', 'Please enter a folder name.');
+      Alert.alert(i18n.t('common.error'), i18n.t('workout.enterFolderName'));
       return;
     }
     if (onAddFolder) {
@@ -342,18 +345,18 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       setSelectedFolderFilter(newFolderName.trim());
       setNewFolderName('');
       setIsFolderModalVisible(false);
-      Alert.alert('Success', 'Folder created successfully!');
+      Alert.alert(i18n.t('common.success'), i18n.t('workout.folderCreatedSuccess'));
     }
   };
 
   const handleConfirmDeleteFolder = (folderName: string) => {
     Alert.alert(
-      'Delete Folder',
-      `Are you sure you want to delete the folder "${folderName}"?\n\nThe routines inside this folder will NOT be deleted.`,
+      i18n.t('workout.deleteFolder'),
+      i18n.t('workout.deleteFolderMsg', { name: folderName }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: i18n.t('common.delete'),
           style: 'destructive',
           onPress: () => {
             if (onDeleteFolder) {
@@ -363,7 +366,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 setSelectedFolderFilter('All');
                 setCurrentFolder(null);
               }
-              Alert.alert('Folder Deleted', `The folder "${folderName}" was successfully removed.`);
+              Alert.alert(i18n.t('workout.folderDeleted'), i18n.t('workout.folderDeletedMsg', { name: folderName }));
             }
           }
         }
@@ -373,7 +376,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const handleImportRoutine = () => {
     if (!importPayloadText.trim()) {
-      Alert.alert('Error', 'Please enter a routine share payload.');
+      Alert.alert(i18n.t('common.error'), i18n.t('workout.enterRoutinePayload'));
       return;
     }
     try {
@@ -386,17 +389,17 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       }
       
       if (!parsed.name || !parsed.exercises) {
-        throw new Error('Invalid format: missing name or exercises.');
+        throw new Error(i18n.t('extras.invalidFormat'));
       }
       
       if (onAddTemplate) {
         onAddTemplate(parsed.name, parsed.exercises, parsed.folder);
-        Alert.alert('Success', `Routine "${parsed.name}" successfully imported!`);
+        Alert.alert(i18n.t('common.success'), i18n.t('workout.routineImported', { name: parsed.name }));
         setImportPayloadText('');
         setIsImportModalVisible(false);
       }
     } catch (e: any) {
-      Alert.alert('Import Failed', `Failed to parse routine: ${e.message || e}`);
+      Alert.alert(i18n.t('workout.importFailed'), i18n.t('extras.failedToParse', { error: e.message || e }));
     }
   };
 
@@ -412,7 +415,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     return [
       {
         icon: isSearching ? 'close-outline' as const : 'search-outline' as const,
-        label: 'Search',
+        label: i18n.t('common.search'),
         onPress: () => {
           setIsSearching(!isSearching);
           if (isSearching) setSearchQuery('');
@@ -420,13 +423,13 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       },
       {
         icon: 'filter-outline' as const,
-        label: 'Filter',
+        label: i18n.t('common.filter'),
         onPress: () => setIsFilterBarVisible(prev => !prev),
         color: selectedFolderFilter !== 'All' ? colors.accent : colors.textPrimary
       },
       {
         icon: 'download-outline' as const,
-        label: 'Import',
+        label: i18n.t('common.import'),
         onPress: () => setIsImportModalVisible(true)
       }
     ];
@@ -437,7 +440,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     if (!activeProgram) return [];
     
     // Map calendar days (1-7) for the selected week
-    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekDays = i18n.t('extras.weekDaysMon') as unknown as string[];
     
     return weekDays.map((dayName, idx) => {
       // Index of training day (e.g. Day 1, Day 2, Day 3)
@@ -477,7 +480,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title="Workout"
+        title={i18n.t('workout.title')}
         actions={headerActions}
         testID="workout.header"
       />
@@ -493,7 +496,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               styles.tabButtonText,
               activeTab === 'routines' ? styles.tabButtonTextActive : styles.tabButtonTextInactive
             ]}>
-              Routines
+              {i18n.t('workout.routines')}
             </Text>
             {activeTab === 'routines' && <View style={styles.tabIndicator} />}
           </Pressable>
@@ -505,7 +508,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               styles.tabButtonText,
               activeTab === 'programs' ? styles.tabButtonTextActive : styles.tabButtonTextInactive
             ]}>
-              Programs
+              {i18n.t('workout.programs')}
             </Text>
             {activeTab === 'programs' && <View style={styles.tabIndicator} />}
           </Pressable>
@@ -521,7 +524,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search routines by name..."
+                  placeholder={i18n.t('workout.searchRoutinesPlaceholder')}
                   placeholderTextColor={colors.textMuted}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -547,19 +550,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 >
                   {/* Header */}
                   <View style={styles.popoverHeader}>
-                    <Text style={styles.popoverTitle}>Filter Routines</Text>
+                    <Text style={styles.popoverTitle}>{i18n.t('workout.filterRoutines')}</Text>
                     {selectedFolderFilter !== 'All' && (
                       <Pressable onPress={() => {
                         setSelectedFolderFilter('All');
                         setCurrentFolder(null);
                       }} style={styles.clearAllBtn}>
-                        <Text style={styles.clearAllText}>Clear Filter</Text>
+                        <Text style={styles.clearAllText}>{i18n.t('workout.clearFilter')}</Text>
                       </Pressable>
                     )}
                   </View>
 
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.popoverScroll}>
-                    <Text style={styles.popoverSectionTitle}>FILTER BY CATEGORY / FOLDER</Text>
+                    <Text style={styles.popoverSectionTitle}>{i18n.t('workout.filterByCategory')}</Text>
                     <View style={styles.popoverGrid}>
                       {folders.map(f => {
                         const isActive = selectedFolderFilter === f;
@@ -617,7 +620,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                       >
                         <Ionicons name="add" size={12} color={colors.accent} />
                         <Text style={[styles.popoverChipText, { color: colors.accent, fontFamily: font.semibold }]}>
-                          New Folder
+                          {i18n.t('workout.newFolder')}
                         </Text>
                       </Pressable>
                     </View>
@@ -630,7 +633,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     android_ripple={rippleTokens.accent}
                   >
                     <Text style={styles.applyBtnText}>
-                      Apply Filter
+                      {i18n.t('workout.applyFilter')}
                     </Text>
                   </Pressable>
                 </Pressable>
@@ -659,15 +662,15 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 <View>
                   {/* CTA — Start Empty */}
                   <Pressable
-                    onPress={() => onStartWorkout && onStartWorkout('Empty Workout', [])}
+                    onPress={() => onStartWorkout && onStartWorkout(i18n.t('extras.emptyWorkout'), [])}
                     android_ripple={{ color: colors.accent + '15', borderless: false }}
                     style={styles.ctaOutline}
-                    accessibilityLabel="Start an empty workout"
+                    accessibilityLabel={i18n.t('extras.startEmptyWorkoutA11y')}
                     accessibilityRole="button"
                     testID="workout.start-empty"
                   >
                     <Ionicons name="add" size={18} color={colors.accent} />
-                    <Text style={styles.ctaOutlineText}>Start an Empty Workout</Text>
+                    <Text style={styles.ctaOutlineText}>{i18n.t('workout.startEmptyWorkout')}</Text>
                   </Pressable>
 
                   {/* Quick Start */}
@@ -675,8 +678,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
                   {/* Folders section header */}
                   <SectionLabel
-                    title="Routine Folders"
-                    subtitle={`${folderListData.length} folders`}
+                    title={i18n.t('workout.routineFolders')}
+                    subtitle={`${folderListData.length} ${i18n.t('workout.folders')}`}
                     rightIcon="add-circle-outline"
                     rightIconColor={colors.accent}
                     onRightPress={() => setIsFolderModalVisible(true)}
@@ -705,7 +708,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                       android_ripple={rippleTokens.borderless}
                     >
                       <Ionicons name="arrow-back" size={18} color={colors.accent} />
-                      <Text style={styles.folderNavBackText}>Folders</Text>
+                      <Text style={styles.folderNavBackText}>{i18n.t('workout.folders')}</Text>
                     </Pressable>
                     <View style={styles.folderNavTitleRow}>
                       <Ionicons name="folder-open" size={18} color={colors.violet} />
@@ -715,7 +718,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                           onPress={() => handleConfirmDeleteFolder(currentFolder)}
                           style={styles.folderNavDelete}
                           android_ripple={rippleTokens.borderless}
-                          accessibilityLabel="Delete folder"
+                          accessibilityLabel={i18n.t('extras.deleteFolderA11y')}
                         >
                           <Ionicons name="trash-outline" size={16} color={colors.error} />
                         </Pressable>
@@ -727,15 +730,15 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 {/* CTA — Start Empty */}
                 {!currentFolder && (
                   <Pressable
-                    onPress={() => onStartWorkout && onStartWorkout('Empty Workout', [])}
+                    onPress={() => onStartWorkout && onStartWorkout(i18n.t('extras.emptyWorkout'), [])}
                     android_ripple={{ color: colors.accent + '15', borderless: false }}
                     style={styles.ctaOutline}
-                    accessibilityLabel="Start an empty workout"
+                    accessibilityLabel={i18n.t('extras.startEmptyWorkoutA11y')}
                     accessibilityRole="button"
                     testID="workout.start-empty"
                   >
                     <Ionicons name="add" size={18} color={colors.accent} />
-                    <Text style={styles.ctaOutlineText}>Start an Empty Workout</Text>
+                    <Text style={styles.ctaOutlineText}>{i18n.t('workout.startEmptyWorkout')}</Text>
                   </Pressable>
                 )}
 
@@ -744,8 +747,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
                 {/* Templates section header */}
                 <SectionLabel
-                  title={currentFolder ? "Folder Routines" : "My Routines"}
-                  subtitle={searchQuery.trim() ? `Found ${filteredTemplates.length} results` : `${filteredTemplates.length} templates`}
+                  title={currentFolder ? i18n.t('workout.folderRoutines') : i18n.t('workout.myRoutines')}
+                  subtitle={searchQuery.trim() ? i18n.t('workout.foundResults', { count: filteredTemplates.length }) : i18n.t('workout.templatesCount', { count: filteredTemplates.length })}
                   rightIcon="add-circle-outline"
                   rightIconColor={colors.accent}
                   onRightPress={() => {
@@ -792,30 +795,30 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     <Ionicons name="ribbon-outline" size={24} color={colors.highlight} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.activeProgSub}>ACTIVE PROGRAM</Text>
+                    <Text style={styles.activeProgSub}>{i18n.t('workout.activeProgram')}</Text>
                     <Text style={styles.activeProgName}>{activeProgram.name}</Text>
                   </View>
                   <Pressable
                     style={styles.unsubBtn}
                     onPress={() => {
                       Alert.alert(
-                        'Unsubscribe',
-                        `Are you sure you want to stop training on "${activeProgram.name}"?`,
+                        i18n.t('common.unsubscribe'),
+                        i18n.t('workout.unsubscribeConfirm', { name: activeProgram.name }),
                         [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Unsubscribe', style: 'destructive', onPress: () => onSubscribeProgram && onSubscribeProgram(null) }
+                          { text: i18n.t('common.cancel'), style: 'cancel' },
+                          { text: i18n.t('common.unsubscribe'), style: 'destructive', onPress: () => onSubscribeProgram && onSubscribeProgram(null) }
                         ]
                       );
                     }}
                   >
-                    <Text style={styles.unsubBtnText}>UNSUBSCRIBE</Text>
+                    <Text style={styles.unsubBtnText}>{i18n.t('common.unsubscribe')}</Text>
                   </Pressable>
                 </View>
                 <Text style={styles.activeProgDesc}>{activeProgram.description}</Text>
                 
                 {/* Progress bar */}
                 <View style={styles.progressContainer}>
-                  <Text style={styles.progressLabel}>Week {viewingWeek} of {activeProgram.weeks}</Text>
+                  <Text style={styles.progressLabel}>{i18n.t('workout.programWeeks', { current: viewingWeek, total: activeProgram.weeks })}</Text>
                   <View style={styles.progressBarBg}>
                     <View style={[styles.progressBarFill, { width: `${(viewingWeek / activeProgram.weeks) * 100}%` }]}>
                       <LinearGradient
@@ -836,21 +839,21 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     onPress={() => setViewingWeek(p => Math.max(1, p - 1))}
                   >
                     <Ionicons name="arrow-back-outline" size={16} color={colors.textSecondary} />
-                    <Text style={styles.weekSelectBtnText}>PREV WEEK</Text>
+                    <Text style={styles.weekSelectBtnText}>{i18n.t('workout.prevWeek')}</Text>
                   </Pressable>
                   <Pressable
                     disabled={viewingWeek === activeProgram.weeks}
                     style={[styles.weekSelectBtn, viewingWeek === activeProgram.weeks && { opacity: 0.3 }]}
                     onPress={() => setViewingWeek(p => Math.min(activeProgram.weeks, p + 1))}
                   >
-                    <Text style={styles.weekSelectBtnText}>NEXT WEEK</Text>
+                    <Text style={styles.weekSelectBtnText}>{i18n.t('workout.nextWeek')}</Text>
                     <Ionicons name="arrow-forward-outline" size={16} color={colors.textSecondary} />
                   </Pressable>
                 </View>
               </Card>
 
               {/* Weekly Scheduled Training Calendar */}
-              <SectionLabel title="Weekly Training Schedule" subtitle={`Week ${viewingWeek} breakdown`} style={styles.sectionLabel} />
+              <SectionLabel title={i18n.t('workout.weeklyTrainingSchedule')} subtitle={i18n.t('workout.weekBreakdown', { week: viewingWeek })} style={styles.sectionLabel} />
               
               <View style={styles.calendarContainer}>
                 {calendarDays.map((day, idx) => (
@@ -859,11 +862,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                       <Text style={styles.calendarDayName}>{day.dayName}</Text>
                       {day.isTraining ? (
                         <View style={styles.calendarBadgeTrain}>
-                          <Text style={styles.calendarBadgeTrainText}>WORKOUT</Text>
+                          <Text style={styles.calendarBadgeTrainText}>{i18n.t('workout.workoutDay')}</Text>
                         </View>
                       ) : (
                         <View style={styles.calendarBadgeRest}>
-                          <Text style={styles.calendarBadgeRestText}>REST</Text>
+                          <Text style={styles.calendarBadgeRestText}>{i18n.t('workout.restDay')}</Text>
                         </View>
                       )}
                     </View>
@@ -882,13 +885,13 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                             onPress={() => onStartWorkout && onStartWorkout(day.workout!.workoutName, day.workout!.exercises)}
                             android_ripple={rippleTokens.accent}
                           >
-                            <Text style={styles.calendarStartBtnText}>START</Text>
+                            <Text style={styles.calendarStartBtnText}>{i18n.t('common.start')}</Text>
                           </Pressable>
                         </View>
                       ) : (
                         <View style={styles.calendarRestBox}>
                           <Ionicons name="moon-outline" size={16} color={colors.textMuted} />
-                          <Text style={styles.calendarRestText}>Sleep, recover, and grow stronger.</Text>
+                           <Text style={styles.calendarRestText}>{i18n.t('workout.restMessage')}</Text>
                         </View>
                       )}
                     </View>
@@ -899,7 +902,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
           ) : (
             <>
               {/* No program subscribed, display catalog */}
-              <SectionLabel title="Training Programs Library" subtitle="Subscribe to structured splits" />
+              <SectionLabel title={i18n.t('workout.trainingProgramsLibrary')} subtitle={i18n.t('workout.subscribeToSplits')} />
               
               {mockPrograms.map((prog, idx) => (
                 <Card key={idx} padding={spacing.lg} style={styles.programCard}>
@@ -907,7 +910,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     <Ionicons name="calendar-sharp" size={24} color={colors.accent} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.progCardName}>{prog.name}</Text>
-                      <Text style={styles.progCardWeeks}>{prog.weeks} weeks program</Text>
+                      <Text style={styles.progCardWeeks}>{i18n.t('workout.weeksProgram', { count: prog.weeks })}</Text>
                     </View>
                   </View>
                   <Text style={styles.progCardDesc}>{prog.description}</Text>
@@ -918,12 +921,12 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                       if (onSubscribeProgram) {
                         onSubscribeProgram(prog.id);
                         setViewingWeek(1);
-                        Alert.alert('Subscribed!', `You are now subscribed to ${prog.name}!`);
+                        Alert.alert(i18n.t('workout.subscribed'), i18n.t('workout.subscribedMsg', { name: prog.name }));
                       }
                     }}
                     android_ripple={rippleTokens.accent}
                   >
-                    <Text style={styles.subscribeBtnText}>SUBSCRIBE & SCHEDULING</Text>
+                    <Text style={styles.subscribeBtnText}>{i18n.t('workout.subscribeScheduling')}</Text>
                   </Pressable>
                 </Card>
               ))}
@@ -946,6 +949,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         onSave={handleSaveRoutineFromEditor}
         onClose={() => setIsRoutineEditorVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
+        exerciseNameLanguage={exerciseNameLanguage}
       />
 
       {/* Modal B: Create Folder Modal */}
@@ -958,7 +962,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>CREATE FOLDER</Text>
+              <Text style={styles.modalTitle}>{i18n.t('workout.createFolder')}</Text>
               <IconButton
                 name="close"
                 size={22}
@@ -968,10 +972,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             </View>
 
             <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>FOLDER NAME</Text>
+              <Text style={styles.inputLabel}>{i18n.t('workout.folderName')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="e.g. Vacation Splits"
+                placeholder={i18n.t('workout.folderNamePlaceholder')}
                 placeholderTextColor={colors.textMuted}
                 value={newFolderName}
                 onChangeText={setNewFolderName}
@@ -985,13 +989,13 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   style={[styles.submitBtn, { flex: 1, backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1 }]}
                   onPress={() => setIsFolderModalVisible(false)}
                 >
-                  <Text style={[styles.submitBtnText, { color: colors.textSecondary }]}>CANCEL</Text>
+                  <Text style={[styles.submitBtnText, { color: colors.textSecondary }]}>{i18n.t('common.cancel')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.submitBtn, { flex: 1 }]}
                   onPress={handleSaveFolder}
                 >
-                  <Text style={styles.submitBtnText}>SAVE</Text>
+                  <Text style={styles.submitBtnText}>{i18n.t('common.save')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1020,7 +1024,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 android_ripple={rippleTokens.surface}
               >
                 <Ionicons name="create-outline" size={20} color={colors.accent} />
-                <Text style={styles.sheetItemText}>Edit Routine</Text>
+                <Text style={styles.sheetItemText}>{i18n.t('workout.editRoutine')}</Text>
               </Pressable>
 
               <Pressable
@@ -1029,7 +1033,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 android_ripple={rippleTokens.surface}
               >
                 <Ionicons name="trash-outline" size={20} color={colors.error} />
-                <Text style={[styles.sheetItemText, { color: colors.error }]}>Delete Routine</Text>
+                <Text style={[styles.sheetItemText, { color: colors.error }]}>{i18n.t('workout.deleteRoutine')}</Text>
               </Pressable>
 
               <Pressable
@@ -1041,7 +1045,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 android_ripple={rippleTokens.surface}
               >
                 <Ionicons name="share-social-outline" size={20} color={colors.highlight} />
-                <Text style={styles.sheetItemText}>Share Routine</Text>
+                <Text style={styles.sheetItemText}>{i18n.t('workout.shareRoutine')}</Text>
               </Pressable>
 
               <Pressable
@@ -1049,7 +1053,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 onPress={() => setIsActionSheetVisible(false)}
                 android_ripple={rippleTokens.surface}
               >
-                <Text style={styles.sheetCancelText}>Cancel</Text>
+                <Text style={styles.sheetCancelText}>{i18n.t('common.cancel')}</Text>
               </Pressable>
             </Pressable>
           </Pressable>
@@ -1076,7 +1080,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>IMPORT SHARED ROUTINE</Text>
+              <Text style={styles.modalTitle}>{i18n.t('workout.importSharedRoutine')}</Text>
               <IconButton
                 name="close"
                 size={22}
@@ -1086,10 +1090,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             </View>
 
             <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>PASTE SHARE PAYLOAD (JSON OR LINK)</Text>
+              <Text style={styles.inputLabel}>{i18n.t('workout.pasteSharePayload')}</Text>
               <TextInput
                 style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
-                placeholder='Paste sharing link or stringified JSON routine split payload...'
+                placeholder={i18n.t('workout.pasteSharePlaceholder')}
                 placeholderTextColor={colors.textMuted}
                 value={importPayloadText}
                 onChangeText={setImportPayloadText}
@@ -1102,7 +1106,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 onPress={handleImportRoutine}
                 android_ripple={rippleTokens.accent}
               >
-                <Text style={styles.submitBtnText}>IMPORT ROUTINE</Text>
+                <Text style={styles.submitBtnText}>{i18n.t('workout.importRoutine')}</Text>
               </Pressable>
             </View>
           </View>
@@ -1118,7 +1122,7 @@ const QuickStartCard: React.FC<{ template: Template; onStart?: (name: string, ex
       onPress={() => onStart && onStart(template.name, template.exercises, template.exercisesDetails)}
       padding={{ vertical: spacing.md, horizontal: spacing.lg }}
       ripple={rippleTokens.accent}
-      accessibilityLabel={`Quick start ${template.name}`}
+      accessibilityLabel={i18n.t('extras.quickStartA11y', { name: template.name })}
     >
       <View style={styles.quickInner}>
         <View style={styles.quickLeft}>
@@ -1126,7 +1130,7 @@ const QuickStartCard: React.FC<{ template: Template; onStart?: (name: string, ex
             <Ionicons name="flash" size={18} color={colors.accent} />
           </View>
           <View>
-            <Text style={styles.quickLabel}>Quick Start</Text>
+            <Text style={styles.quickLabel}>{i18n.t('workout.quickStart')}</Text>
             <Text style={styles.quickName}>{template.name}</Text>
           </View>
         </View>

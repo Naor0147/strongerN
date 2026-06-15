@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
+import i18n from '../../utils/i18n';
 
 interface SocialShareCardProps {
   visible: boolean;
@@ -30,7 +31,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
   onClose,
 }) => {
   const handleExport = (platform: string) => {
-    Alert.alert("Social Share", `Workout summary card successfully formatted and exported to ${platform}!`);
+    Alert.alert(i18n.t('socialShare.socialShare'), i18n.t('socialShare.exportMsg', { platform }));
     onClose();
   };
 
@@ -45,7 +46,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>SOCIAL SHARE CARD</Text>
+            <Text style={styles.title}>{i18n.t('socialShare.socialShareCard')}</Text>
             <Pressable onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={colors.textSecondary} />
             </Pressable>
@@ -69,7 +70,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
                 </View>
 
                 {/* Workout Title */}
-                <Text style={styles.workoutCompletedLabel}>WORKOUT COMPLETED</Text>
+                <Text style={styles.workoutCompletedLabel}>{i18n.t('socialShare.workoutCompleted')}</Text>
                 <Text style={styles.workoutTitle} numberOfLines={1}>
                   {workoutName.toUpperCase()}
                 </Text>
@@ -80,17 +81,17 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <Text style={styles.statVal}>{durationMin}m</Text>
-                    <Text style={styles.statLabel}>DURATION</Text>
+                    <Text style={styles.statLabel}>{i18n.t('socialShare.duration')}</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Text style={styles.statVal}>{totalSets}</Text>
-                    <Text style={styles.statLabel}>SETS LOGGED</Text>
+                    <Text style={styles.statLabel}>{i18n.t('socialShare.setsLogged')}</Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <Text style={styles.statVal}>{totalVolume.toLocaleString()} kg</Text>
-                    <Text style={styles.statLabel}>VOLUME</Text>
+                    <Text style={styles.statLabel}>{i18n.t('socialShare.volume')}</Text>
                   </View>
                 </View>
 
@@ -99,7 +100,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
                 {/* Motivational Quote footer */}
                 <View style={styles.motivationContainer}>
                   <Ionicons name="flame" size={14} color={colors.accent} />
-                  <Text style={styles.motivationText}>Every rep counts. Consistent progression.</Text>
+                  <Text style={styles.motivationText}>{i18n.t('socialShare.tagline')}</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -112,7 +113,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
               onPress={() => handleExport('Instagram')}
             >
               <Ionicons name="logo-instagram" size={16} color="#FFFFFF" />
-              <Text style={styles.shareBtnText}>Instagram</Text>
+              <Text style={styles.shareBtnText}>{i18n.t('socialShare.instagram')}</Text>
             </Pressable>
 
             <Pressable
@@ -120,7 +121,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
               onPress={() => handleExport('Facebook')}
             >
               <Ionicons name="logo-facebook" size={16} color="#FFFFFF" />
-              <Text style={styles.shareBtnText}>Facebook</Text>
+              <Text style={styles.shareBtnText}>{i18n.t('socialShare.facebook')}</Text>
             </Pressable>
           </View>
 
@@ -129,7 +130,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
             onPress={() => handleExport('Device Gallery')}
           >
             <Ionicons name="download-outline" size={16} color="#0D0F14" />
-            <Text style={styles.downloadBtnText}>SAVE TO GALLERY</Text>
+            <Text style={styles.downloadBtnText}>{i18n.t('socialShare.saveToGallery')}</Text>
           </Pressable>
         </View>
       </View>
@@ -153,11 +154,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    boxShadow: '0px 6px 12px rgba(0, 0, 0, 0.5)',
   },
   header: {
     flexDirection: 'row',

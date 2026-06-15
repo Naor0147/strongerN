@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Exercise } from '../data/mockData';
 import IconButton from '../components/ui/IconButton';
+import i18n from '../utils/i18n';
+import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 
 const MUSCLE_GROUPS = [
   'Chest', 'Back', 'Quads', 'Hamstrings', 'Shoulders',
@@ -45,7 +47,7 @@ const getMuscleColor = (muscleGroup: string): string => {
   return colors.textSecondary;
 };
 
-export interface AddExerciseScreenProps {
+interface AddExerciseScreenProps {
   visible: boolean;
   exercises: Exercise[];
   onConfirm: (exerciseNames: string[]) => void;
@@ -55,6 +57,7 @@ export interface AddExerciseScreenProps {
   singleSelect?: boolean;
   title?: string;
   sessions?: any[];
+  exerciseNameLanguage?: 'en' | 'he';
 }
 
 const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
@@ -64,8 +67,9 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   onClose,
   onAddCustomExercise,
   singleSelect = false,
-  title = 'ADD EXERCISES',
+  title = i18n.t('extras.addExercisePlural', { count: 0, plural: '' }),
   sessions = [],
+  exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery]       = useState('');
@@ -131,10 +135,15 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           
           let matchScore = 0;
           
+          // Cross-lingual match (English name, Hebrew name, aliases)
+          const isCrossLingualMatch = exerciseMatchesQuery(ex.name, q);
+          
           if (nameLower === q) {
             matchScore = 10000;
           } else if (nameLower.startsWith(q)) {
             matchScore = 5000;
+          } else if (isCrossLingualMatch) {
+            matchScore = 3000; // Cross-lingual match gets high priority
           } else if (new RegExp(`\\b${q}`).test(nameLower)) {
             matchScore = 2000;
           } else if (nameLower.includes(q)) {
@@ -204,6 +213,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   const renderExerciseItem = useCallback(({ item }: { item: Exercise }) => {
     const isSelected = selectedNames.includes(item.name);
     const muscleColor = getMuscleColor(item.muscleGroup);
+    const displayName = getDisplayName(item.name, exerciseNameLanguage);
     return (
       <Pressable
         onPress={() => toggleSelect(item.name)}
@@ -218,7 +228,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
             style={[styles.exerciseItemName, isSelected && styles.exerciseItemNameSelected]}
             numberOfLines={1}
           >
-            {item.name}
+            {displayName}
           </Text>
           <Text style={styles.exerciseItemMeta}>
             <Text style={{ color: muscleColor }}>{item.muscleGroup.toUpperCase()}</Text>
@@ -269,7 +279,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
             </Pressable>
 
             <Text style={styles.headerTitle}>
-              {isCreatingCustom ? 'CREATE EXERCISE' : title}
+              {isCreatingCustom ? i18n.t('extras.createExerciseTitle') : title}
             </Text>
 
             <Pressable
@@ -291,7 +301,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           {isFilterVisible && !isCreatingCustom && (
             <View style={styles.filterPanel}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                <Text style={styles.filterGroupLabel}>MUSCLE</Text>
+                <Text style={styles.filterGroupLabel}>{i18n.t('extras.muscleLabel')}</Text>
                 {MUSCLE_GROUPS.map(m => {
                   const active = selectedMuscles.includes(m);
                   const mc = getMuscleColor(m);
@@ -305,14 +315,14 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                       ]}
                     >
                       <Text style={[styles.filterChipText, active && { color: mc, fontFamily: font.semibold }]}>
-                        {m}
+                        {getMuscleDisplayName(m, exerciseNameLanguage)}
                       </Text>
                     </Pressable>
                   );
                 })}
               </ScrollView>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                <Text style={styles.filterGroupLabel}>EQUIP</Text>
+                <Text style={styles.filterGroupLabel}>{i18n.t('extras.equipLabel')}</Text>
                 {EQUIPMENT_TYPES.map(eq => {
                   const active = selectedEquipment.includes(eq);
                   return (
@@ -341,19 +351,19 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
               contentContainerStyle={styles.customFormContent}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.formLabel}>EXERCISE NAME</Text>
+              <Text style={styles.formLabel}>{i18n.t('extras.exerciseNameLabel')}</Text>
               <TextInput
                 style={styles.formInput}
                 value={customName}
                 onChangeText={setCustomName}
-                placeholder="e.g. Incline Dumbbell Press"
+                placeholder={i18n.t('extras.exerciseNamePlaceholder')}
                 placeholderTextColor={colors.textMuted}
                 keyboardAppearance="dark"
                 autoFocus
                 maxLength={40}
               />
 
-              <Text style={styles.formLabel}>TARGET MUSCLE GROUP</Text>
+              <Text style={styles.formLabel}>{i18n.t('extras.primaryMuscleGroup')}</Text>
               <View style={styles.chipGrid}>
                 {MUSCLE_GROUPS.map(m => {
                   const active = customMuscle === m;
@@ -368,14 +378,14 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                       ]}
                     >
                       <Text style={[styles.gridChipText, active && { color: mc, fontFamily: font.bold }]}>
-                        {m.toUpperCase()}
+                        {getMuscleDisplayName(m, exerciseNameLanguage).toUpperCase()}
                       </Text>
                     </Pressable>
                   );
                 })}
               </View>
 
-              <Text style={styles.formLabel}>EQUIPMENT TYPE</Text>
+              <Text style={styles.formLabel}>{i18n.t('extras.equipmentType')}</Text>
               <View style={styles.chipGrid}>
                 {EQUIPMENT_TYPES.map(eq => {
                   const active = customEquip === eq;
@@ -402,7 +412,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                 style={styles.advancedHeader}
                 android_ripple={rippleTokens.surface}
               >
-                <Text style={styles.advancedHeaderTitle}>ADVANCED SETTINGS</Text>
+                <Text style={styles.advancedHeaderTitle}>{i18n.t('extras.advancedSettings')}</Text>
                 <Ionicons
                   name={showAdvanced ? 'chevron-up' : 'chevron-down'}
                   size={16}
@@ -412,7 +422,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
 
               {showAdvanced && (
                 <View style={styles.advancedContent}>
-                  <Text style={styles.formLabel}>EXERCISE MODE</Text>
+                  <Text style={styles.formLabel}>{i18n.t('extras.exerciseModeLabel')}</Text>
                   <View style={styles.chipGrid}>
                     <Pressable
                       onPress={() => setIsUnilateral(false)}
@@ -422,7 +432,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                       ]}
                     >
                       <Text style={[styles.gridChipText, !isUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
-                        BILATERAL (DEFAULT)
+                        {i18n.t('extras.bilateralDefault')}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -433,7 +443,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                       ]}
                     >
                       <Text style={[styles.gridChipText, isUnilateral && { color: colors.accent, fontFamily: font.bold }]}>
-                        UNILATERAL (SINGLE SIDE)
+                        {i18n.t('extras.unilateralSingle')}
                       </Text>
                     </Pressable>
                   </View>
@@ -446,7 +456,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   onPress={() => setIsCreatingCustom(false)}
                   android_ripple={rippleTokens.surface}
                 >
-                  <Text style={styles.formBtnCancelText}>CANCEL</Text>
+                  <Text style={styles.formBtnCancelText}>{i18n.t('extras.cancelBtn')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.formBtn, styles.formBtnSave, !customName.trim() && { opacity: 0.4 }]}
@@ -454,7 +464,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   disabled={!customName.trim()}
                   android_ripple={rippleTokens.accent}
                 >
-                  <Text style={styles.formBtnSaveText}>SAVE & ADD</Text>
+                  <Text style={styles.formBtnSaveText}>{i18n.t('extras.saveAndAddBtn')}</Text>
                 </Pressable>
               </View>
             </ScrollView>
@@ -466,7 +476,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Search exercise or muscle..."
+                    placeholder={i18n.t('exercises.searchPlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -490,7 +500,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
               {filteredExercises.length === 0 && searchQuery.trim() !== '' ? (
                 <View style={styles.emptyContainer}>
                   <Ionicons name="alert-circle-outline" size={36} color={colors.textSecondary} />
-                  <Text style={styles.emptyText}>No results for "{searchQuery}"</Text>
+                  <Text style={styles.emptyText}>{i18n.t('extras.noResults', { query: searchQuery })}</Text>
                   <Pressable
                     style={styles.createCustomBtn}
                     onPress={() => {
@@ -500,7 +510,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                     android_ripple={rippleTokens.accent}
                   >
                     <Ionicons name="add-circle-outline" size={16} color={colors.bg} style={{ marginRight: spacing.xs }} />
-                    <Text style={styles.createCustomBtnText}>Create Custom Exercise</Text>
+                    <Text style={styles.createCustomBtnText}>{i18n.t('extras.createCustomExercise')}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -518,7 +528,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                       android_ripple={rippleTokens.surface}
                     >
                       <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
-                      <Text style={styles.createCustomRowText}>Create Custom Exercise</Text>
+                      <Text style={styles.createCustomRowText}>{i18n.t('extras.createCustomExercise')}</Text>
                     </Pressable>
                   }
                 />
@@ -529,8 +539,8 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                 <View style={styles.confirmBar}>
                   <Text style={styles.confirmCount}>
                     {selectedNames.length > 0
-                      ? `${selectedNames.length} selected`
-                      : `${filteredExercises.length} exercises`}
+                      ? i18n.t('extras.selectedCount', { count: selectedNames.length })
+                      : i18n.t('extras.exercisesCountLabel', { count: filteredExercises.length })}
                   </Text>
                   <Pressable
                     style={[
@@ -543,7 +553,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   >
                     <Ionicons name="checkmark" size={16} color={colors.bg} style={{ marginRight: spacing.xs }} />
                     <Text style={styles.confirmBtnText}>
-                      ADD {selectedNames.length > 0 ? selectedNames.length : ''} EXERCISE{selectedNames.length !== 1 ? 'S' : ''}
+                      {i18n.t('extras.addExercisePlural', { count: selectedNames.length, plural: selectedNames.length !== 1 ? 'S' : '' })}
                     </Text>
                   </Pressable>
                 </View>

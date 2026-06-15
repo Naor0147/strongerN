@@ -34,6 +34,11 @@ jest.mock('react-native', () => {
       OS: 'ios',
       select: (obj: any) => obj.ios || obj.default || {},
     },
+    I18nManager: {
+      isRTL: false,
+      allowRTL: jest.fn(),
+      forceRTL: jest.fn(),
+    },
   };
 });
 

@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Animated,
   Easing,
   FlatList,
   PanResponder,
@@ -21,6 +20,8 @@ import {
   UIManager,
   AppState,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -28,6 +29,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
@@ -47,6 +49,12 @@ interface SetRecord {
   leftReps?:       string;
   rightWeight?:    string;
   rightReps?:      string;
+  suggestedWeight?: string;
+  suggestedReps?: string;
+  suggestedLeftWeight?: string;
+  suggestedLeftReps?: string;
+  suggestedRightWeight?: string;
+  suggestedRightReps?: string;
 }
 
 interface ActiveExercise {
@@ -78,6 +86,7 @@ interface ActiveWorkoutModalProps {
   isAutoFinishSetEnabled?: boolean;
   isKeyboardDismissOnNextEnabled?: boolean;
   isRpeMode?: boolean;
+  exerciseNameLanguage?: 'en' | 'he';
 }
 
 function formatElapsed(startTime: Date): string {
@@ -88,14 +97,19 @@ function formatElapsed(startTime: Date): string {
   return h > 0 ? `${h}:${min}:${sec}` : `${min}:${sec}`;
 }
 
-const SwipeableRow: React.FC<{
+interface SwipeableRowProps {
   children: React.ReactNode;
-  onDelete: () => void;
+  onDelete: ((confirm: (stateUpdateCb: () => void) => void, cancel: () => void) => void) | (() => void);
   borderRadius?: number;
   style?: any;
-}> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
+}
+
+const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
+  const [width, setWidth] = useState(0);
+  const [isPastThreshold, setIsPastThreshold] = useState(false);
+  const hasTriggeredHaptic = useRef(false);
 
   const animateTranslation = (toVal: number, callback?: () => void) => {
     if (globalAnimation.speed === 0) {
@@ -115,6 +129,8 @@ const SwipeableRow: React.FC<{
     }
   };
 
+  const currentThreshold = width ? -width * 0.45 : -150;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -128,33 +144,86 @@ const SwipeableRow: React.FC<{
         }
         if (newX > 0) newX = 0;
         translateX.setValue(newX);
+
+        // Check threshold
+        const past = newX < currentThreshold;
+        if (past) {
+          if (!hasTriggeredHaptic.current) {
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            }
+            hasTriggeredHaptic.current = true;
+          }
+        } else {
+          if (hasTriggeredHaptic.current && newX > currentThreshold + 15) {
+            hasTriggeredHaptic.current = false;
+          }
+        }
+        setIsPastThreshold(past);
       },
       onPanResponderRelease: (_, gestureState) => {
-        const threshold = isOpen.current ? -30 : -45;
-        if (gestureState.dx < threshold) {
-          animateTranslation(-70, () => {
-            isOpen.current = true;
-          });
+        const currentX = isOpen.current ? -70 + gestureState.dx : gestureState.dx;
+
+        if (currentX < currentThreshold || gestureState.vx < -0.5) {
+          triggerDeleteFlow();
         } else {
-          animateTranslation(0, () => {
-            isOpen.current = false;
-          });
+          const threshold = isOpen.current ? -30 : -45;
+          if (gestureState.dx < threshold) {
+            animateTranslation(-70, () => {
+              isOpen.current = true;
+            });
+          } else {
+            animateTranslation(0, () => {
+              isOpen.current = false;
+            });
+          }
+          hasTriggeredHaptic.current = false;
+          setIsPastThreshold(false);
         }
       },
     })
   ).current;
 
-  const handleDeletePress = () => {
-    if (Platform.OS !== 'web') Vibration.vibrate(15);
-    Animated.timing(translateX, {
-      toValue: -500,
-      duration: getScaledDuration(150),
-      useNativeDriver: true,
-    }).start(() => {
-      onDelete();
-      translateX.setValue(0);
-      isOpen.current = false;
-    });
+  const triggerDeleteFlow = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+
+    const performDeleteAnimation = (onCompleted: () => void) => {
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      const toVal = width ? -(width + 50) : -500;
+      Animated.timing(translateX, {
+        toValue: toVal,
+        duration: getScaledDuration(180),
+        useNativeDriver: true,
+      }).start(() => {
+        translateX.setValue(0);
+        isOpen.current = false;
+        setIsPastThreshold(false);
+        hasTriggeredHaptic.current = false;
+        onCompleted();
+      });
+    };
+
+    if (onDelete.length === 2) {
+      const confirm = (onConfirmedStateUpdate: () => void) => {
+        performDeleteAnimation(onConfirmedStateUpdate);
+      };
+      const cancel = () => {
+        animateTranslation(0, () => {
+          isOpen.current = false;
+          setIsPastThreshold(false);
+          hasTriggeredHaptic.current = false;
+        });
+      };
+      (onDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
+    } else {
+      performDeleteAnimation(() => {
+        (onDelete as () => void)();
+      });
+    }
   };
 
   const handleOverlayPress = () => {
@@ -165,6 +234,12 @@ const SwipeableRow: React.FC<{
     }
   };
 
+  const trashScale = translateX.interpolate({
+    inputRange: [currentThreshold, -70, 0],
+    outputRange: [1.3, 1.0, 0.8],
+    extrapolate: 'clamp',
+  });
+
   const underlayOpacity = translateX.interpolate({
     inputRange: [-10, 0],
     outputRange: [1, 0],
@@ -172,16 +247,29 @@ const SwipeableRow: React.FC<{
   });
 
   return (
-    <View style={[styles.swipeContainer, { borderRadius }, style]}>
+    <View 
+      style={[styles.swipeContainer, { borderRadius }, style]}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+    >
       <Animated.View
         style={[StyleSheet.absoluteFill, { opacity: underlayOpacity }]}
       >
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={handleDeletePress}
+          onPress={triggerDeleteFlow}
         >
-          <View style={[styles.swipeDeleteAction, { borderRadius }]}>
-            <Ionicons name="trash-outline" size={20} color="#FFF" />
+          <View style={[
+            styles.swipeDeleteAction, 
+            { borderRadius },
+            isPastThreshold && { backgroundColor: '#FF3B30' }
+          ]}>
+            <Animated.View style={{ transform: [{ scale: trashScale }] }}>
+              <Ionicons 
+                name={isPastThreshold ? "trash" : "trash-outline"} 
+                size={20} 
+                color="#FFF" 
+              />
+            </Animated.View>
           </View>
         </Pressable>
       </Animated.View>
@@ -196,32 +284,238 @@ const SwipeableRow: React.FC<{
   );
 };
 
-const getProgressiveOverloadSuggestions = (exName: string, sessions: any[]) => {
-  const previousSession = sessions?.find((s: any) =>
-    s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
-  );
-  if (previousSession) {
-    const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-    if (found) {
-      const lastWeight = found.bestWeight || 0;
-      const lastReps = found.bestReps || 0;
-      const lastSets = typeof found.sets === 'number' ? found.sets : (found.setsDetails?.length || found.sets?.length || 3);
-      if (lastWeight > 0) {
+interface SetSuggestion {
+  weight: string;
+  reps: string;
+  leftWeight?: string;
+  leftReps?: string;
+  rightWeight?: string;
+  rightReps?: string;
+}
+
+const getProgressiveOverloadSuggestionForSet = (
+  exName: string,
+  setIdx: number,
+  sessions: any[],
+  templateSet?: any
+): SetSuggestion => {
+  const matchingSessions = (sessions || [])
+    .filter((s: any) =>
+      s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
+    )
+    .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+  if (matchingSessions.length === 0) {
+    return {
+      weight: templateSet?.weight?.toString() || '60',
+      reps: templateSet?.reps?.toString() || '10',
+      leftWeight: templateSet?.leftWeight?.toString() || templateSet?.weight?.toString() || '60',
+      leftReps: templateSet?.leftReps?.toString() || templateSet?.reps?.toString() || '10',
+      rightWeight: templateSet?.rightWeight?.toString() || templateSet?.weight?.toString() || '60',
+      rightReps: templateSet?.rightReps?.toString() || templateSet?.reps?.toString() || '10',
+    };
+  }
+
+  // Build history of this specific set index across sessions (oldest to newest)
+  const history: any[] = [];
+  for (const sess of matchingSessions) {
+    const ex = sess.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+    if (ex) {
+      const setsDetails = ex.setsDetails || [];
+      const s = setsDetails[setIdx] || setsDetails[setsDetails.length - 1];
+      if (s) {
+        history.push(s);
+      }
+    }
+  }
+
+  const lastSet = history[history.length - 1];
+  if (!lastSet) {
+    return {
+      weight: templateSet?.weight?.toString() || '60',
+      reps: templateSet?.reps?.toString() || '10',
+      leftWeight: templateSet?.leftWeight?.toString() || templateSet?.weight?.toString() || '60',
+      leftReps: templateSet?.leftReps?.toString() || templateSet?.reps?.toString() || '10',
+      rightWeight: templateSet?.rightWeight?.toString() || templateSet?.weight?.toString() || '60',
+      rightReps: templateSet?.rightReps?.toString() || templateSet?.reps?.toString() || '10',
+    };
+  }
+
+  const isCompound = /bench|press|squat|deadlift|row|overhead|pullup|pull-up|dip|chinup|chin-up/i.test(exName);
+  const isIsolation = /curl|extension|fly|raise|crossover|pushdown|lateral|kickback/i.test(exName);
+  const targetReps = isCompound ? 8 : (isIsolation ? 12 : 10);
+
+  // Unilateral logic
+  if (lastSet.isUnilateral || templateSet?.isUnilateral) {
+    const lw = parseFloat(lastSet.leftWeight ?? lastSet.weight ?? '0') || 0;
+    const lr = parseInt(lastSet.leftReps ?? lastSet.reps ?? '0', 10) || 0;
+    const rw = parseFloat(lastSet.rightWeight ?? lastSet.weight ?? '0') || 0;
+    const rr = parseInt(lastSet.rightReps ?? lastSet.reps ?? '0', 10) || 0;
+
+    // Calculate historical adaptation rate (how many sessions it takes to increase reps)
+    let totalIncreases = 0;
+    let totalSessionsSpent = 0;
+    let currentRepCount = -1;
+    let currentRepSessions = 0;
+
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      const hLr = parseInt(h.leftReps ?? h.reps ?? '0', 10) || 0;
+      const hRr = parseInt(h.rightReps ?? h.reps ?? '0', 10) || 0;
+      const minR = Math.min(hLr, hRr);
+      if (minR === currentRepCount) {
+        currentRepSessions++;
+      } else {
+        if (currentRepCount !== -1 && minR > currentRepCount) {
+          totalIncreases++;
+          totalSessionsSpent += currentRepSessions;
+        }
+        currentRepCount = minR;
+        currentRepSessions = 1;
+      }
+    }
+
+    const avgSessionsToIncrease = totalIncreases > 0 ? (totalSessionsSpent / totalIncreases) : 2;
+    const requiredSessions = Math.min(5, Math.max(1, Math.round(avgSessionsToIncrease)));
+
+    // Calculate current weight consistency and rep consistency
+    let consecutiveSessionsAtCurrentWeight = 0;
+    let consecutiveSessionsAtLastRepsOrMore = 0;
+    const minReps = Math.min(lr, rr);
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      const hLw = parseFloat(history[i].leftWeight ?? history[i].weight ?? '0') || 0;
+      const hRw = parseFloat(history[i].rightWeight ?? history[i].weight ?? '0') || 0;
+      const hLr = parseInt(history[i].leftReps ?? history[i].reps ?? '0', 10) || 0;
+      const hRr = parseInt(history[i].rightReps ?? history[i].reps ?? '0', 10) || 0;
+
+      if (hLw === lw && hRw === rw) {
+        consecutiveSessionsAtCurrentWeight++;
+        if (Math.min(hLr, hRr) >= minReps) {
+          consecutiveSessionsAtLastRepsOrMore++;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (minReps >= targetReps) {
+      // Met or exceeded target reps! Increase weight
+      const slowProgression = consecutiveSessionsAtCurrentWeight >= requiredSessions * 3;
+      const weightInc = slowProgression ? 1.0 : 1.25; // Smaller jump for slow progressors
+      return {
+        weight: (lw + weightInc).toString(),
+        reps: (targetReps - 2).toString(),
+        leftWeight: (lw + weightInc).toString(),
+        leftReps: (targetReps - 2).toString(),
+        rightWeight: (rw + weightInc).toString(),
+        rightReps: (targetReps - 2).toString(),
+      };
+    } else {
+      // Below target reps: increase reps or consolidate
+      if (consecutiveSessionsAtLastRepsOrMore < requiredSessions) {
+        // Consolidate current performance
         return {
-          weight: (lastWeight + 2.5).toString(),
-          reps: lastReps.toString(),
-          sets: lastSets,
+          weight: lw.toString(),
+          reps: minReps.toString(),
+          leftWeight: lw.toString(),
+          leftReps: lr.toString(),
+          rightWeight: rw.toString(),
+          rightReps: rr.toString(),
         };
       } else {
+        // Progress reps: focus on lifting the weaker side
+        const nextLreps = lr < rr ? lr + 1 : (lr === rr ? lr + 1 : lr);
+        const nextRreps = rr < lr ? rr + 1 : (lr === rr ? rr + 1 : rr);
         return {
-          weight: '0',
-          reps: (lastReps + 1).toString(),
-          sets: lastSets,
+          weight: lw.toString(),
+          reps: Math.max(nextLreps, nextRreps).toString(),
+          leftWeight: lw.toString(),
+          leftReps: nextLreps.toString(),
+          rightWeight: rw.toString(),
+          rightReps: nextRreps.toString(),
         };
       }
     }
   }
-  return null;
+
+  // Bilateral logic
+  const w = parseFloat(lastSet.weight ?? '0') || 0;
+  const r = parseInt(lastSet.reps ?? '0', 10) || 0;
+
+  // Calculate historical adaptation rate (how many sessions it takes to increase reps)
+  let totalIncreases = 0;
+  let totalSessionsSpent = 0;
+  let currentRepCount = -1;
+  let currentRepSessions = 0;
+
+  for (let i = 0; i < history.length; i++) {
+    const h = history[i];
+    const hR = parseInt(h.reps ?? '0', 10) || 0;
+    if (hR === currentRepCount) {
+      currentRepSessions++;
+    } else {
+      if (currentRepCount !== -1 && hR > currentRepCount) {
+        totalIncreases++;
+        totalSessionsSpent += currentRepSessions;
+      }
+      currentRepCount = hR;
+      currentRepSessions = 1;
+    }
+  }
+
+  const avgSessionsToIncrease = totalIncreases > 0 ? (totalSessionsSpent / totalIncreases) : 2;
+  const requiredSessions = Math.min(5, Math.max(1, Math.round(avgSessionsToIncrease)));
+
+  // Calculate current weight consistency and rep consistency
+  let consecutiveSessionsAtCurrentWeight = 0;
+  let consecutiveSessionsAtLastRepsOrMore = 0;
+
+  for (let i = history.length - 1; i >= 0; i--) {
+    const hWeight = parseFloat(history[i].weight ?? '0') || 0;
+    const hReps = parseInt(history[i].reps ?? '0', 10) || 0;
+
+    if (hWeight === w) {
+      consecutiveSessionsAtCurrentWeight++;
+      if (hReps >= r) {
+        consecutiveSessionsAtLastRepsOrMore++;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (r >= targetReps) {
+    // Met or exceeded target reps! Increase weight
+    const slowProgression = consecutiveSessionsAtCurrentWeight >= requiredSessions * 3;
+    let weightInc = 2.5;
+    if (isIsolation || w < 20 || slowProgression) {
+      weightInc = 1.25; // Smaller jump for isolation, light weights, or slow progressors
+    }
+    return {
+      weight: (w + weightInc).toString(),
+      reps: (targetReps - 2).toString(),
+    };
+  } else {
+    // Below target reps: increase reps or consolidate
+    if (consecutiveSessionsAtLastRepsOrMore < requiredSessions) {
+      // Consolidate current reps
+      return {
+        weight: w.toString(),
+        reps: r.toString(),
+      };
+    } else {
+      // Progress reps
+      return {
+        weight: w.toString(),
+        reps: (r + 1).toString(),
+      };
+    }
+  }
 };
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
@@ -246,6 +540,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isAutoFinishSetEnabled = true,
   isKeyboardDismissOnNextEnabled = true,
   isRpeMode = true,
+  exerciseNameLanguage,
 }) => {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
@@ -263,6 +558,42 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   } | null>(null);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
+
+  const [showSecondsOnly, setShowSecondsOnly] = useState(false);
+  const timerFadeAnim = useRef(new Animated.Value(1)).current;
+  const timerScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const toggleTimerFormat = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    Animated.parallel([
+      Animated.timing(timerFadeAnim, {
+        toValue: 0.2,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(timerScaleAnim, {
+        toValue: 0.85,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowSecondsOnly(prev => !prev);
+      Animated.parallel([
+        Animated.timing(timerFadeAnim, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.spring(timerScaleAnim, {
+          toValue: 1,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [timerFadeAnim, timerScaleAnim]);
 
   useEffect(() => {
     if (visible) {
@@ -391,23 +722,34 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           // Reconstruct SetRecord from setsDetails if present
           const existingDetails = (ex as any).setsDetails;
           const isSetsArray = Array.isArray(ex.sets);
+          
           if (existingDetails && existingDetails.length > 0) {
             return {
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
-              sets: existingDetails.map((s: any, sIdx: number) => ({
-                id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
-                weight:       s.weight.toString(),
-                reps:         s.reps.toString(),
-                completed:    s.completed || false,
-                rpe:          s.rpe ? s.rpe.toString() : '',
-                category:     s.category || 'S',
-                isUnilateral: s.isUnilateral || false,
-                leftWeight:   s.leftWeight ? s.leftWeight.toString() : undefined,
-                leftReps:     s.leftReps ? s.leftReps.toString() : undefined,
-                rightWeight:  s.rightWeight ? s.rightWeight.toString() : undefined,
-                rightReps:    s.rightReps ? s.rightReps.toString() : undefined,
-              })),
+              sets: existingDetails.map((s: any, sIdx: number) => {
+                const isUnilateral = s.isUnilateral || false;
+                const completed = s.completed || false;
+                return {
+                  id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
+                  weight:       completed ? (s.weight?.toString() || '') : '',
+                  reps:         completed ? (s.reps?.toString() || '') : '',
+                  completed:    completed,
+                  rpe:          s.rpe ? s.rpe.toString() : '',
+                  category:     (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
+                  isUnilateral: isUnilateral,
+                  leftWeight:   isUnilateral ? (completed ? (s.leftWeight?.toString() || '') : '') : undefined,
+                  leftReps:     isUnilateral ? (completed ? (s.leftReps?.toString() || '') : '') : undefined,
+                  rightWeight:  isUnilateral ? (completed ? (s.rightWeight?.toString() || '') : '') : undefined,
+                  rightReps:    isUnilateral ? (completed ? (s.rightReps?.toString() || '') : '') : undefined,
+                  suggestedWeight: s.suggestedWeight?.toString() || s.weight?.toString() || '60',
+                  suggestedReps: s.suggestedReps?.toString() || s.reps?.toString() || '10',
+                  suggestedLeftWeight: isUnilateral ? (s.suggestedLeftWeight?.toString() || s.leftWeight?.toString() || s.weight?.toString() || '60') : undefined,
+                  suggestedLeftReps: isUnilateral ? (s.suggestedLeftReps?.toString() || s.leftReps?.toString() || s.reps?.toString() || '10') : undefined,
+                  suggestedRightWeight: isUnilateral ? (s.suggestedRightWeight?.toString() || s.rightWeight?.toString() || s.weight?.toString() || '60') : undefined,
+                  suggestedRightReps: isUnilateral ? (s.suggestedRightReps?.toString() || s.rightReps?.toString() || s.reps?.toString() || '10') : undefined,
+                };
+              }),
               superSetGroupId: (ex as any).superSetGroupId,
             };
           } else if (isSetsArray && ex.sets.length > 0) {
@@ -415,50 +757,83 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
               sets: ex.sets.map((s: any, sIdx: number) => {
-                let weightVal = s.weight ? s.weight.toString() : '60';
-                let repsVal = s.reps ? s.reps.toString() : '10';
+                const isUnilateral = s.isUnilateral || false;
+                const completed = s.completed || false;
+                let suggested: SetSuggestion = {
+                  weight: s.weight?.toString() || '60',
+                  reps: s.reps?.toString() || '10',
+                  leftWeight: s.leftWeight?.toString() || s.weight?.toString() || '60',
+                  leftReps: s.leftReps?.toString() || s.reps?.toString() || '10',
+                  rightWeight: s.rightWeight?.toString() || s.weight?.toString() || '60',
+                  rightReps: s.rightReps?.toString() || s.reps?.toString() || '10',
+                };
                 if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                  const suggestion = getProgressiveOverloadSuggestions(ex.name, sessions);
-                  if (suggestion) {
-                    weightVal = suggestion.weight;
-                    repsVal = suggestion.reps;
-                  }
+                  suggested = getProgressiveOverloadSuggestionForSet(ex.name, sIdx, sessions, s);
                 }
                 return {
                   id:        s.id || `set-${exIdx}-${sIdx}-${Date.now()}`,
-                  weight:    weightVal,
-                  reps:      repsVal,
-                  completed: s.completed || false,
+                  weight:    completed ? suggested.weight : '',
+                  reps:      completed ? suggested.reps : '',
+                  completed: completed,
                   rpe:       s.rpe ? s.rpe.toString() : '',
-                  category:  s.category || 'S',
+                  category:  (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
+                  isUnilateral: isUnilateral,
+                  leftWeight:   isUnilateral ? (completed ? suggested.leftWeight : '') : undefined,
+                  leftReps:     isUnilateral ? (completed ? suggested.leftReps : '') : undefined,
+                  rightWeight:  isUnilateral ? (completed ? suggested.rightWeight : '') : undefined,
+                  rightReps:    isUnilateral ? (completed ? suggested.rightReps : '') : undefined,
+                  suggestedWeight: suggested.weight,
+                  suggestedReps: suggested.reps,
+                  suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+                  suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+                  suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+                  suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
                 };
               }),
               superSetGroupId: (ex as any).superSetGroupId,
             };
           }
-
-          return {
-            id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
-            name: ex.name,
-            sets: Array.from({ length: setsCount }).map((_, setIdx) => {
-              let weightVal = ex.bestWeight ? ex.bestWeight.toString() : '60';
-              let repsVal = ex.bestReps ? ex.bestReps.toString() : '10';
-              if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                const suggestion = getProgressiveOverloadSuggestions(ex.name, sessions);
-                if (suggestion) {
-                  weightVal = suggestion.weight;
-                  repsVal = suggestion.reps;
-                }
-              }
-              return {
-                id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
-                weight:    weightVal,
-                reps:      repsVal,
-                completed: false,
-                rpe:       '',
-                category:  'S',
-              };
-            }),
+ 
+           return {
+             id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
+             name: ex.name,
+             sets: Array.from({ length: setsCount }).map((_, setIdx) => {
+               const isUnilateral = (ex as any).isUnilateral || false;
+               let suggested: SetSuggestion = {
+                 weight: ex.bestWeight ? ex.bestWeight.toString() : '60',
+                 reps: ex.bestReps ? ex.bestReps.toString() : '10',
+                 leftWeight: ex.bestWeight ? ex.bestWeight.toString() : '60',
+                 leftReps: ex.bestReps ? ex.bestReps.toString() : '10',
+                 rightWeight: ex.bestWeight ? ex.bestWeight.toString() : '60',
+                 rightReps: ex.bestReps ? ex.bestReps.toString() : '10',
+               };
+               if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+                 suggested = getProgressiveOverloadSuggestionForSet(ex.name, setIdx, sessions, {
+                   weight: suggested.weight,
+                   reps: suggested.reps,
+                   isUnilateral
+                 });
+               }
+               return {
+                 id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
+                 weight:    '',
+                 reps:      '',
+                 completed: false,
+                 rpe:       '',
+                 category:  'S' as const,
+                 isUnilateral: isUnilateral,
+                 leftWeight:   isUnilateral ? '' : undefined,
+                 leftReps:     isUnilateral ? '' : undefined,
+                 rightWeight:  isUnilateral ? '' : undefined,
+                 rightReps:    isUnilateral ? '' : undefined,
+                 suggestedWeight: suggested.weight,
+                 suggestedReps: suggested.reps,
+                 suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+                 suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+                 suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+                 suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+               };
+             }),
             superSetGroupId: (ex as any).superSetGroupId,
           };
         });
@@ -547,6 +922,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           if (now >= restTimerEndTarget.current) {
             setRestTimeRemaining(0);
             setIsTimerActive(false);
+            restTimerEndTarget.current = null;
           } else {
             setRestTimeRemaining(Math.ceil((restTimerEndTarget.current - now) / 1000));
           }
@@ -642,6 +1018,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   };
 
+  const adjustRestTimer = (seconds: number) => {
+    if (!restTimerEndTarget.current) return;
+    const now = Date.now();
+    const newTarget = restTimerEndTarget.current + seconds * 1000;
+    if (newTarget <= now) {
+      setRestTimeRemaining(0);
+      setIsTimerActive(false);
+      setIsTimerSubMenuVisible(false);
+      restTimerEndTarget.current = null;
+      Notifications.cancelAllScheduledNotificationsAsync();
+    } else {
+      restTimerEndTarget.current = newTarget;
+      const remaining = Math.ceil((newTarget - now) / 1000);
+      setRestTimeRemaining(remaining);
+      scheduleRestNotification(remaining);
+    }
+  };
+
   const timerPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!isTimerActive) return;
@@ -693,7 +1087,30 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           ...ex,
           sets: ex.sets.map((set, sIdx) => {
             if (sIdx !== setIdx) return set;
-            return { ...set, completed: willBeCompleted };
+            let updated = { ...set, completed: willBeCompleted };
+            if (willBeCompleted) {
+              if (!updated.weight && (updated as any).suggestedWeight) {
+                updated.weight = (updated as any).suggestedWeight;
+              }
+              if (!updated.reps && (updated as any).suggestedReps) {
+                updated.reps = (updated as any).suggestedReps;
+              }
+              if (updated.isUnilateral) {
+                if (!updated.leftWeight && (updated as any).suggestedLeftWeight) {
+                  updated.leftWeight = (updated as any).suggestedLeftWeight;
+                }
+                if (!updated.leftReps && (updated as any).suggestedLeftReps) {
+                  updated.leftReps = (updated as any).suggestedLeftReps;
+                }
+                if (!updated.rightWeight && (updated as any).suggestedRightWeight) {
+                  updated.rightWeight = (updated as any).suggestedRightWeight;
+                }
+                if (!updated.rightReps && (updated as any).suggestedRightReps) {
+                  updated.rightReps = (updated as any).suggestedRightReps;
+                }
+              }
+            }
+            return updated;
           })
         };
       });
@@ -709,7 +1126,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           ...ex,
           sets: ex.sets.map((set, sIdx) => {
             if (sIdx !== setIdx) return set;
-            return { ...set, [field]: value };
+            const updated = { ...set, [field]: value };
+            if (field === 'weight') (updated as any).weightSuggested = false;
+            else if (field === 'reps') (updated as any).repsSuggested = false;
+            else if (field === 'leftWeight') (updated as any).leftWeightSuggested = false;
+            else if (field === 'leftReps') (updated as any).leftRepsSuggested = false;
+            else if (field === 'rightWeight') (updated as any).rightWeightSuggested = false;
+            else if (field === 'rightReps') (updated as any).rightRepsSuggested = false;
+            return updated;
           })
         };
       });
@@ -729,19 +1153,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         if (eIdx !== exIdx) return ex;
         const currentSets = ex.sets;
         const lastSet = currentSets[currentSets.length - 1];
+
+        const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
+        const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
+        const sugLeftWeight = isUnilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined;
+        const sugLeftReps = isUnilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined;
+        const sugRightWeight = isUnilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined;
+        const sugRightReps = isUnilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined;
+
         const newSet: SetRecord = {
           id:        `set-${exIdx}-${Date.now()}-${Math.random()}`,
-          weight:    lastSet?.weight ?? '60',
-          reps:      lastSet?.reps ?? '10',
+          weight:    '',
+          reps:      '',
           completed: false,
           rpe:       '',
           category:  lastSet?.category ?? 'S',
           isUnilateral: isUnilateral,
-          leftWeight:   isUnilateral ? (lastSet?.leftWeight ?? lastSet?.weight ?? '60') : undefined,
-          leftReps:     isUnilateral ? (lastSet?.leftReps ?? lastSet?.reps ?? '10') : undefined,
-          rightWeight:  isUnilateral ? (lastSet?.rightWeight ?? lastSet?.weight ?? '60') : undefined,
-          rightReps:    isUnilateral ? (lastSet?.rightReps ?? lastSet?.reps ?? '10') : undefined,
-        };
+          leftWeight:   isUnilateral ? '' : undefined,
+          leftReps:     isUnilateral ? '' : undefined,
+          rightWeight:  isUnilateral ? '' : undefined,
+          rightReps:    isUnilateral ? '' : undefined,
+          suggestedWeight: sugWeight,
+          suggestedReps: sugReps,
+          suggestedLeftWeight: sugLeftWeight,
+          suggestedLeftReps: sugLeftReps,
+          suggestedRightWeight: sugRightWeight,
+          suggestedRightReps: sugRightReps,
+        } as any;
         return {
           ...ex,
           sets: [...currentSets, newSet]
@@ -996,46 +1434,58 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (isReplaceMode && activeExerciseMenuIndex !== null && names.length > 0) {
       // Replace mode: replace the targeted exercise
       const exName = names[0];
-      let weightVal = '60';
-      let repsVal = '10';
+      const targetEx = activeExercises[activeExerciseMenuIndex];
+      const isUnilateral = targetEx?.sets[0]?.isUnilateral || false;
 
-      if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-        const suggestion = getProgressiveOverloadSuggestions(exName, sessions);
-        if (suggestion) {
-          weightVal = suggestion.weight;
-          repsVal = suggestion.reps;
+      const updatedSets = targetEx.sets.map((s, sIdx) => {
+        let suggested: SetSuggestion = {
+          weight: '60',
+          reps: '10',
+          leftWeight: '60',
+          leftReps: '10',
+          rightWeight: '60',
+          rightReps: '10',
+        };
+        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+          suggested = getProgressiveOverloadSuggestionForSet(exName, sIdx, sessions, { isUnilateral });
         } else {
           const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
           if (libEx) {
-            weightVal = (libEx.bestWeight || 60).toString();
-            repsVal = (libEx.bestReps || 10).toString();
+            suggested.weight = (libEx.bestWeight || 60).toString();
+            suggested.reps = (libEx.bestReps || 10).toString();
+            suggested.leftWeight = suggested.weight;
+            suggested.leftReps = suggested.reps;
+            suggested.rightWeight = suggested.weight;
+            suggested.rightReps = suggested.reps;
           }
         }
-      } else {
-        const previousSession = sessions?.find((s: any) =>
-          s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
-        );
-        if (previousSession) {
-          const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-          if (found) {
-            weightVal = (found.bestWeight || 60).toString();
-            repsVal = (found.bestReps || 10).toString();
-          }
-        } else {
-          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
-          if (libEx) {
-            weightVal = (libEx.bestWeight || 60).toString();
-            repsVal = (libEx.bestReps || 10).toString();
-          }
-        }
-      }
+        return {
+          id: `set-${activeExerciseMenuIndex}-${sIdx}-${Date.now()}`,
+          weight: '',
+          reps: '',
+          completed: false,
+          rpe: '',
+          category: (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
+          isUnilateral: isUnilateral,
+          leftWeight: isUnilateral ? '' : undefined,
+          leftReps: isUnilateral ? '' : undefined,
+          rightWeight: isUnilateral ? '' : undefined,
+          rightReps: isUnilateral ? '' : undefined,
+          suggestedWeight: suggested.weight,
+          suggestedReps: suggested.reps,
+          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+        };
+      });
 
       setActiveExercises(prev => prev.map((ex, idx) => {
         if (idx === activeExerciseMenuIndex) {
           return {
             id: ex.id,
             name: exName,
-            sets: ex.sets.map(s => ({ ...s, weight: weightVal, reps: repsVal, completed: false })),
+            sets: updatedSets,
             superSetGroupId: ex.superSetGroupId,
           };
         }
@@ -1044,61 +1494,72 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setActiveExerciseMenuIndex(null);
     } else {
       // Add mode: append all selected exercises
-      const newOnes = names.map((exName, idx) => {
-        let weightVal = '60';
-        let repsVal = '10';
+      const newOnes: ActiveExercise[] = names.map((exName, idx) => {
+        const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+        const isUnilateral = libEx?.isUnilateral || false;
+        
         let setsCount = 3;
-
-        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          const suggestion = getProgressiveOverloadSuggestions(exName, sessions);
-          if (suggestion) {
-            weightVal = suggestion.weight;
-            repsVal = suggestion.reps;
-            setsCount = suggestion.sets || 3;
-          } else {
-            const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
-            if (libEx) {
-              weightVal = (libEx.bestWeight || 60).toString();
-              repsVal = (libEx.bestReps || 10).toString();
-            }
-          }
-        } else {
-          const previousSession = sessions?.find((s: any) =>
+        if (sessions && sessions.length > 0) {
+          const previousSession = sessions.find((s: any) =>
             s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
           );
-          if (previousSession) {
-            const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-            if (found) {
-              weightVal = (found.bestWeight || 60).toString();
-              repsVal = (found.bestReps || 10).toString();
-              setsCount = typeof found.sets === 'number' ? found.sets : (found.sets?.length || 3);
-            }
-          } else {
-            const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
-            if (libEx) {
-              weightVal = (libEx.bestWeight || 60).toString();
-              repsVal = (libEx.bestReps || 10).toString();
-            }
+          const found = previousSession?.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+          if (found) {
+            setsCount = typeof found.sets === 'number' ? found.sets : (found.setsDetails?.length || found.sets?.length || 3);
           }
         }
+
+        const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
+          let suggested: SetSuggestion = {
+            weight: '60',
+            reps: '10',
+            leftWeight: '60',
+            leftReps: '10',
+            rightWeight: '60',
+            rightReps: '10',
+          };
+          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+            suggested = getProgressiveOverloadSuggestionForSet(exName, sIdx, sessions, { isUnilateral });
+          } else if (libEx) {
+            suggested.weight = (libEx.bestWeight || 60).toString();
+            suggested.reps = (libEx.bestReps || 10).toString();
+            suggested.leftWeight = suggested.weight;
+            suggested.leftReps = suggested.reps;
+            suggested.rightWeight = suggested.weight;
+            suggested.rightReps = suggested.reps;
+          }
+          return {
+            id: `set-new-${idx}-${sIdx}-${Date.now()}`,
+            weight: '',
+            reps: '',
+            completed: false,
+            rpe: '',
+            category: 'S' as const,
+            isUnilateral: isUnilateral,
+            leftWeight: isUnilateral ? '' : undefined,
+            leftReps: isUnilateral ? '' : undefined,
+            rightWeight: isUnilateral ? '' : undefined,
+            rightReps: isUnilateral ? '' : undefined,
+            suggestedWeight: suggested.weight,
+            suggestedReps: suggested.reps,
+            suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+            suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+            suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+            suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+          };
+        });
 
         return {
           id: `ex-new-${idx}-${Date.now()}-${Math.random()}`,
           name: exName,
-          sets: Array.from({ length: setsCount }).map((_, sIdx) => ({
-            id: `set-${Date.now()}-${idx}-${sIdx}`,
-            weight: weightVal,
-            reps: repsVal,
-            completed: false,
-            category: 'S' as const,
-          })),
+          sets: sets,
         };
       });
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setActiveExercises(prev => [...prev, ...newOnes]);
     }
     setIsLibraryVisible(false);
-  }, [isReplaceMode, activeExerciseMenuIndex, isProgressiveOverloadEnabled, sessions, exerciseLibrary]);
+  }, [isReplaceMode, activeExerciseMenuIndex, isProgressiveOverloadEnabled, sessions, exerciseLibrary, activeExercises]);
 
   // Legacy single-select compat (used internally)
   const handleSelectLibraryExercise = (exName: string) => {
@@ -1291,15 +1752,49 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 )}
               </View>
 
-              <View style={[styles.headerCenter, { pointerEvents: 'none', flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                <Text style={styles.headerTimerText}>{elapsed}</Text>
-                {isLiveHeartRateEnabled && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 4 }}>
-                    <Ionicons name="heart" size={14} color={colors.error} />
-                    <Text style={{ color: colors.error, fontSize: 13, fontFamily: font.bold }}>{heartRate}</Text>
+              {(() => {
+                const totalSeconds = Math.max(0, Math.floor((Date.now() - startTime.getTime()) / 1000));
+                return (
+                  <View style={[styles.headerCenter, { pointerEvents: 'box-none' }]}>
+                    <Pressable
+                      onPress={toggleTimerFormat}
+                      style={({ pressed }) => [
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                          opacity: pressed ? 0.75 : 1.0,
+                        }
+                      ]}
+                      hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
+                      accessibilityLabel="Toggle elapsed timer format"
+                    >
+                      <Animated.View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          opacity: timerFadeAnim,
+                          transform: [{ scale: timerScaleAnim }],
+                        }}
+                      >
+                        {showSecondsOnly ? (
+                          <Text style={styles.headerTimerText}>{totalSeconds}s</Text>
+                        ) : (
+                          <Text style={styles.headerTimerText}>{elapsed}</Text>
+                        )}
+                        {isLiveHeartRateEnabled && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 4 }}>
+                            <Ionicons name="heart" size={14} color={colors.error} />
+                            <Text style={{ color: colors.error, fontSize: 13, fontFamily: font.bold }}>{heartRate}</Text>
+                          </View>
+                        )}
+                      </Animated.View>
+                    </Pressable>
                   </View>
-                )}
-              </View>
+                );
+              })()}
 
               <View style={styles.headerRight}>
                 <Pressable
@@ -1328,11 +1823,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <View style={styles.timerSubMenuButtons}>
                     <Pressable
                       style={styles.timerSubMenuBtn}
-                      onPress={() => {
-                        if (restTimerEndTarget.current) {
-                          restTimerEndTarget.current -= 30000;
-                        }
-                      }}
+                      onPress={() => adjustRestTimer(-30)}
                       android_ripple={rippleTokens.surface}
                     >
                       <Text style={styles.timerSubMenuBtnText}>-30</Text>
@@ -1340,11 +1831,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     
                     <Pressable
                       style={styles.timerSubMenuBtn}
-                      onPress={() => {
-                        if (restTimerEndTarget.current) {
-                          restTimerEndTarget.current -= 10000;
-                        }
-                      }}
+                      onPress={() => adjustRestTimer(-10)}
                       android_ripple={rippleTokens.surface}
                     >
                       <Text style={styles.timerSubMenuBtnText}>-10</Text>
@@ -1365,11 +1852,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     
                     <Pressable
                       style={styles.timerSubMenuBtn}
-                      onPress={() => {
-                        if (restTimerEndTarget.current) {
-                          restTimerEndTarget.current += 10000;
-                        }
-                      }}
+                      onPress={() => adjustRestTimer(10)}
                       android_ripple={rippleTokens.surface}
                     >
                       <Text style={styles.timerSubMenuBtnText}>+10</Text>
@@ -1377,11 +1860,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     
                     <Pressable
                       style={styles.timerSubMenuBtn}
-                      onPress={() => {
-                        if (restTimerEndTarget.current) {
-                          restTimerEndTarget.current += 30000;
-                        }
-                      }}
+                      onPress={() => adjustRestTimer(30)}
                       android_ripple={rippleTokens.surface}
                     >
                       <Text style={styles.timerSubMenuBtnText}>+30</Text>
@@ -1488,18 +1967,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     <SwipeableRow 
                       borderRadius={radius.md}
                       style={{ marginBottom: spacing.lg }}
-                      onDelete={() => {
+                      onDelete={(confirm, cancel) => {
                         Alert.alert(
                           'Remove Exercise',
                           `Are you sure you want to remove "${exercise.name}"?`,
                           [
-                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Cancel', style: 'cancel', onPress: cancel },
                             {
                               text: 'Remove',
                               style: 'destructive',
                               onPress: () => {
-                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                                setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
+                                confirm(() => {
+                                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                  setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
+                                });
                               }
                             }
                           ]
@@ -3062,11 +3543,7 @@ const styles = StyleSheet.create({
   visualPlate: {
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 2,
-    shadowOffset: { width: 1, height: 1 },
-    elevation: 3,
+    boxShadow: '1px 1px 2px rgba(0, 0, 0, 0.5)',
   },
   visualPlateText: {
     fontFamily: font.bold,

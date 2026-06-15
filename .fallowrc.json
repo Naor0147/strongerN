@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "ignorePatterns": [
+    "src/__tests__/mocks/fileMock.js",
+    "src/utils/soundPlayer.ts"
+  ],
+  "ignoreDependencies": [
+    "@expo/metro-runtime",
+    "@ohah/react-native-mcp-server",
+    "expo-audio",
+    "expo-crypto",
+    "expo-localization",
+    "react-native-web",
+    "babel-preset-expo"
+  ],
+  "ignoreExports": [
+    {
+      "file": "src/theme.ts",
+      "exports": ["themePresets", "getSpringConfig"]
+    },
+    {
+      "file": "src/data/mockData.ts",
+      "exports": ["mockChartData"]
+    }
+  ],
+  "duplicates": {
+    "enabled": false,
+    "minTokens": 65535,
+    "minLines": 65535
+  },
+  "health": {
+    "maxCyclomatic": 65535,
+    "maxCognitive": 65535,
+    "maxCrap": 65535.0
+  }
+}

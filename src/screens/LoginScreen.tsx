@@ -10,7 +10,6 @@ import {
   Pressable,
   TextInput,
   ScrollView,
-  Animated,
   Easing,
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +18,8 @@ import {
   Dimensions,
   Image,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,6 +30,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { AuthMode } from '../utils/authStore';
 import { pickAndReadBackupFile } from '../utils/backupManager';
+import i18n from '../utils/i18n';
 
 // Required: warm up the browser so Google sign-in opens instantly on Android
 WebBrowser.maybeCompleteAuthSession();
@@ -192,7 +194,7 @@ const DataInfoCard: React.FC = () => {
         android_ripple={rippleTokens.surface}
       >
         <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
-        <Text style={styles.infoCardTitle}>Where is my data stored?</Text>
+        <Text style={styles.infoCardTitle}>{i18n.t('login.whereDataStored')}</Text>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={16}
@@ -204,15 +206,15 @@ const DataInfoCard: React.FC = () => {
         <View style={styles.infoCardBody}>
           <DataInfoRow
             icon="phone-portrait-outline"
-            text="Data is stored locally on this device (SQLite). It is available instantly without internet."
+            text={i18n.t('login.dataLocal')}
           />
           <DataInfoRow
             icon="cloud-outline"
-            text="Connect Google to back up across reinstalls. Your Drive file will be restored on next sign-in."
+            text={i18n.t('login.dataGoogle')}
           />
           <DataInfoRow
             icon="document-outline"
-            text="You can also manually export a JSON backup from Settings → Data at any time."
+            text={i18n.t('login.dataExport')}
           />
         </View>
       </Animated.View>
@@ -274,14 +276,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
           handleGoogleConnectWithToken(token);
         } else {
           setIsGoogleLoading(false);
-          Alert.alert('Google Sign-In Error', 'No access token returned from Google.');
+          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
         }
       } else if (response.type === 'error') {
         setIsGoogleLoading(false);
-        Alert.alert('Google Sign-In Error', `OAuth error: ${response.error?.message || 'Unknown error'}`);
+        Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
       } else if (response.type === 'cancel') {
         setIsGoogleLoading(false);
-        Alert.alert('Google Sign-In Cancelled', 'The Google Sign-In flow was closed or cancelled.');
+        Alert.alert(i18n.t('login.googleSignInCancelled'), i18n.t('login.googleCancelledMsg'));
       }
     }
   }, [response]);
@@ -318,11 +320,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const handleLocalSubmit = () => {
     const trimmed = localUsername.trim();
     if (!trimmed) {
-      setUsernameError('Please enter a name to continue.');
+      setUsernameError(i18n.t('login.enterNameToContinue'));
       return;
     }
     if (trimmed.length < 2) {
-      setUsernameError('Name must be at least 2 characters.');
+      setUsernameError(i18n.t('login.nameMinChars'));
       return;
     }
     setUsernameError('');
@@ -347,15 +349,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       if (typedName && typedName.toLowerCase() !== backupUsername.toLowerCase()) {
         await new Promise<void>((resolve) => {
           Alert.alert(
-            'Name Mismatch',
-            `Backup belongs to "${backupUsername}". Use "${backupUsername}" as your profile name?`,
+            i18n.t('login.nameMismatch'),
+            i18n.t('login.nameMismatchMsg', { backupName: backupUsername }),
             [
               {
-                text: `Use "${backupUsername}"`,
+                text: i18n.t('login.useName', { name: backupUsername }),
                 onPress: () => { resolvedUsername = backupUsername; resolve(); },
               },
               {
-                text: `Keep "${typedName}"`,
+                text: i18n.t('login.keepName', { name: typedName }),
                 onPress: () => { resolvedUsername = typedName; resolve(); },
               },
             ],
@@ -370,7 +372,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
           onComplete('local', resolvedUsername);
           return;
         } else {
-          Alert.alert('Restore Failed', 'Could not apply the backup. Please try again.');
+          Alert.alert(i18n.t('login.restoreFailed'), i18n.t('login.restoreFailedMsg'));
         }
       } else {
         // Fallback: just log in with the username from the backup
@@ -379,7 +381,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       }
     } catch (e: any) {
       console.error('[LoginScreen] Restore error:', e);
-      Alert.alert('Error', `Restore failed: ${e.message || String(e)}`);
+      Alert.alert(i18n.t('common.error'), i18n.t('extras.restoreFailedError', { error: e.message || String(e) }));
     } finally {
       setIsRestoring(false);
     }
@@ -468,17 +470,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
               <AnimatedLogo />
 
               {/* ── App Name ─────────────────────────────────── */}
-              <Text style={styles.appName}>strongerN</Text>
-              <Text style={styles.tagline}>Your personal strength tracker</Text>
+              <Text style={styles.appName}>{i18n.t('login.appTitle')}</Text>
+              <Text style={styles.tagline}>{i18n.t('login.appSubtitle')}</Text>
 
               {/* ── Auth Card ────────────────────────────────── */}
               <View style={styles.card}>
                 {/* Google Sign-In */}
                 {!showLocalForm && (
                   <>
-                    <Text style={styles.cardTitle}>Get Started</Text>
+                    <Text style={styles.cardTitle}>{i18n.t('login.getStarted')}</Text>
                     <Text style={styles.cardSubtitle}>
-                      Sign in to keep your data safe across reinstalls, or jump straight in.
+                      {i18n.t('login.signInDesc')}
                     </Text>
 
                     {/* Google Button */}
@@ -491,7 +493,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                       onPress={handleGoogleOAuth}
                       disabled={isGoogleLoading}
                       android_ripple={rippleTokens.surface}
-                      accessibilityLabel="Continue with Google"
+                      accessibilityLabel={i18n.t('extras.continueWithGoogleA11y')}
                     >
                       {isGoogleLoading ? (
                         <ActivityIndicator size="small" color={colors.textPrimary} />
@@ -501,7 +503,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                           <View style={styles.googleIconBox}>
                             <Text style={styles.googleG}>G</Text>
                           </View>
-                          <Text style={styles.googleBtnText}>Continue with Google</Text>
+                          <Text style={styles.googleBtnText}>{i18n.t('login.continueWithGoogle')}</Text>
                         </>
                       )}
                     </Pressable>
@@ -509,7 +511,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                     {/* Token fallback (developer / web popup blocked) */}
                     {showTokenInput && (
                       <View style={styles.tokenFallback}>
-                        <Text style={styles.tokenLabel}>Paste Google Access Token:</Text>
+                        <Text style={styles.tokenLabel}>{i18n.t('login.pasteAccessToken')}</Text>
                         <TextInput
                           id="login-google-token-input"
                           style={styles.tokenInput}
@@ -527,7 +529,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                           disabled={!googleToken.trim()}
                           android_ripple={rippleTokens.accent}
                         >
-                          <Text style={styles.tokenSubmitText}>CONNECT</Text>
+                          <Text style={styles.tokenSubmitText}>{i18n.t('login.connect')}</Text>
                         </Pressable>
                       </View>
                     )}
@@ -535,7 +537,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                     {/* Divider */}
                     <View style={styles.dividerRow}>
                       <View style={styles.dividerLine} />
-                      <Text style={styles.dividerText}>or</Text>
+                      <Text style={styles.dividerText}>{i18n.t('common.or')}</Text>
                       <View style={styles.dividerLine} />
                     </View>
 
@@ -548,10 +550,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                       ]}
                       onPress={() => setShowLocalForm(true)}
                       android_ripple={rippleTokens.accent}
-                      accessibilityLabel="Create a local account"
+                      accessibilityLabel={i18n.t('extras.createLocalAccountA11y')}
                     >
                       <Ionicons name="person-outline" size={18} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
-                      <Text style={styles.localBtnText}>Create Local Account</Text>
+                      <Text style={styles.localBtnText}>{i18n.t('login.createLocalAccount')}</Text>
                     </Pressable>
 
                     {/* Guest */}
@@ -563,10 +565,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                       ]}
                       onPress={handleContinueAsGuest}
                       android_ripple={rippleTokens.borderless}
-                      accessibilityLabel="Continue as guest"
+                      accessibilityLabel={i18n.t('extras.continueAsGuestA11y')}
                     >
                       <Ionicons name="eye-off-outline" size={15} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
-                      <Text style={styles.guestBtnText}>Continue as Guest</Text>
+                      <Text style={styles.guestBtnText}>{i18n.t('login.continueAsGuest')}</Text>
                     </Pressable>
                   </>
                 )}
@@ -580,7 +582,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                       android_ripple={rippleTokens.borderless}
                     >
                       <Ionicons name="arrow-back" size={18} color={colors.textSecondary} />
-                      <Text style={styles.backText}>Back</Text>
+                      <Text style={styles.backText}>{i18n.t('login.back')}</Text>
                     </Pressable>
 
                     {/* ── Tab Switcher: Create | Restore ─── */}
@@ -592,7 +594,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                         android_ripple={rippleTokens.borderless}
                       >
                         <Ionicons name="person-add-outline" size={15} color={!restoreMode ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.localTabText, !restoreMode && styles.localTabTextActive]}>New Account</Text>
+                        <Text style={[styles.localTabText, !restoreMode && styles.localTabTextActive]}>{i18n.t('login.newAccount')}</Text>
                       </Pressable>
                       <Pressable
                         id="login-tab-restore"
@@ -601,16 +603,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                         android_ripple={rippleTokens.borderless}
                       >
                         <Ionicons name="cloud-download-outline" size={15} color={restoreMode ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.localTabText, restoreMode && styles.localTabTextActive]}>Restore</Text>
+                        <Text style={[styles.localTabText, restoreMode && styles.localTabTextActive]}>{i18n.t('login.restore')}</Text>
                       </Pressable>
                     </View>
 
                     {!restoreMode ? (
                       /* ── Create New Account ── */
                       <>
-                        <Text style={styles.cardTitle}>Create Account</Text>
+                        <Text style={styles.cardTitle}>{i18n.t('login.createAccount')}</Text>
                         <Text style={styles.cardSubtitle}>
-                          Choose a name to display on your profile. Data stays on-device.
+                          {i18n.t('login.chooseName')}
                         </Text>
 
                         <View style={[styles.inputWrapper, usernameError ? styles.inputWrapperError : null]}>
@@ -620,7 +622,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                             style={styles.textInput}
                             value={localUsername}
                             onChangeText={(t) => { setLocalUsername(t); setUsernameError(''); }}
-                            placeholder="Your name…"
+                            placeholder={i18n.t('login.yourName')}
                             placeholderTextColor={colors.textMuted}
                             maxLength={32}
                             returnKeyType="done"
@@ -644,18 +646,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                           onPress={handleLocalSubmit}
                           android_ripple={rippleTokens.accent}
                         >
-                          <Text style={styles.localBtnText}>Continue</Text>
+                          <Text style={styles.localBtnText}>{i18n.t('login.continue')}</Text>
                           <Ionicons name="arrow-forward" size={18} color={colors.textInverse} style={{ marginLeft: spacing.sm }} />
                         </Pressable>
                       </>
                     ) : (
                       /* ── Restore from Backup File ── */
                       <>
-                        <Text style={styles.cardTitle}>Restore Account</Text>
+                        <Text style={styles.cardTitle}>{i18n.t('login.restoreAccount')}</Text>
                         <Text style={styles.cardSubtitle}>
-                          Pick your exported{' '}
-                          <Text style={{ fontFamily: font.bold, color: colors.accent }}>strongerN backup (.json)</Text>{' '}
-                          file to recover all your workouts, exercises, and settings instantly.
+                          {i18n.t('login.restoreDesc')}
                         </Text>
 
                         {/* Optional name hint */}
@@ -666,7 +666,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                             style={styles.textInput}
                             value={localUsername}
                             onChangeText={(t) => setLocalUsername(t)}
-                            placeholder="Your name (optional hint)…"
+                            placeholder={i18n.t('login.yourNameHint')}
                             placeholderTextColor={colors.textMuted}
                             maxLength={32}
                             returnKeyType="done"
@@ -675,13 +675,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                         </View>
 
                         <Text style={styles.restoreHint}>
-                          The name in your backup file will be used. Enter your name above only if you want to confirm it matches.
+                          {i18n.t('login.restoreNameNote')}
                         </Text>
 
                         {isRestoring ? (
                           <View style={styles.restoreLoadingRow}>
                             <ActivityIndicator size="small" color={colors.accent} />
-                            <Text style={styles.restoreLoadingText}>Restoring your data…</Text>
+                            <Text style={styles.restoreLoadingText}>{i18n.t('login.restoringData')}</Text>
                           </View>
                         ) : (
                           <Pressable
@@ -695,7 +695,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                             accessibilityLabel="Pick backup file to restore"
                           >
                             <Ionicons name="folder-open-outline" size={20} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
-                            <Text style={styles.restoreFileBtnText}>Pick Backup File (.json)</Text>
+                            <Text style={styles.restoreFileBtnText}>{i18n.t('login.pickBackupFile')}</Text>
                           </Pressable>
                         )}
                       </>
@@ -707,7 +707,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                       onPress={handleContinueAsGuest}
                       android_ripple={rippleTokens.borderless}
                     >
-                      <Text style={styles.guestBtnText}>Skip — Continue as Guest</Text>
+                      <Text style={styles.guestBtnText}>{i18n.t('login.skipGuest')}</Text>
                     </Pressable>
                   </>
                 )}
@@ -718,7 +718,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
               {/* ── Privacy note ─────────────────────────────── */}
               <Text style={styles.privacyNote}>
-                No personal data is sent to any server.{'\n'}Your workouts belong to you.
+                {i18n.t('login.privacyNote')}
               </Text>
             </Animated.View>
           </ScrollView>

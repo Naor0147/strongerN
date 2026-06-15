@@ -15,6 +15,7 @@ import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureSt
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
 import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
 import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
+import i18n from './utils/i18n';
 
 // Screens — Auth
 import LoginScreen from './screens/LoginScreen';
@@ -219,6 +220,7 @@ export default function App() {
   const [isKeyboardDismissOnNextEnabled, setIsKeyboardDismissOnNextEnabled] = React.useState(true);
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [isRpeMode, setIsRpeMode] = React.useState(true); // true = RPE, false = RIR
+  const [exerciseNameLanguage, setExerciseNameLanguage] = React.useState<'en' | 'he'>('en');
 
 
   const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('chime');
@@ -451,6 +453,7 @@ export default function App() {
         isAutoFinishSetEnabled,
         isKeyboardDismissOnNextEnabled,
         isRpeMode,
+        exerciseNameLanguage,
         appTheme,
         customAccentColor,
       };
@@ -458,7 +461,7 @@ export default function App() {
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, appTheme, customAccentColor]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -1002,6 +1005,7 @@ export default function App() {
       if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
       if (s.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(s.isKeyboardDismissOnNextEnabled);
       if (s.isRpeMode !== undefined) setIsRpeMode(s.isRpeMode);
+      if (s.exerciseNameLanguage !== undefined) setExerciseNameLanguage(s.exerciseNameLanguage);
       return true;
     } catch (e) {
       console.warn('Error applying backup data', e);
@@ -1258,7 +1262,7 @@ export default function App() {
 
   const handleWipeAllData = () => {
     setUser({
-      name: 'Alex Morgan',
+      name: 'Guest User',
       totalWorkouts: 0,
       isPro: false,
     });
@@ -1477,8 +1481,8 @@ export default function App() {
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
       Alert.alert(
-        "Workout Active",
-        "You already have an active workout session running. Please finish or discard it first before resuming/editing another workout."
+        i18n.t('alerts.workoutActive'),
+        i18n.t('alerts.workoutActiveMsg')
       );
       return;
     }
@@ -1646,10 +1650,10 @@ export default function App() {
             ex.setsDetails.forEach((set: any) => {
               if (set.completed) {
                 if (set.isUnilateral) {
-                  const leftW = parseFloat(set.leftWeight || set.weight) || 0;
-                  const leftR = parseInt(set.leftReps || set.reps, 10) || 0;
-                  const rightW = parseFloat(set.rightWeight || set.weight) || 0;
-                  const rightR = parseInt(set.rightReps || set.reps, 10) || 0;
+                  const leftW = parseFloat(set.leftWeight ?? set.weight ?? '0') || 0;
+                  const leftR = parseInt(set.leftReps ?? set.reps ?? '0', 10) || 0;
+                  const rightW = parseFloat(set.rightWeight ?? set.weight ?? '0') || 0;
+                  const rightR = parseInt(set.rightReps ?? set.reps ?? '0', 10) || 0;
                   totalVolume += (leftW * leftR) + (rightW * rightR);
                 } else {
                   totalVolume += (set.weight || 0) * (set.reps || 0);
@@ -1664,9 +1668,9 @@ export default function App() {
         });
 
         Alert.alert(
-          "Safety Timer Triggered",
-          "Your active workout session has exceeded the 3-hour limit and has been automatically saved.",
-          [{ text: "OK" }]
+          i18n.t('alerts.safetyTimer'),
+          i18n.t('alerts.safetyTimerMsg'),
+          [{ text: i18n.t('common.ok') }]
         );
 
         handleFinishWorkout({
@@ -1831,6 +1835,8 @@ export default function App() {
                   setIsKeyboardDismissOnNextEnabled={setIsKeyboardDismissOnNextEnabled}
                   isRpeMode={isRpeMode}
                   setIsRpeMode={setIsRpeMode}
+                  exerciseNameLanguage={exerciseNameLanguage}
+                  setExerciseNameLanguage={setExerciseNameLanguage}
                 />
               )}
             </Tab.Screen>
@@ -1861,6 +1867,7 @@ export default function App() {
                   enableRoutineFolders={enableRoutineFolders}
                   onAddCustomExercise={handleAddExercise}
                   sessions={sessionsList}
+                  exerciseNameLanguage={exerciseNameLanguage}
                 />
               )}
             </Tab.Screen>
@@ -1874,6 +1881,7 @@ export default function App() {
                   onUpdateExerciseNotes={handleUpdateExerciseNotes}
                   onUpdateExercise={handleUpdateExercise}
                   sessions={sessionsList}
+                  exerciseNameLanguage={exerciseNameLanguage}
                 />
               )}
             </Tab.Screen>
@@ -1885,6 +1893,7 @@ export default function App() {
                     weeklyMuscleSets={weeklyMuscleSets}
                     sessions={sessionsList}
                     exercisesList={exercisesList}
+                    exerciseNameLanguage={exerciseNameLanguage}
                   />
                 )}
               </Tab.Screen>
@@ -1897,7 +1906,7 @@ export default function App() {
               startTime={startTime}
               activeExercises={workoutExercises}
               onCheckSet={() => {
-                Alert.alert("Wearable Companion", "Set marked as completed on smartwatch companion app!");
+                Alert.alert(i18n.t('alerts.wearableCompanion'), i18n.t('alerts.wearableCompanionMsg'));
               }}
               onClose={() => setIsWatchSimulatorVisible(false)}
             />
@@ -1926,6 +1935,7 @@ export default function App() {
             isAutoFinishSetEnabled={isAutoFinishSetEnabled}
             isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
             isRpeMode={isRpeMode}
+            exerciseNameLanguage={exerciseNameLanguage}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}
@@ -1965,7 +1975,7 @@ export default function App() {
                     <Ionicons name="trophy" size={54} color={colors.gold} />
                   </View>
                   
-                  <Text style={styles.celebrationTitle}>WORKOUT COMPLETED!</Text>
+                  <Text style={styles.celebrationTitle}>{i18n.t('completion.workoutCompleted')}</Text>
                   <Text style={styles.celebrationSubtitle}>{completionData.name}</Text>
                   
                   <View style={styles.divider} />
@@ -1973,17 +1983,17 @@ export default function App() {
                   <View style={styles.celebrationStats}>
                     <View style={styles.celebrationStatItem}>
                       <Text style={styles.statVal}>{completionData.durationMin}m</Text>
-                      <Text style={styles.statLabel}>DURATION</Text>
+                      <Text style={styles.statLabel}>{i18n.t('completion.duration')}</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.celebrationStatItem}>
                       <Text style={styles.statVal}>{completionData.totalSets}</Text>
-                      <Text style={styles.statLabel}>SETS</Text>
+                      <Text style={styles.statLabel}>{i18n.t('completion.sets')}</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.celebrationStatItem}>
                       <Text style={styles.statVal}>{completionData.totalVolume} kg</Text>
-                      <Text style={styles.statLabel}>VOLUME</Text>
+                      <Text style={styles.statLabel}>{i18n.t('completion.volume')}</Text>
                     </View>
                   </View>
                   
@@ -1992,7 +2002,7 @@ export default function App() {
                     onPress={() => setIsSocialShareVisible(true)}
                     android_ripple={rippleTokens.surface}
                   >
-                    <Text style={[styles.doneBtnText, { color: colors.accent }]}>SHARE WORKOUT CARD</Text>
+                    <Text style={[styles.doneBtnText, { color: colors.accent }]}>{i18n.t('completion.shareCard')}</Text>
                   </Pressable>
 
                   <Pressable
@@ -2000,7 +2010,7 @@ export default function App() {
                     onPress={() => setCompletionData(null)}
                     android_ripple={rippleTokens.accent}
                   >
-                    <Text style={styles.doneBtnText}>AWESOME</Text>
+                    <Text style={styles.doneBtnText}>{i18n.t('completion.awesome')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -2086,7 +2096,7 @@ export default function App() {
                         onPress={() => setActiveAlert(null)}
                         android_ripple={rippleTokens.accent}
                       >
-                        <Text style={styles.alertBtnText}>OK</Text>
+                        <Text style={styles.alertBtnText}>{i18n.t('common.ok')}</Text>
                       </Pressable>
                     )}
                   </View>

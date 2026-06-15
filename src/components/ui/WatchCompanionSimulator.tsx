@@ -5,10 +5,12 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Animated,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, shadow, globalAnimation, getScaledDuration } from '../../theme';
+import i18n from '../../utils/i18n';
 
 interface WatchCompanionSimulatorProps {
   workoutName: string;
@@ -72,7 +74,7 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
       return ex.setsDetails.some((s: any) => !s.completed);
     }
     return true;
-  }) ?? activeExercises[0] ?? { name: 'Bench Press', sets: 3 };
+  }) ?? activeExercises[0] ?? { name: i18n.t('watchCompanion.benchPress'), sets: 3 };
 
   return (
     <View style={styles.backdrop}>
@@ -90,16 +92,16 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
 
           {/* Workout name */}
           <Text style={styles.workoutName} numberOfLines={1}>
-            {workoutName || 'Active Workout'}
+            {workoutName || i18n.t('watchCompanion.activeWorkout')}
           </Text>
 
           {/* Middle info */}
           <View style={styles.middleCard}>
-            <Text style={styles.label}>CURRENT EXERCISE</Text>
+            <Text style={styles.label}>{i18n.t('watchCompanion.currentExercise')}</Text>
             <Text style={styles.exerciseName} numberOfLines={2}>
               {currentExercise.name}
             </Text>
-            <Text style={styles.setsLabel}>3 Sets Remaining</Text>
+            <Text style={styles.setsLabel}>{i18n.t('watchCompanion.setsRemaining')}</Text>
           </View>
 
           {/* Watch Action Button */}
@@ -109,12 +111,12 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
             android_ripple={{ color: colors.success + '44' }}
           >
             <Ionicons name="checkmark" size={14} color="#0D0F14" />
-            <Text style={styles.actionText}>CHECK SET</Text>
+            <Text style={styles.actionText}>{i18n.t('watchCompanion.checkSet')}</Text>
           </Pressable>
 
           {/* Close watch overlay */}
           <Pressable style={styles.closeBtn} onPress={onClose}>
-            <Text style={styles.closeText}>Close Watch View</Text>
+            <Text style={styles.closeText}>{i18n.t('watchCompanion.closeWatchView')}</Text>
           </Pressable>
         </View>
       </View>
@@ -144,11 +146,7 @@ const styles = StyleSheet.create({
     padding: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 15,
+    boxShadow: '0px 10px 15px rgba(0, 0, 0, 0.8)',
   },
   watchScreen: {
     width: '100%',

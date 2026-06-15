@@ -6,8 +6,9 @@
 import { Platform, Alert, Share } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
+import i18n from './i18n';
 
-export const BACKUP_VERSION = 'strongern_backup_v2';
+const BACKUP_VERSION = 'strongern_backup_v2';
 
 export interface BackupData {
   version: string;
@@ -51,7 +52,7 @@ function sanitizeFilename(name: string): string {
 /**
  * Build the canonical backup filename for a user.
  */
-export function buildBackupFilename(username: string): string {
+function buildBackupFilename(username: string): string {
   const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const safeName = sanitizeFilename(username || 'User');
   return `strongern_backup_${safeName}_${date}.json`;
@@ -141,7 +142,7 @@ export async function pickAndReadBackupFile(): Promise<BackupData | null> {
     }
 
     if (!content || !content.trim()) {
-      Alert.alert('Invalid File', 'The selected file is empty.');
+      Alert.alert(i18n.t('backup.invalidFile'), i18n.t('backup.fileEmpty'));
       return null;
     }
 
@@ -150,7 +151,7 @@ export async function pickAndReadBackupFile(): Promise<BackupData | null> {
   } catch (e: any) {
     console.error('[BackupManager] pickAndReadBackupFile error:', e);
     if (e instanceof SyntaxError) {
-      Alert.alert('Invalid File', 'The selected file is not valid JSON. Make sure you pick a strongerN backup file.');
+      Alert.alert(i18n.t('backup.invalidFile'), i18n.t('backup.fileNotJson'));
     }
     return null;
   }
@@ -160,16 +161,16 @@ export async function pickAndReadBackupFile(): Promise<BackupData | null> {
  * Validate a parsed backup object and normalize it to BackupData.
  * Handles both v2 format and the legacy v1 format (plain object from handleExportBackup).
  */
-export function validateBackup(parsed: any): BackupData | null {
+function validateBackup(parsed: any): BackupData | null {
   if (!parsed || typeof parsed !== 'object') {
-    Alert.alert('Invalid Backup', 'The file does not contain valid backup data.');
+    Alert.alert(i18n.t('backup.invalidBackup'), i18n.t('backup.invalidBackupData'));
     return null;
   }
 
   // v2 format
   if (parsed.version === BACKUP_VERSION) {
     if (!parsed.user) {
-      Alert.alert('Invalid Backup', 'Backup file is missing user data.');
+      Alert.alert(i18n.t('backup.invalidBackup'), i18n.t('backup.missingUserData'));
       return null;
     }
     return parsed as BackupData;
@@ -211,8 +212,8 @@ export function validateBackup(parsed: any): BackupData | null {
   }
 
   Alert.alert(
-    'Unrecognized Format',
-    'This file does not appear to be a strongerN backup. Please select a file exported from strongerN.'
+    i18n.t('backup.unrecognizedFormat'),
+    i18n.t('backup.unrecognizedFormatMsg')
   );
   return null;
 }

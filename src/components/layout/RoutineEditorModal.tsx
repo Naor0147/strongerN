@@ -12,11 +12,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Animated,
   PanResponder,
   Vibration,
   Alert,
+  LayoutAnimation,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
@@ -24,6 +26,11 @@ import { Exercise } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
+import i18n from '../../utils/i18n';
+import { SwipeableRow } from './SwipeableRow';
+import { SetRow } from './SetRow';
+import { exerciseBlockStyles } from './exerciseBlockStyles';
+import { ExerciseCard } from './ExerciseCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SetRecord {
@@ -45,7 +52,7 @@ interface RoutineExercise {
   superSetGroupId?: string;
 }
 
-export interface RoutineEditorModalProps {
+interface RoutineEditorModalProps {
   visible:               boolean;
   initialName?:          string;
   initialExercises?:     string[];
@@ -58,115 +65,8 @@ export interface RoutineEditorModalProps {
   onClose:               () => void;
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string) => any;
   sessions?:             any[];
+  exerciseNameLanguage?: 'en' | 'he';
 }
-
-// ─── SwipeableRow (same pattern as ActiveWorkoutModal) ────────────────────────
-const SwipeableRow: React.FC<{
-  children:     React.ReactNode;
-  onDelete:     () => void;
-  borderRadius?: number;
-  style?:        any;
-}> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
-
-  const animateTranslation = (toVal: number, callback?: () => void) => {
-    if (globalAnimation.speed === 0) {
-      Animated.timing(translateX, {
-        toValue: toVal,
-        duration: 0,
-        useNativeDriver: true,
-      }).start(callback);
-    } else {
-      Animated.spring(translateX, {
-        toValue: toVal,
-        useNativeDriver: true,
-        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
-        damping: 16 / globalAnimation.speed,
-        mass: 0.9,
-      }).start(callback);
-    }
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dx) > 10 && Math.abs(gs.dy) < 8,
-      onPanResponderMove: (_, gs) => {
-        let newX = gs.dx;
-        if (isOpen.current) {
-          newX = -70 + gs.dx;
-        }
-        if (newX > 0) newX = 0;
-        translateX.setValue(newX);
-      },
-      onPanResponderRelease: (_, gs) => {
-        const threshold = isOpen.current ? -30 : -45;
-        if (gs.dx < threshold) {
-          animateTranslation(-70, () => {
-            isOpen.current = true;
-          });
-        } else {
-          animateTranslation(0, () => {
-            isOpen.current = false;
-          });
-        }
-      },
-    })
-  ).current;
-
-  const handleDeletePress = () => {
-    if (Platform.OS !== 'web') Vibration.vibrate(15);
-    Animated.timing(translateX, {
-      toValue: -500,
-      duration: getScaledDuration(150),
-      useNativeDriver: true,
-    }).start(() => {
-      onDelete();
-      translateX.setValue(0);
-      isOpen.current = false;
-    });
-  };
-
-  const handleOverlayPress = () => {
-    if (isOpen.current) {
-      animateTranslation(0, () => {
-        isOpen.current = false;
-      });
-    }
-  };
-
-  const underlayOpacity = translateX.interpolate({
-    inputRange: [-10, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <View style={[{ position: 'relative', overflow: 'hidden', borderRadius }, style]}>
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: underlayOpacity }]}
-      >
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={handleDeletePress}
-        >
-          <View style={[edStyles.swipeDeleteBg, { borderRadius }]}>
-            <Ionicons name="trash-outline" size={18} color="#FFF" />
-          </View>
-        </Pressable>
-      </Animated.View>
-      <Animated.View
-        style={{ transform: [{ translateX }] }}
-        {...panResponder.panHandlers}
-        onTouchStart={handleOverlayPress}
-      >
-        {children}
-      </Animated.View>
-    </View>
-  );
-};
 
 // Contiguous supersets verification & dissolution helper
 function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
@@ -222,6 +122,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   onClose,
   onAddCustomExercise,
   sessions = [],
+  exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
   const [routineName,  setRoutineName]  = useState(initialName);
@@ -358,6 +259,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // ── Set helpers ──────────────────────────────────────────────────────────────
   const addSet = useCallback((exIdx: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEditorExercises(prev => {
       const next = [...prev];
       const exName = next[exIdx].name;
@@ -383,6 +285,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   }, [exercises]);
 
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEditorExercises(prev => {
       const next = [...prev];
       next[exIdx].sets = next[exIdx].sets.filter((_, i) => i !== setIdx);
@@ -390,7 +293,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     });
   }, []);
 
-  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
+  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
     setEditorExercises(prev => {
       const next = [...prev];
       (next[exIdx].sets[setIdx] as any)[field] = value;
@@ -554,11 +457,11 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!routineName.trim()) {
-      Alert.alert('Name Required', 'Please enter a name for your routine.');
+      Alert.alert(i18n.t('routineEditor.nameRequired'), i18n.t('routineEditor.nameRequiredMsg'));
       return;
     }
     if (editorExercises.length === 0) {
-      Alert.alert('No Exercises', 'Please add at least one exercise to your routine.');
+      Alert.alert(i18n.t('routineEditor.noExercises'), i18n.t('routineEditor.noExercisesMsg'));
       return;
     }
     const folderVal = routineFolder.trim() || undefined;
@@ -606,7 +509,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     onPress={handleCloseAttempt}
                     style={edStyles.backBtn}
                     android_ripple={rippleTokens.borderless}
-                    accessibilityLabel="Close routine editor"
+                    accessibilityLabel={i18n.t('extras.closeRoutineEditorA11y')}
                   >
                     <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
                   </Pressable>
@@ -618,7 +521,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     style={edStyles.headerNameInput}
                     value={routineName}
                     onChangeText={setRoutineName}
-                    placeholder="Routine Name..."
+                    placeholder={i18n.t('routineEditor.routineNamePlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     keyboardAppearance="dark"
                     maxLength={40}
@@ -632,10 +535,10 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     onPress={handleSave}
                     style={edStyles.saveBtn}
                     android_ripple={rippleTokens.accent}
-                    accessibilityLabel="Save routine"
+                    accessibilityLabel={i18n.t('extras.saveRoutineA11y')}
                   >
                     <Ionicons name="checkmark" size={14} color={colors.bg} />
-                    <Text style={edStyles.saveBtnText}>SAVE</Text>
+                    <Text style={edStyles.saveBtnText}>{i18n.t('common.save')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -659,7 +562,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     style={edStyles.folderPill}
                   >
                     <Text style={edStyles.folderPillText}>
-                      {routineFolder || 'No Folder'}
+                      {routineFolder || i18n.t('routineEditor.noFolder')}
                     </Text>
                     <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
                   </Pressable>
@@ -676,7 +579,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         android_ripple={rippleTokens.surface}
                       >
                         <Text style={[edStyles.folderDropdownText, routineFolder === f && { color: colors.violet, fontFamily: font.semibold }]}>
-                          {f || 'No Folder'}
+                          {f || i18n.t('routineEditor.noFolder')}
                         </Text>
                         {routineFolder === f && <Ionicons name="checkmark" size={14} color={colors.violet} />}
                       </Pressable>
@@ -688,8 +591,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 {editorExercises.length === 0 && (
                   <View style={edStyles.emptyContainer}>
                     <Ionicons name="barbell-outline" size={48} color={colors.textMuted} />
-                    <Text style={edStyles.emptyTitle}>No exercises yet</Text>
-                    <Text style={edStyles.emptySubtitle}>Tap "Add Exercise" below to build your routine</Text>
+                    <Text style={edStyles.emptyTitle}>{i18n.t('extras.noExercisesYet')}</Text>
+                    <Text style={edStyles.emptySubtitle}>{i18n.t('routineEditor.tapAddExercise')}</Text>
                   </View>
                 )}
 
@@ -745,11 +648,12 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                           style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
                           onDelete={() => {
                             Alert.alert(
-                              'Remove Exercise',
-                              `Remove "${exercise.name}" from this routine?`,
+                              i18n.t('routineEditor.removeExercise'),
+                              i18n.t('routineEditor.removeExerciseMsg', { name: exercise.name }),
                               [
-                                { text: 'Cancel', style: 'cancel' },
-                                { text: 'Remove', style: 'destructive', onPress: () => {
+                                { text: i18n.t('common.cancel'), style: 'cancel' },
+                                { text: i18n.t('common.remove'), style: 'destructive', onPress: () => {
+                                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                                   setEditorExercises(prev => {
                                     const filtered = prev.filter((_, i) => i !== exIdx);
                                     return sanitizeSuperSets(filtered);
@@ -759,91 +663,24 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                             );
                           }}
                         >
-                          <View style={[
-                            edStyles.exerciseCard,
-                            isSuperSet && {
-                              borderLeftWidth: 4,
-                              borderLeftColor: superSetColor,
-                            },
-                            nextIsSameSuperSet && {
-                              borderBottomLeftRadius: 0,
-                              borderBottomRightRadius: 0,
-                              borderBottomWidth: 0,
-                            },
-                            prevIsSameSuperSet && {
-                              borderTopLeftRadius: 0,
-                              borderTopRightRadius: 0,
-                            }
-                          ]}>
-                            {/* Exercise Header */}
-                            <View style={edStyles.exerciseHeader}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
-                                <Text style={edStyles.exerciseName} numberOfLines={1}>
-                                  {exercise.name}
-                                </Text>
-                                {isSuperSet && (
-                                  <View style={[edStyles.superSetBadge, { borderColor: superSetColor, backgroundColor: superSetColor + '20' }]}>
-                                    <Text style={[edStyles.superSetBadgeText, { color: superSetColor }]}>SUPER SET</Text>
-                                  </View>
-                                )}
-                              </View>
-
-                              <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm }}>
-                                {/* Ellipsis menu */}
-                                <Pressable
-                                  onPress={() => { setExMenuIdx(exIdx); setIsExMenuVisible(true); }}
-                                  style={edStyles.exEllipsis}
-                                  android_ripple={rippleTokens.borderless}
-                                >
-                                  <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
-                                </Pressable>
-
-                                {/* Drag Handle (long press activates) */}
-                                <Pressable
-                                  {...dragHandlers}
-                                  style={edStyles.dragHandle}
-                                  android_ripple={rippleTokens.borderless}
-                                  accessibilityLabel="Drag to reorder"
-                                >
-                                  <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                                </Pressable>
-                              </View>
-                            </View>
-
-                          {/* Table Header */}
-                          <View style={edStyles.tableHeader}>
-                            <Text style={[edStyles.columnLabel, edStyles.colSet]}>SET</Text>
-                            <Text style={[edStyles.columnLabel, edStyles.colWeight, { textAlign: 'center' }]}>KG</Text>
-                            <Text style={[edStyles.columnLabel, edStyles.colReps, { textAlign: 'center' }]}>REPS</Text>
-                            <View style={{ width: 32 }} />
-                          </View>
-
-                          {/* Sets */}
-                          {exercise.sets.map((set, setIdx) => (
-                            <RoutineSetRowItem
-                              key={set.id}
-                              set={set}
-                              setIdx={setIdx}
-                              exIdx={exIdx}
-                              activeInput={activeInput}
-                              onFocus={handleSetFocus}
-                              updateSetField={updateSetField}
-                              deleteSet={deleteSet}
-                              inputRefs={inputRefs}
-                            />
-                          ))}
-
-                          {/* Add Set */}
-                          <Pressable
-                            style={edStyles.addSetRow}
-                            onPress={() => addSet(exIdx)}
-                            android_ripple={rippleTokens.surface}
-                          >
-                            <Ionicons name="add" size={16} color={colors.accent} />
-                            <Text style={edStyles.addSetText}>ADD SET</Text>
-                          </Pressable>
-                        </View>
-                      </SwipeableRow>
+                          <ExerciseCard
+                            exercise={exercise}
+                            exIdx={exIdx}
+                            activeInput={activeInput}
+                            onFocus={handleSetFocus}
+                            updateSetField={updateSetField}
+                            deleteSet={deleteSet}
+                            inputRefs={inputRefs}
+                            mode="editor"
+                            superSetColor={superSetColor}
+                            isSuperSet={isSuperSet}
+                            nextIsSameSuperSet={nextIsSameSuperSet}
+                            prevIsSameSuperSet={prevIsSameSuperSet}
+                            onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
+                            onAddSet={addSet}
+                            dragHandlers={dragHandlers}
+                          />
+                        </SwipeableRow>
                     </Animated.View>
                   );
                   });
@@ -856,7 +693,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   android_ripple={rippleTokens.surface}
                 >
                   <Ionicons name="add-circle-outline" size={20} color={colors.accent} style={{ marginRight: spacing.xs }} />
-                  <Text style={edStyles.addExBtnText}>ADD EXERCISE</Text>
+                  <Text style={edStyles.addExBtnText}>{i18n.t('extras.addExerciseBtnRoutine')}</Text>
                 </Pressable>
 
                 {/* Save Routine Button */}
@@ -867,7 +704,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 >
                   <Ionicons name="bookmark-outline" size={18} color={colors.bg} style={{ marginRight: spacing.sm }} />
                   <Text style={edStyles.saveRoutineBtnText}>
-                    {isEditing ? 'SAVE CHANGES' : 'SAVE ROUTINE'}
+                    {isEditing ? i18n.t('routineEditor.saveChanges') : i18n.t('routineEditor.saveRoutine')}
                   </Text>
                 </Pressable>
               </ScrollView>
@@ -902,7 +739,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       android_ripple={rippleTokens.surface}
                     >
                       <Ionicons name="arrow-up-outline" size={20} color={colors.accent} />
-                      <Text style={edStyles.sheetItemText}>Move Up</Text>
+                      <Text style={edStyles.sheetItemText}>{i18n.t('extras.moveUp')}</Text>
                     </Pressable>
 
                     <Pressable
@@ -920,7 +757,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       android_ripple={rippleTokens.surface}
                     >
                       <Ionicons name="arrow-down-outline" size={20} color={colors.accent} />
-                      <Text style={edStyles.sheetItemText}>Move Down</Text>
+                      <Text style={edStyles.sheetItemText}>{i18n.t('extras.moveDown')}</Text>
                     </Pressable>
 
                     {(() => {
@@ -947,7 +784,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               android_ripple={rippleTokens.surface}
                             >
                               <Ionicons name="link-outline" size={20} color={colors.accent} />
-                              <Text style={edStyles.sheetItemText}>Unlink Super Set</Text>
+                              <Text style={edStyles.sheetItemText}>{i18n.t('extras.unlinkSuperSet')}</Text>
                             </Pressable>
                           )}
 
@@ -978,7 +815,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               android_ripple={rippleTokens.surface}
                             >
                               <Ionicons name="link-outline" size={20} color={colors.accent} />
-                              <Text style={edStyles.sheetItemText}>Link with Next</Text>
+                              <Text style={edStyles.sheetItemText}>{i18n.t('extras.linkWithNext')}</Text>
                             </Pressable>
                           )}
 
@@ -1009,7 +846,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               android_ripple={rippleTokens.surface}
                             >
                               <Ionicons name="link-outline" size={20} color={colors.accent} />
-                              <Text style={edStyles.sheetItemText}>Link with Previous</Text>
+                              <Text style={edStyles.sheetItemText}>{i18n.t('extras.linkWithPrevious')}</Text>
                             </Pressable>
                           )}
                         </>
@@ -1020,11 +857,11 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       style={edStyles.sheetItem}
                       onPress={() => {
                         Alert.alert(
-                           'Remove Exercise',
-                           `Remove "${editorExercises[exMenuIdx]?.name}" from this routine?`,
+                           i18n.t('routineEditor.removeExercise'),
+                           i18n.t('routineEditor.removeExerciseMsg', { name: editorExercises[exMenuIdx]?.name }),
                            [
-                             { text: 'Cancel', style: 'cancel' },
-                             { text: 'Remove', style: 'destructive', onPress: () => {
+                             { text: i18n.t('common.cancel'), style: 'cancel' },
+                             { text: i18n.t('common.remove'), style: 'destructive', onPress: () => {
                                setEditorExercises(prev => {
                                  const filtered = prev.filter((_, i) => i !== exMenuIdx);
                                  return sanitizeSuperSets(filtered);
@@ -1037,7 +874,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       android_ripple={rippleTokens.surface}
                     >
                       <Ionicons name="trash-outline" size={20} color={colors.error} />
-                      <Text style={[edStyles.sheetItemText, { color: colors.error }]}>Remove Exercise</Text>
+                      <Text style={[edStyles.sheetItemText, { color: colors.error }]}>{i18n.t('routineEditor.removeExercise')}</Text>
                     </Pressable>
 
                     <Pressable
@@ -1045,7 +882,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       onPress={() => setIsExMenuVisible(false)}
                       android_ripple={rippleTokens.surface}
                     >
-                      <Text style={edStyles.sheetCancelText}>Cancel</Text>
+                      <Text style={edStyles.sheetCancelText}>{i18n.t('common.cancel')}</Text>
                     </Pressable>
                   </Pressable>
                 </Pressable>
@@ -1066,9 +903,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   style={edStyles.confirmCard} 
                   onPress={e => e.stopPropagation()}
                 >
-                  <Text style={edStyles.confirmTitle}>DISCARD CHANGES?</Text>
+                  <Text style={edStyles.confirmTitle}>{i18n.t('extras.discardChanges')}</Text>
                   <Text style={edStyles.confirmMessage}>
-                    You have unsaved changes. Are you sure you want to discard them and leave?
+                    {i18n.t('extras.discardChangesMsg')}
                   </Text>
                   <View style={edStyles.confirmActions}>
                     <Pressable
@@ -1079,14 +916,14 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       style={[edStyles.confirmBtn, edStyles.confirmBtnYes]}
                       android_ripple={rippleTokens.borderless}
                     >
-                      <Text style={edStyles.confirmBtnTextYes}>ARE YOU SURE</Text>
+                      <Text style={edStyles.confirmBtnTextYes}>{i18n.t('extras.areYouSure')}</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => setIsDiscardConfirmVisible(false)}
                       style={[edStyles.confirmBtn, edStyles.confirmBtnStay]}
                       android_ripple={rippleTokens.borderless}
                     >
-                      <Text style={edStyles.confirmBtnTextStay}>STAY</Text>
+                      <Text style={edStyles.confirmBtnTextStay}>{i18n.t('extras.stayBtn')}</Text>
                     </Pressable>
                   </View>
                 </Pressable>
@@ -1122,202 +959,13 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         onConfirm={handleConfirmExercises}
         onClose={() => setIsAddExerciseVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
-        title="ADD EXERCISES"
+        title={i18n.t('routineEditor.addExercises')}
         sessions={sessions}
+        exerciseNameLanguage={exerciseNameLanguage}
       />
     </>
   );
 };
-
-interface RoutineSetRowItemProps {
-  set: SetRecord;
-  setIdx: number;
-  exIdx: number;
-  activeInput: { 
-    exIdx: number; 
-    setIdx: number; 
-    fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps'; 
-    focusTime?: number; 
-  } | null;
-  onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => void;
-  updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => void;
-  deleteSet: (exIdx: number, setIdx: number) => void;
-  inputRefs: React.MutableRefObject<{ [key: string]: any }>;
-}
-
-const RoutineSetRowItem: React.FC<RoutineSetRowItemProps> = React.memo(({
-  set,
-  setIdx,
-  exIdx,
-  activeInput,
-  onFocus,
-  updateSetField,
-  deleteSet,
-  inputRefs,
-}) => {
-  if (set.isUnilateral) {
-    const isLeftWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftWeight';
-    const isLeftRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftReps';
-    const isRightWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightWeight';
-    const isRightRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightReps';
-
-    return (
-      <SwipeableRow onDelete={() => deleteSet(exIdx, setIdx)} borderRadius={radius.xs} style={{ marginBottom: 4 }}>
-        <View style={[edStyles.setRow, edStyles.unilateralSetRow]}>
-          {/* Set Number */}
-          <View style={[edStyles.colSet, edStyles.setNumCol]}>
-            <Text style={edStyles.setNumText}>{setIdx + 1}</Text>
-          </View>
-
-          {/* Left/Right Container */}
-          <View style={edStyles.unilateralContainer}>
-            {/* Left Side (L) */}
-            <View style={edStyles.unilateralRow}>
-              <Text style={edStyles.unilateralLabel}>L</Text>
-              <View style={edStyles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
-                  style={[
-                    edStyles.unilateralInput,
-                    isLeftWeightFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  keyboardType="numeric"
-                  value={set.leftWeight || set.weight}
-                  onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  selectTextOnFocus
-                />
-              </View>
-              <View style={edStyles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
-                  style={[
-                    edStyles.unilateralInput,
-                    isLeftRepsFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  keyboardType="numeric"
-                  value={set.leftReps || set.reps}
-                  onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  selectTextOnFocus
-                />
-              </View>
-            </View>
-
-            {/* Right Side (R) */}
-            <View style={edStyles.unilateralRow}>
-              <Text style={edStyles.unilateralLabel}>R</Text>
-              <View style={edStyles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
-                  style={[
-                    edStyles.unilateralInput,
-                    isRightWeightFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  keyboardType="numeric"
-                  value={set.rightWeight || set.weight}
-                  onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  selectTextOnFocus
-                />
-              </View>
-              <View style={edStyles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
-                  style={[
-                    edStyles.unilateralInput,
-                    isRightRepsFocused && { borderColor: colors.accent },
-                  ]}
-                  showSoftInputOnFocus={false}
-                  keyboardType="numeric"
-                  value={set.rightReps || set.reps}
-                  onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  selectTextOnFocus
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Delete Button */}
-          <Pressable
-            style={edStyles.setDeleteBtn}
-            onPress={() => deleteSet(exIdx, setIdx)}
-            android_ripple={rippleTokens.borderless}
-          >
-            <Ionicons name="close" size={14} color={colors.textMuted} />
-          </Pressable>
-        </View>
-      </SwipeableRow>
-    );
-  }
-
-  const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
-  const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
-
-  return (
-    <SwipeableRow onDelete={() => deleteSet(exIdx, setIdx)} borderRadius={radius.xs} style={{ marginBottom: 4 }}>
-      <View style={edStyles.setRow}>
-        {/* Set Number */}
-        <View style={[edStyles.colSet, edStyles.setNumCol]}>
-          <Text style={edStyles.setNumText}>{setIdx + 1}</Text>
-        </View>
-
-        {/* Weight */}
-        <View style={[edStyles.colWeight, edStyles.inputWrapper]}>
-          <TextInput
-            ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
-            style={[
-              edStyles.input,
-              isWeightFocused && { borderColor: colors.accent },
-            ]}
-            showSoftInputOnFocus={false}
-            keyboardType="numeric"
-            value={set.weight}
-            onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            selectTextOnFocus
-          />
-        </View>
-
-        {/* Reps */}
-        <View style={[edStyles.colReps, edStyles.inputWrapper]}>
-          <TextInput
-            ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
-            style={[
-              edStyles.input,
-              isRepsFocused && { borderColor: colors.accent },
-            ]}
-            showSoftInputOnFocus={false}
-            keyboardType="numeric"
-            value={set.reps}
-            onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            selectTextOnFocus
-          />
-        </View>
-
-        {/* Delete icon (quick tap) */}
-        <Pressable
-          style={edStyles.setDeleteBtn}
-          onPress={() => deleteSet(exIdx, setIdx)}
-          android_ripple={rippleTokens.borderless}
-        >
-          <Ionicons name="close" size={14} color={colors.textMuted} />
-        </Pressable>
-      </View>
-    </SwipeableRow>
-  );
-});
 
 export default RoutineEditorModal;
 

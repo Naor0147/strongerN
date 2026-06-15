@@ -18,15 +18,22 @@ echo.
 set "ANDROID_HOME=C:\Users\NAORA\AppData\Local\Android\Sdk"
 set "PATH=%PATH%;%ANDROID_HOME%\platform-tools"
 
+:: Auto mode: pass --auto flag to skip all interactive prompts and exit after build
+set "AUTO_MODE=false"
+for %%a in (%*) do if /i "%%a"=="--auto" set "AUTO_MODE=true"
+if defined STRONGERN_AUTO if /i "%STRONGERN_AUTO%"=="1" set "AUTO_MODE=true"
+
 :: Check if ADB device is connected
 set "DEVICE_CONNECTED=false"
-adb.exe get-state 2>nul | findstr /i "device" >nul
-if %ERRORLEVEL% equ 0 (
-    set "DEVICE_CONNECTED=true"
+for /f "delims=" %%d in ('adb.exe get-state 2^>nul') do (
+    if /i "%%d"=="device" set "DEVICE_CONNECTED=true"
+)
+if "%DEVICE_CONNECTED%"=="true" (
     echo [SYSTEM] USB Device detected! Enabling automatic installation mode.
     echo.
 )
 
+set "JAVA_HOME="
 if exist "C:\Program Files\Java\jdk-19" (
     set "JAVA_HOME=C:\Program Files\Java\jdk-19"
     echo [SYSTEM] Using compatible JDK 19 at C:\Program Files\Java\jdk-19
@@ -44,6 +51,11 @@ set "APK_DEST=apk\strongerN.apk"
 if exist "%APK_DEST%" (
     if "%DEVICE_CONNECTED%"=="true" (
         echo [INFO] USB Device connected. Automatically rebuilding and installing...
+        echo.
+        goto skip_rebuild_prompt
+    )
+    if "%AUTO_MODE%"=="true" (
+        echo [INFO] Auto mode. Rebuilding...
         echo.
         goto skip_rebuild_prompt
     )
@@ -76,12 +88,17 @@ if not exist "android" (
 )
 
 :: Select Build Target Architecture to optimize build speed
-if "%DEVICE_CONNECTED%"=="true" (
-    set "ARCH_FLAG=-PreactNativeArchitectures=arm64-v8a"
-    echo [BUILD] USB Device connected. Automatically compiling for Physical Device [arm64-v8a]...
-    echo.
-    goto skip_arch_prompt
-)
+if "%DEVICE_CONNECTED%"=="true" goto auto_arch
+if "%AUTO_MODE%"=="true" goto auto_arch
+goto show_arch_menu
+
+:auto_arch
+set "ARCH_FLAG=-PreactNativeArchitectures=arm64-v8a"
+echo [BUILD] USB Device connected. Automatically compiling for Physical Device [arm64-v8a]...
+echo.
+goto skip_arch_prompt
+
+:show_arch_menu
 color 0E
 echo ======================================================================
 echo [OPTIMIZATION] Select Build Target Architecture
@@ -146,6 +163,10 @@ copy /y "%APK_SRC%" "%APK_DEST%" >nul
 
 :post_build_menu
 if "%DEVICE_CONNECTED%"=="true" goto install_usb
+if "%AUTO_MODE%"=="true" (
+    echo [SYSTEM] Auto mode. Build complete. APK at: %APK_DEST%
+    goto exit_script
+)
 cls
 color 0B
 echo ======================================================================

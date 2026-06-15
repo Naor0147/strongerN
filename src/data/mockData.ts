@@ -1,5 +1,7 @@
 // data/mockData.ts — All mock data and TypeScript interfaces
 
+import i18n from '../utils/i18n';
+
 // ─────────────────────────────────────────────
 // INTERFACES
 // ─────────────────────────────────────────────
@@ -76,6 +78,8 @@ export interface Exercise {
   equipment?: string;
   isUnilateral?: boolean;
   weeklySets?: number;
+  nameHe?: string;
+  searchAliases?: string[];
 }
 
 export interface MeasureHistoryEntry {
@@ -513,7 +517,7 @@ export const mockExercises: Exercise[] = [
 export const mockPrimaryMetrics: MeasureItem[] = [
   {
     id: 'metric-1',
-    label: 'Weight',
+    label: i18n.t('mockData.weight'),
     lastValue: '82.4 kg',
     history: [
       { date: getRelativeDateString(27), value: 84.2 },
@@ -525,7 +529,7 @@ export const mockPrimaryMetrics: MeasureItem[] = [
   },
   {
     id: 'metric-2',
-    label: 'Body fat %',
+    label: i18n.t('mockData.bodyFat'),
     lastValue: '14.2%',
     history: [
       { date: getRelativeDateString(27), value: 15.1 },
@@ -537,7 +541,7 @@ export const mockPrimaryMetrics: MeasureItem[] = [
   },
   {
     id: 'metric-3',
-    label: 'Caloric intake',
+    label: i18n.t('mockData.caloricIntake'),
     lastValue: '2,800 kcal',
     history: [
       { date: getRelativeDateString(27), value: 2750 },
@@ -550,15 +554,15 @@ export const mockPrimaryMetrics: MeasureItem[] = [
 ];
 
 export const mockBodyPartMetrics: MeasureItem[] = [
-  { id: 'bp-1',  label: 'Neck', lastValue: '38.5 cm', history: [{ date: getRelativeDateString(7), value: 38.5 }] },
-  { id: 'bp-2',  label: 'Shoulders', lastValue: '122.0 cm', history: [{ date: getRelativeDateString(7), value: 122.0 }] },
-  { id: 'bp-3',  label: 'Chest', lastValue: '108.5 cm', history: [{ date: getRelativeDateString(7), value: 108.5 }] },
-  { id: 'bp-4',  label: 'Left bicep', lastValue: '39.2 cm', history: [{ date: getRelativeDateString(7), value: 39.2 }] },
-  { id: 'bp-5',  label: 'Right bicep', lastValue: '39.4 cm', history: [{ date: getRelativeDateString(7), value: 39.4 }] },
-  { id: 'bp-6',  label: 'Waist', lastValue: '84.0 cm', history: [{ date: getRelativeDateString(7), value: 84.0 }] },
-  { id: 'bp-7',  label: 'Hips', lastValue: '98.0 cm', history: [{ date: getRelativeDateString(7), value: 98.0 }] },
-  { id: 'bp-8',  label: 'Left thigh', lastValue: '61.0 cm', history: [{ date: getRelativeDateString(7), value: 61.0 }] },
-  { id: 'bp-9',  label: 'Right thigh', lastValue: '61.2 cm', history: [{ date: getRelativeDateString(7), value: 61.2 }] },
-  { id: 'bp-10', label: 'Left calf', lastValue: '38.0 cm', history: [{ date: getRelativeDateString(7), value: 38.0 }] },
-  { id: 'bp-11', label: 'Right calf', lastValue: '38.1 cm', history: [{ date: getRelativeDateString(7), value: 38.1 }] },
+  { id: 'bp-1',  label: i18n.t('mockData.neck'), lastValue: '38.5 cm', history: [{ date: getRelativeDateString(7), value: 38.5 }] },
+  { id: 'bp-2',  label: i18n.t('mockData.shoulders'), lastValue: '122.0 cm', history: [{ date: getRelativeDateString(7), value: 122.0 }] },
+  { id: 'bp-3',  label: i18n.t('mockData.chest'), lastValue: '108.5 cm', history: [{ date: getRelativeDateString(7), value: 108.5 }] },
+  { id: 'bp-4',  label: i18n.t('mockData.leftBicep'), lastValue: '39.2 cm', history: [{ date: getRelativeDateString(7), value: 39.2 }] },
+  { id: 'bp-5',  label: i18n.t('mockData.rightBicep'), lastValue: '39.4 cm', history: [{ date: getRelativeDateString(7), value: 39.4 }] },
+  { id: 'bp-6',  label: i18n.t('mockData.waist'), lastValue: '84.0 cm', history: [{ date: getRelativeDateString(7), value: 84.0 }] },
+  { id: 'bp-7',  label: i18n.t('mockData.hips'), lastValue: '98.0 cm', history: [{ date: getRelativeDateString(7), value: 98.0 }] },
+  { id: 'bp-8',  label: i18n.t('mockData.leftThigh'), lastValue: '61.0 cm', history: [{ date: getRelativeDateString(7), value: 61.0 }] },
+  { id: 'bp-9',  label: i18n.t('mockData.rightThigh'), lastValue: '61.2 cm', history: [{ date: getRelativeDateString(7), value: 61.2 }] },
+  { id: 'bp-10', label: i18n.t('mockData.leftCalf'), lastValue: '38.0 cm', history: [{ date: getRelativeDateString(7), value: 38.0 }] },
+  { id: 'bp-11', label: i18n.t('mockData.rightCalf'), lastValue: '38.1 cm', history: [{ date: getRelativeDateString(7), value: 38.1 }] },
 ];

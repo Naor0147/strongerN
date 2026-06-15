@@ -6,8 +6,9 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Animated,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -147,11 +148,7 @@ const styles = StyleSheet.create({
     height:          3,
     borderRadius:    radius.full,
     backgroundColor: colors.accent,
-    shadowColor:     colors.accent,
-    shadowOpacity:   0.7,
-    shadowRadius:    6,
-    shadowOffset:    { width: 0, height: 0 },
-    elevation:       6,
+    boxShadow:       '0px 0px 6px ' + colors.accent + 'B3',
   },
   label: {
     fontSize:   font.sizes.xs,

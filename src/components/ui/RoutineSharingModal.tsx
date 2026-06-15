@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect, Path } from 'react-native-svg';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
 import { Template } from '../../data/mockData';
+import i18n from '../../utils/i18n';
 
 interface RoutineSharingModalProps {
   visible: boolean;
@@ -39,7 +40,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
   const deepLink = `strongern://share?routine=${encodeURIComponent(serialized)}`;
 
   const handleCopy = (text: string, type: string) => {
-    Alert.alert("Copied!", `${type} copied to clipboard! You can share it anywhere.`);
+    Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type }));
   };
 
   return (
@@ -52,7 +53,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>
-            <Text style={styles.title}>SHARE ROUTINE</Text>
+            <Text style={styles.title}>{i18n.t('routineSharing.shareRoutine')}</Text>
             <Pressable onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={colors.textSecondary} />
             </Pressable>
@@ -66,19 +67,19 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
               style={[styles.tab, activeTab === 'link' && styles.tabActive]}
               onPress={() => setActiveTab('link')}
             >
-              <Text style={[styles.tabText, activeTab === 'link' && styles.tabTextActive]}>DEEP LINK</Text>
+              <Text style={[styles.tabText, activeTab === 'link' && styles.tabTextActive]}>{i18n.t('routineSharing.deepLink')}</Text>
             </Pressable>
             <Pressable
               style={[styles.tab, activeTab === 'qr' && styles.tabActive]}
               onPress={() => setActiveTab('qr')}
             >
-              <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>QR CODE</Text>
+              <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>{i18n.t('routineSharing.qrCode')}</Text>
             </Pressable>
             <Pressable
               style={[styles.tab, activeTab === 'json' && styles.tabActive]}
               onPress={() => setActiveTab('json')}
             >
-              <Text style={[styles.tabText, activeTab === 'json' && styles.tabTextActive]}>JSON PAYLOAD</Text>
+              <Text style={[styles.tabText, activeTab === 'json' && styles.tabTextActive]}>{i18n.t('routineSharing.jsonPayload')}</Text>
             </Pressable>
           </View>
 
@@ -86,7 +87,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
             {activeTab === 'link' && (
               <View style={styles.tabContent}>
                 <Text style={styles.instructions}>
-                  Share this deep link. Tapping it on another device will automatically import this routine!
+                  {i18n.t('routineSharing.deepLinkDesc')}
                 </Text>
                 <TextInput
                   style={styles.textInput}
@@ -99,7 +100,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                   onPress={() => handleCopy(deepLink, 'Deep Link')}
                 >
                   <Ionicons name="copy-outline" size={16} color="#0D0F14" />
-                  <Text style={styles.actionBtnText}>COPY DEEP LINK</Text>
+                  <Text style={styles.actionBtnText}>{i18n.t('routineSharing.copyDeepLink')}</Text>
                 </Pressable>
               </View>
             )}
@@ -107,7 +108,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
             {activeTab === 'qr' && (
               <View style={[styles.tabContent, { alignItems: 'center' }]}>
                 <Text style={[styles.instructions, { textAlign: 'center' }]}>
-                  Ask a gym buddy to scan this QR code to instantly import your routine split.
+                  {i18n.t('routineSharing.qrCodeDesc')}
                 </Text>
                 
                 {/* Simulated QR Code using React Native SVG */}
@@ -141,10 +142,10 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
 
                 <Pressable
                   style={[styles.actionBtn, { backgroundColor: colors.highlight }]}
-                  onPress={() => Alert.alert("QR Code", "QR Code successfully generated! Your gym buddy can scan this.")}
+                  onPress={() => Alert.alert(i18n.t('routineSharing.qrCode'), i18n.t('routineSharing.qrCodeGenerated'))}
                 >
                   <Ionicons name="camera-outline" size={16} color="#0D0F14" />
-                  <Text style={[styles.actionBtnText, { color: '#0D0F14' }]}>SHOW SCAN SCANNER</Text>
+                  <Text style={[styles.actionBtnText, { color: '#0D0F14' }]}>{i18n.t('routineSharing.showScanner')}</Text>
                 </Pressable>
               </View>
             )}
@@ -152,7 +153,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
             {activeTab === 'json' && (
               <View style={styles.tabContent}>
                 <Text style={styles.instructions}>
-                  Copy this JSON payload string. Paste it in the import box on another device to restore this routine.
+                  {i18n.t('routineSharing.jsonPayloadDesc')}
                 </Text>
                 <TextInput
                   style={[styles.textInput, styles.codeBox]}
@@ -166,7 +167,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                   onPress={() => handleCopy(serialized, 'JSON Data')}
                 >
                   <Ionicons name="copy-outline" size={16} color="#0D0F14" />
-                  <Text style={styles.actionBtnText}>COPY JSON STRING</Text>
+                  <Text style={styles.actionBtnText}>{i18n.t('routineSharing.copyJsonString')}</Text>
                 </Pressable>
               </View>
             )}
@@ -193,11 +194,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    boxShadow: '0px 6px 12px rgba(0, 0, 0, 0.5)',
   },
   header: {
     flexDirection: 'row',

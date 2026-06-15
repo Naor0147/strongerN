@@ -119,7 +119,7 @@ export async function deleteFromDb(key: string): Promise<boolean> {
 /**
  * Wipe all keys from the KV store (used for full data reset).
  */
-export async function clearDb(): Promise<boolean> {
+async function clearDb(): Promise<boolean> {
   if (!isWeb && db) {
     try {
       db.execSync(`DELETE FROM ${TABLE_NAME};`);

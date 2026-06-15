@@ -2,11 +2,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   PanResponder,
-  Animated,
   StyleSheet,
   Vibration,
   Platform,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 
 interface DraggableListProps<T> {
   data: T[];

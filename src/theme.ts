@@ -21,7 +21,7 @@ StyleSheet.create = (styles: any) => {
 };
 
 // Helper to darken a hex color (percent between 0 and 1)
-export function darkenColor(hex: string, percent: number): string {
+function darkenColor(hex: string, percent: number): string {
   const cleanHex = hex.replace('#', '');
   let r = parseInt(cleanHex.substring(0, 2), 16);
   let g = parseInt(cleanHex.substring(2, 4), 16);
@@ -145,7 +145,7 @@ export const font = {
  * Get the appropriate font family based on RTL mode.
  * Usage: getRTLFont(font.semibold) returns Rubik for Hebrew, Inter for English.
  */
-export function getRTLFont(englishFont: string): string {
+function getRTLFont(englishFont: string): string {
   if (!I18nManager.isRTL) return englishFont;
   switch (englishFont) {
     case font.regular:  return font.heRegular;
@@ -354,7 +354,7 @@ export const themePresets: Record<Exclude<AppThemeName, 'custom'>, ThemeColors> 
   },
 };
 
-export const getCustomThemeColors = (accentColor: string): ThemeColors => {
+const getCustomThemeColors = (accentColor: string): ThemeColors => {
   const accent = accentColor.startsWith('#') ? accentColor : `#${accentColor}`;
   const accentDim = darkenColor(accent, 0.3);
   const accentGlow = `${accent}20`;
@@ -385,7 +385,7 @@ export const getCustomThemeColors = (accentColor: string): ThemeColors => {
   };
 };
 
-export const updateRegisteredStyles = () => {
+const updateRegisteredStyles = () => {
   const getNestedValue = (obj: any, path: string): any => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
   };

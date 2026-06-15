@@ -68,7 +68,7 @@ export async function saveAuthState(state: AuthState): Promise<void> {
 /**
  * Mark onboarding as completed (quick helper).
  */
-export async function completeOnboarding(
+async function completeOnboarding(
   authMode: AuthMode,
   localUsername: string,
   googleProfile?: GoogleProfile | null,

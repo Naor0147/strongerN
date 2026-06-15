@@ -17,6 +17,11 @@ When building, compiling, or deploying the app, always use the developer's perso
 # Standalone APK Auto-Build
 
 After completing any task or making modifications, always rebuild the standalone release APK by running:
-`cmd.exe /c "(echo y & echo 2 & echo 4) | build-apk.bat"`
-This compiles the release app and deploys it automatically to any connected USB debugging device.
+`build-apk.bat --auto`
+This compiles the release app and exits cleanly. If a USB device is connected, it also installs automatically.
+
+# App Versioning
+
+Every time you make any change or complete a task, increment the app version in `app.json` and in the translation keys `profile.version` in `src/utils/i18n.ts` (both English and Hebrew), and report the new version at the end of the task.
+
 

@@ -7,22 +7,26 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Animated,
   Alert,
   PanResponder,
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Ellipse, Line, Defs, RadialGradient, Stop, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import ScreenHeader from '../components/layout/ScreenHeader';
+import i18n from '../utils/i18n';
+import { getMuscleDisplayName } from '../utils/exerciseNames';
 
 interface MuscleMapScreenProps {
   weeklyMuscleSets: Record<string, number>;
   sessions: any[];
   exercisesList: any[];
+  exerciseNameLanguage?: 'en' | 'he';
 }
 
 // ─── Images ──────────────────────────────────────────────────────────────────
@@ -595,7 +599,7 @@ const ZOOM_OFFSETS: Record<string, { scale: number; x: number; y: number }> = {
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList }) => {
+const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList, exerciseNameLanguage = 'en' }) => {
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { top } = useSafeAreaInsets();
   
@@ -617,7 +621,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const sheetTranslateY = useRef(new Animated.Value(T_CLOSED)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const springScale = (anim: Animated.Value, toValue: number, speedMultiplier = 1) => {
+  const springScale = (anim: RN.Animated.Value, toValue: number, speedMultiplier = 1) => {
     const s = globalAnimation.speed * speedMultiplier;
     if (s === 0) {
       return Animated.timing(anim, { toValue, duration: 0, useNativeDriver: true });
@@ -631,7 +635,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     });
   };
 
-  const timingSheet = (anim: Animated.Value, toValue: number, baseDuration = 250) => {
+  const timingSheet = (anim: RN.Animated.Value, toValue: number, baseDuration = 250) => {
     return Animated.timing(anim, {
       toValue,
       duration: getScaledDuration(baseDuration),
@@ -965,8 +969,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   return (
     <View style={[styles.safe, { paddingTop: top }]}>
       <ScreenHeader
-        title="Muscle Map"
-        subtitle="This week's training focus"
+        title={i18n.t('muscleMap.title')}
+        subtitle={i18n.t('muscleMap.weekFocus')}
         testID="musclemap.header"
       />
       <ScrollView
@@ -987,21 +991,21 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{totalSets}</Text>
-            <Text style={styles.summaryLabel}>TOTAL SETS</Text>
+            <Text style={styles.summaryLabel}>{i18n.t('extras.totalSets')}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>
               {Object.keys(weeklyMuscleSets).filter(k => (weeklyMuscleSets[k] ?? 0) > 0).length}
             </Text>
-            <Text style={styles.summaryLabel}>MUSCLES HIT</Text>
+            <Text style={styles.summaryLabel}>{i18n.t('extras.musclesHit')}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: mostWorkedColor }]}>
-              {mostWorked?.key ?? '--'}
+              {mostWorked?.key ? getMuscleDisplayName(mostWorked.key, exerciseNameLanguage) : '--'}
             </Text>
-            <Text style={styles.summaryLabel}>MOST WORKED</Text>
+            <Text style={styles.summaryLabel}>{i18n.t('extras.mostWorked')}</Text>
           </View>
         </View>
 
@@ -1012,7 +1016,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             onPress={() => setView('front')}
           >
             <Text style={[styles.toggleBtnText, view === 'front' && styles.toggleBtnTextActive]}>
-              FRONT
+              {i18n.t('extras.frontLabel')}
             </Text>
           </Pressable>
           <Pressable
@@ -1020,7 +1024,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             onPress={() => setView('back')}
           >
             <Text style={[styles.toggleBtnText, view === 'back' && styles.toggleBtnTextActive]}>
-              BACK
+              {i18n.t('extras.backLabel')}
             </Text>
           </Pressable>
         </View>
@@ -1054,19 +1058,19 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
 
           {/* Intensity scale */}
           <View style={styles.scaleContainer}>
-            <Text style={styles.scaleLabel}>Low</Text>
+            <Text style={styles.scaleLabel}>{i18n.t('extras.low')}</Text>
             <View style={styles.scaleGradient}>
               {[0.1, 0.3, 0.5, 0.7, 0.9].map((v, i) => (
                 <View key={i} style={[styles.scaleStep, { opacity: v }]} />
               ))}
             </View>
-            <Text style={styles.scaleLabel}>High</Text>
+            <Text style={styles.scaleLabel}>{i18n.t('extras.high')}</Text>
           </View>
         </View>
 
         {/* ── Muscle Legend ── */}
         <Text style={styles.legendTitle}>
-          {view === 'front' ? 'FRONT MUSCLES' : 'BACK MUSCLES'}
+          {view === 'front' ? i18n.t('extras.frontMuscles') : i18n.t('extras.backMuscles')}
         </Text>
         <View style={styles.legendGrid}>
           {filteredMuscles.map(muscle => {
@@ -1087,8 +1091,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                   ]}
                 />
                 <View style={styles.legendInfo}>
-                  <Text style={styles.legendMuscle}>{muscle.key}</Text>
-                  <Text style={styles.legendSets}>{muscle.sets} sets this week</Text>
+                  <Text style={styles.legendMuscle}>{getMuscleDisplayName(muscle.key, exerciseNameLanguage)}</Text>
+                  <Text style={styles.legendSets}>{i18n.t('extras.setsThisWeek', { count: muscle.sets })}</Text>
                 </View>
                 <View style={styles.legendBarBg}>
                   <View
@@ -1115,12 +1119,12 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
           <View style={styles.bottomSheetHeader} {...panResponder.panHandlers}>
             <View style={styles.dragHandle} />
             <View style={styles.bottomSheetHeaderContent}>
-              <Text style={styles.bottomSheetTitle}>{selectedMuscle.toUpperCase()}</Text>
+              <Text style={styles.bottomSheetTitle}>{getMuscleDisplayName(selectedMuscle, exerciseNameLanguage).toUpperCase()}</Text>
               <Pressable
                 onPress={handleClose}
                 style={styles.bottomSheetCloseBtn}
               >
-                <Text style={styles.bottomSheetCloseText}>CLOSE</Text>
+                <Text style={styles.bottomSheetCloseText}>{i18n.t('extras.closeBtn')}</Text>
               </Pressable>
             </View>
           </View>
@@ -1134,20 +1138,20 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             <View style={styles.sheetStatsCard}>
               <View style={styles.sheetStatItem}>
                 <Text style={styles.sheetStatValue}>{weeklyMuscleStats.sets}</Text>
-                <Text style={styles.sheetStatLabel}>WEEKLY SETS</Text>
+                <Text style={styles.sheetStatLabel}>{i18n.t('extras.weeklySetsLabel')}</Text>
               </View>
               <View style={styles.sheetStatDivider} />
               <View style={styles.sheetStatItem}>
-                <Text style={styles.sheetStatValue}>{weeklyMuscleStats.tonnage.toLocaleString()} kg</Text>
-                <Text style={styles.sheetStatLabel}>EST. TONNAGE</Text>
+                <Text style={styles.sheetStatValue}>{weeklyMuscleStats.tonnage.toLocaleString()} {i18n.t('extras.kgSuffix')}</Text>
+                <Text style={styles.sheetStatLabel}>{i18n.t('extras.estTonnage')}</Text>
               </View>
             </View>
 
             {/* Hypertrophy Goal progress bar */}
             <View style={styles.goalContainer}>
               <View style={styles.goalHeader}>
-                <Text style={styles.goalTitle}>Hypertrophy Focus Goal</Text>
-                <Text style={styles.goalValue}>{weeklyMuscleStats.sets} / 12 sets</Text>
+                <Text style={styles.goalTitle}>{i18n.t('extras.hypertrophyGoal')}</Text>
+                <Text style={styles.goalValue}>{i18n.t('extras.setsGoalValue', { current: weeklyMuscleStats.sets })}</Text>
               </View>
               <View style={styles.goalBarBg}>
                 <View 
@@ -1162,17 +1166,17 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
               </View>
               <Text style={styles.goalDescription}>
                 {weeklyMuscleStats.sets >= 12 
-                  ? "Hypertrophy target met! Optimal volume achieved." 
-                  : `Need ${12 - weeklyMuscleStats.sets} more sets to hit optimal hypertrophy range.`}
+                  ? i18n.t('extras.hypertrophyTargetMet')
+                  : i18n.t('extras.needMoreSets', { count: 12 - weeklyMuscleStats.sets })}
               </Text>
             </View>
 
             {/* Detailed Expanded Sections (fade in smoothly as the sheet expands) */}
             <Animated.View style={{ opacity: detailsOpacity }} pointerEvents={sheetState === 'expanded' ? 'auto' : 'none'}>
               {/* Section 1: This Week's Workouts */}
-              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.md }]}>THIS WEEK'S WORKOUTS</Text>
+              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.md }]}>{i18n.t('extras.thisWeekWorkouts')}</Text>
               {weeklyWorkouts.length === 0 ? (
-                <Text style={styles.sheetEmptyText}>No workouts logged for {selectedMuscle} this week.</Text>
+                <Text style={styles.sheetEmptyText}>{i18n.t('extras.noWorkoutsLogged', { muscle: selectedMuscle })}</Text>
               ) : (
                 <View style={styles.workoutsContainer}>
                   {weeklyWorkouts.map((w, idx) => (
@@ -1190,9 +1194,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
               )}
 
               {/* Section 2: Detailed Exercise Breakdown */}
-              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.lg }]}>DETAILED EXERCISE BREAKDOWN</Text>
+              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.lg }]}>{i18n.t('extras.detailedExerciseBreakdown')}</Text>
               {detailedExerciseBreakdown.length === 0 ? (
-                <Text style={styles.sheetEmptyText}>No exercises logged for {selectedMuscle} this week.</Text>
+                <Text style={styles.sheetEmptyText}>{i18n.t('extras.noExercisesLogged', { muscle: selectedMuscle })}</Text>
               ) : (
                 <View style={styles.breakdownList}>
                   {detailedExerciseBreakdown.map((ex, idx) => {
@@ -1206,9 +1210,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                           </View>
                           <View style={styles.breakdownInfo}>
                             <Text style={styles.breakdownName}>{ex.name}</Text>
-                            <Text style={styles.breakdownSub}>{ex.equipment} • {ex.setsList.length} sets this week</Text>
+                            <Text style={styles.breakdownSub}>{ex.equipment} • {i18n.t('extras.setsThisWeek', { count: ex.setsList.length })}</Text>
                             <Text style={styles.breakdownSets} numberOfLines={1}>
-                              {setsSummary} {hasMore ? `(+${ex.setsList.length - 3} more)` : ''}
+                              {setsSummary} {hasMore ? `(+${ex.setsList.length - 3} ${i18n.t('extras.more')})` : ''}
                             </Text>
                           </View>
                         </View>
@@ -1219,17 +1223,17 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
               )}
 
               {/* Section 3: Suggestion Library */}
-              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.lg }]}>SUGGESTED EXERCISES</Text>
+              <Text style={[styles.sheetSectionTitle, { marginTop: spacing.lg }]}>{i18n.t('extras.suggestedExercises')}</Text>
               <View style={styles.suggestionsGrid}>
                 {suggestedExercisesForMuscle.length === 0 ? (
-                  <Text style={styles.sheetEmptyText}>No suggested exercises found.</Text>
+                  <Text style={styles.sheetEmptyText}>{i18n.t('extras.noSuggestedExercises')}</Text>
                 ) : (
                   suggestedExercisesForMuscle.map((ex, idx) => (
                     <Pressable 
                       key={idx} 
                       style={styles.suggestionChip}
                       onPress={() => {
-                        Alert.alert(ex.name, `${ex.name} is a great ${ex.equipment?.toLowerCase() || 'other'} exercise targeting the ${ex.muscleGroup}. Add it to your next routine!`);
+                        Alert.alert(ex.name, i18n.t('muscleMap.exerciseInfo', { name: ex.name, equipment: ex.equipment?.toLowerCase() || i18n.t('muscleMap.otherEquipment'), muscle: ex.muscleGroup }));
                       }}
                       android_ripple={rippleTokens.surface}
                     >
@@ -1299,11 +1303,7 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: {
     backgroundColor: colors.surface,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
+    boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.2)',
   },
   toggleBtnText: {
     color: colors.textMuted,
@@ -1325,11 +1325,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
+    boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.3)',
     position: 'relative',
     overflow: 'hidden',
   },

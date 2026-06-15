@@ -6,11 +6,12 @@ import {
   StyleSheet,
   Pressable,
   Platform,
-  Vibration,
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
+import i18n from '../../utils/i18n';
 
 interface CustomWorkoutKeyboardProps {
   visible: boolean;
@@ -60,7 +61,11 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
 
   const playFeedback = (type: 'tap' | 'heavy' = 'tap') => {
     if (Platform.OS !== 'web') {
-      Vibration.vibrate(type === 'heavy' ? 15 : 8);
+      if (type === 'heavy') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
     }
   };
 
@@ -126,18 +131,21 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
           {title ? `${title.toUpperCase()}` : ''}
           {fieldName && (
             <Text style={styles.fieldTypeText}>
-              {` • ENTERING ${fieldName.toUpperCase()}`}
+              {` • ${i18n.t('extras.enteringField', { field: fieldName.toUpperCase() })}`}
             </Text>
           )}
         </Text>
         <Pressable
-          style={styles.closeBtn}
+          style={({ pressed }) => [
+            styles.closeBtn,
+            pressed && { transform: [{ scale: 0.9 }] }
+          ]}
           onPress={() => {
             playFeedback('tap');
             onClose();
           }}
           android_ripple={rippleTokens.borderless}
-          accessibilityLabel="Hide keyboard"
+          accessibilityLabel={i18n.t('extras.hideKeyboardA11y')}
         >
           <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
         </Pressable>
@@ -146,19 +154,24 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
       {/* ── RPE/RIR Selector Bar (Expands above key pad) ── */}
       {showRpeBar && (
         <View style={styles.rpeBar}>
-          <Text style={styles.rpeBarLabel}>{isRpeMode ? 'SELECT RPE' : 'SELECT RIR'}</Text>
+          <Text style={styles.rpeBarLabel}>{isRpeMode ? i18n.t('customKeyboard.selectRpe') : i18n.t('customKeyboard.selectRir')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.rpeScroll}
           >
             <Pressable
-              style={[styles.rpeChip, rpeValue === '' && styles.rpeChipActive]}
+              style={({ pressed }) => [
+                styles.rpeChip,
+                rpeValue === '' && styles.rpeChipActive,
+                pressed && { transform: [{ scale: 0.95 }] }
+              ]}
               onPress={handleRpeClear}
+              unstable_pressDelay={0}
               android_ripple={rippleTokens.surface}
             >
               <Text style={[styles.rpeChipText, rpeValue === '' && styles.rpeChipTextActive]}>
-                NONE
+                {i18n.t('extras.noneRpe')}
               </Text>
             </Pressable>
             {(isRpeMode ? RPE_OPTIONS : RIR_OPTIONS).map((val) => {
@@ -166,8 +179,13 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
               return (
                 <Pressable
                   key={val}
-                  style={[styles.rpeChip, isActive && styles.rpeChipActive]}
+                  style={({ pressed }) => [
+                    styles.rpeChip,
+                    isActive && styles.rpeChipActive,
+                    pressed && { transform: [{ scale: 0.95 }] }
+                  ]}
                   onPress={() => handleRpeSelect(val)}
+                  unstable_pressDelay={0}
                   android_ripple={rippleTokens.surface}
                 >
                   <Text style={[styles.rpeChipText, isActive && styles.rpeChipTextActive]}>
@@ -191,8 +209,15 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 return (
                   <Pressable
                     key={key}
-                    style={styles.key}
+                    style={({ pressed }) => [
+                      styles.key,
+                      pressed && { 
+                        backgroundColor: colors.surface2, 
+                        transform: [{ scale: 0.95 }] 
+                      }
+                    ]}
                     onPress={() => handleKeyPress(key)}
+                    unstable_pressDelay={0}
                     android_ripple={rippleTokens.surface}
                   >
                     {isBackspace ? (
@@ -212,11 +237,16 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
           {/* RPE/RIR Toggle Button */}
           {onChangeRpe ? (
             <Pressable
-              style={[styles.actionKey, showRpeBar && styles.rpeKeyActive]}
+              style={({ pressed }) => [
+                styles.actionKey,
+                showRpeBar && styles.rpeKeyActive,
+                pressed && { transform: [{ scale: 0.95 }] }
+              ]}
               onPress={() => {
                 playFeedback('tap');
                 setShowRpeBar(!showRpeBar);
               }}
+              unstable_pressDelay={0}
               android_ripple={rippleTokens.surface}
             >
               <Ionicons
@@ -225,7 +255,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
                 color={showRpeBar ? colors.violet : colors.textSecondary}
               />
               <Text style={[styles.actionKeyText, showRpeBar && { color: colors.violet }]}>
-                {isRpeMode ? 'RPE' : 'RIR'}
+                {isRpeMode ? i18n.t('customKeyboard.selectRpe').replace('SELECT ', '') : i18n.t('customKeyboard.selectRir').replace('SELECT ', '')}
               </Text>
             </Pressable>
           ) : (
@@ -235,27 +265,37 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
           {/* Next Button */}
           {onNext ? (
             <Pressable
-              style={[styles.actionKey, styles.nextKey]}
+              style={({ pressed }) => [
+                styles.actionKey,
+                styles.nextKey,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }
+              ]}
               onPress={() => {
                 playFeedback('heavy');
                 onNext();
               }}
+              unstable_pressDelay={0}
               android_ripple={rippleTokens.accent}
             >
               <Ionicons name="arrow-forward" size={20} color="#0D0F14" />
-              <Text style={styles.nextKeyText}>NEXT</Text>
+              <Text style={styles.nextKeyText}>{i18n.t('customKeyboard.next')}</Text>
             </Pressable>
           ) : (
             <Pressable
-              style={[styles.actionKey, styles.doneKey]}
+              style={({ pressed }) => [
+                styles.actionKey,
+                styles.doneKey,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }
+              ]}
               onPress={() => {
                 playFeedback('heavy');
                 onClose();
               }}
+              unstable_pressDelay={0}
               android_ripple={rippleTokens.accent}
             >
               <Ionicons name="checkmark" size={20} color="#0D0F14" />
-              <Text style={styles.doneKeyText}>DONE</Text>
+              <Text style={styles.doneKeyText}>{i18n.t('customKeyboard.done')}</Text>
             </Pressable>
           )}
         </View>

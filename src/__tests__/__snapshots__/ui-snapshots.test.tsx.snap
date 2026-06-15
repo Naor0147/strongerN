@@ -8,20 +8,13 @@ exports[`UI Primitives Snapshot Tests Badge Component renders customized badge c
         "alignSelf": "flex-start",
         "borderRadius": 9999,
         "borderWidth": 1,
-        "elevation": 4,
         "paddingHorizontal": 8,
         "paddingVertical": 2,
-        "shadowOffset": {
-          "height": 0,
-          "width": 0,
-        },
-        "shadowOpacity": 0.45,
-        "shadowRadius": 6,
       },
       {
         "backgroundColor": "#FFD70022",
         "borderColor": "#FFD700",
-        "shadowColor": "#FFD700",
+        "boxShadow": "0px 0px 6px #FFD70073",
       },
       undefined,
     ]
@@ -56,20 +49,13 @@ exports[`UI Primitives Snapshot Tests Badge Component renders default badge corr
         "alignSelf": "flex-start",
         "borderRadius": 9999,
         "borderWidth": 1,
-        "elevation": 4,
         "paddingHorizontal": 8,
         "paddingVertical": 2,
-        "shadowOffset": {
-          "height": 0,
-          "width": 0,
-        },
-        "shadowOpacity": 0.45,
-        "shadowRadius": 6,
       },
       {
         "backgroundColor": "#4F8EF722",
         "borderColor": "#4F8EF7",
-        "shadowColor": "#4F8EF7",
+        "boxShadow": "0px 0px 6px #4F8EF773",
       },
       undefined,
     ]

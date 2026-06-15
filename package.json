@@ -56,7 +56,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "health-check": "node scripts/health-check.js",
-    "self-check": "npm run typecheck && npm test && echo '✅ All checks passed!'"
+    "self-check": "npm run typecheck && npm test && echo '✅ All checks passed!'",
+    "doctor": "npx react-doctor@latest"
   },
   "private": true
 }

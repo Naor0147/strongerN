@@ -11,13 +11,15 @@ import {
   Alert,
   ScrollView,
   PanResponder,
-  Animated,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { MeasureItem } from '../data/mockData';
+import i18n from '../utils/i18n';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import SectionLabel from '../components/ui/SectionLabel';
@@ -41,7 +43,7 @@ const MetricRow: React.FC<{ item: MeasureItem; onPress: (item: MeasureItem) => v
       style={styles.rowContainer}
       padding={{ vertical: spacing.md, horizontal: spacing.lg }}
       testID={`measure.metric.${item.id}`}
-      accessibilityLabel={`${item.label}, last recorded value is ${item.lastValue ?? 'none'}`}
+      accessibilityLabel={`${item.label}, ${i18n.t('extras.lastRecordedValue')}: ${item.lastValue ?? i18n.t('extras.none')}`}
     >
       <View style={styles.rowContent}>
         <Text style={styles.rowLabel}>{item.label}</Text>
@@ -175,9 +177,9 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   const [isNewPrimary, setIsNewPrimary] = useState(false);
 
   const allData: ListItem[] = useMemo(() => [
-    { _type: 'header', id: 'header-primary', label: 'Primary Metrics' },
+    { _type: 'header', id: 'header-primary', label: i18n.t('measure.primaryMetrics') },
     ...primaryMetrics,
-    { _type: 'header', id: 'header-body-part', label: 'Body Parts' },
+    { _type: 'header', id: 'header-body-part', label: i18n.t('measure.bodyParts') },
     ...bodyPartMetrics,
   ], [primaryMetrics, bodyPartMetrics]);
 
@@ -206,7 +208,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   const handleSaveLog = () => {
     if (selectedMetric && onRecordMetric) {
       if (!newLogValue.trim()) {
-        Alert.alert('Error', 'Please enter a value.');
+        Alert.alert(i18n.t('common.error'), i18n.t('measure.enterValue'));
         return;
       }
       onRecordMetric(selectedMetric.id, newLogValue.trim());
@@ -233,30 +235,30 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
         });
       }
       setNewLogValue('');
-      Alert.alert('Success', `Recorded value for ${selectedMetric.label}!`);
+      Alert.alert(i18n.t('common.success'), i18n.t('measure.recordedValue', { label: selectedMetric.label }));
     }
   };
 
   const handleAddSubmit = () => {
     if (!newMetricLabel.trim()) {
-      Alert.alert('Error', 'Please enter a metric label.');
+      Alert.alert(i18n.t('common.error'), i18n.t('measure.enterMetricLabel'));
       return;
     }
     if (onAddMetric) {
       onAddMetric(newMetricLabel.trim(), isNewPrimary);
       setNewMetricLabel('');
       setIsAddModalVisible(false);
-      Alert.alert('Success', `Custom metric "${newMetricLabel.trim()}" added successfully!`);
+      Alert.alert(i18n.t('common.success'), i18n.t('measure.customMetricAdded', { name: newMetricLabel.trim() }));
     }
   };
 
   const headerActions = useMemo(() => [
-    { icon: 'add-outline' as const, label: 'Add Metric', onPress: () => setIsAddModalVisible(true) },
+    { icon: 'add-outline' as const, label: i18n.t('measure.addMetric'), onPress: () => setIsAddModalVisible(true) },
     {
       icon: 'settings-outline' as const,
-      label: 'Settings',
+      label: i18n.t('measure.settings'),
       onPress: () => {
-        Alert.alert('Measurement Settings', 'Measurements allow you to track your body fat, weight, and key muscle circumferences in AMOLED high-fidelity details.');
+        Alert.alert(i18n.t('measure.measurementSettings'), i18n.t('measure.measurementSettingsMsg'));
       }
     },
   ], []);
@@ -268,8 +270,8 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title="Measure"
-        subtitle={`${totalCount} metrics tracked`}
+        title={i18n.t('measure.title')}
+        subtitle={i18n.t('extras.metricsTracked', { count: totalCount })}
         actions={headerActions}
       />
       <FlatList
@@ -316,7 +318,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                 {/* ── Trend Graph Section ── */}
                 {selectedMetric.history && selectedMetric.history.length > 0 ? (
                   <View style={styles.detailSection}>
-                    <Text style={styles.sectionTitle}>TREND HISTORY</Text>
+                    <Text style={styles.sectionTitle}>{i18n.t('extras.trendHistory')}</Text>
                     <View style={styles.chartContainer}>
                       {(() => {
                         const history = selectedMetric.history || [];
@@ -357,7 +359,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
 
                 {/* ── Log New Entry Section ── */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>LOG NEW ENTRY</Text>
+                  <Text style={styles.sectionTitle}>{i18n.t('extras.logNewEntry')}</Text>
                   <View style={styles.logInputContainer}>
                     <TextInput
                       style={[styles.textInput, { flex: 1 }]}
@@ -379,16 +381,16 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                       onPress={handleSaveLog}
                       android_ripple={rippleTokens.accent}
                     >
-                      <Text style={styles.logSaveBtnText}>SAVE</Text>
+                      <Text style={styles.logSaveBtnText}>{i18n.t('extras.saveBtn')}</Text>
                     </Pressable>
                   </View>
                 </View>
 
                 {/* ── History Logs List Section ── */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>LOG HISTORY</Text>
+                  <Text style={styles.sectionTitle}>{i18n.t('extras.logHistory')}</Text>
                   {(!selectedMetric.history || selectedMetric.history.length === 0) ? (
-                    <Text style={styles.emptyLogsText}>No history logs recorded.</Text>
+                    <Text style={styles.emptyLogsText}>{i18n.t('extras.noHistoryLogs')}</Text>
                   ) : (
                     <View style={styles.logsListContainer}>
                       {selectedMetric.history.slice().reverse().map((entry, idx) => {
@@ -441,7 +443,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>ADD MEASURE POINT</Text>
+              <Text style={styles.modalTitle}>{i18n.t('extras.addMeasurePoint')}</Text>
               <IconButton
                 name="close"
                 size={22}
@@ -451,10 +453,10 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
             </View>
 
             <ScrollView contentContainerStyle={styles.modalScroll}>
-              <Text style={styles.inputLabel}>METRIC LABEL</Text>
+              <Text style={styles.inputLabel}>{i18n.t('extras.metricLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="e.g. Forearms / Chest / Neck"
+                placeholder={i18n.t('extras.metricLabelPlaceholder')}
                 placeholderTextColor={colors.textMuted}
                 value={newMetricLabel}
                 onChangeText={setNewMetricLabel}
@@ -462,7 +464,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                 maxLength={30}
               />
 
-              <Text style={styles.inputLabel}>METRIC CATEGORY</Text>
+              <Text style={styles.inputLabel}>{i18n.t('extras.metricCategory')}</Text>
               <View style={styles.categoryRow}>
                 <Pressable
                   onPress={() => setIsNewPrimary(true)}
@@ -477,7 +479,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                     styles.categoryBtnText,
                     isNewPrimary && styles.categoryBtnTextActive
                   ]}>
-                    PRIMARY
+                    {i18n.t('extras.primaryCategory')}
                   </Text>
                 </Pressable>
 
@@ -494,7 +496,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                     styles.categoryBtnText,
                     !isNewPrimary && styles.categoryBtnTextActive
                   ]}>
-                    BODY PART
+                    {i18n.t('extras.bodyPartCategory')}
                   </Text>
                 </Pressable>
               </View>
@@ -504,7 +506,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                 onPress={handleAddSubmit}
                 android_ripple={rippleTokens.accent}
               >
-                <Text style={styles.submitBtnText}>ADD POINT</Text>
+                <Text style={styles.submitBtnText}>{i18n.t('extras.addPointBtn')}</Text>
               </Pressable>
             </ScrollView>
           </View>

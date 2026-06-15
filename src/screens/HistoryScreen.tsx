@@ -9,13 +9,15 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Animated,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { WorkoutSession, ExerciseSet } from '../data/mockData';
+import i18n from '../utils/i18n';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card         from '../components/ui/Card';
@@ -105,7 +107,7 @@ const SessionCard: React.FC<{
           {hasPR && (
             <View style={styles.prBadge}>
               <Ionicons name="trophy" size={12} color={colors.gold} />
-              <Text style={styles.prText}>{session.prs} PR</Text>
+              <Text style={styles.prText}>{i18n.t('extras.prBadge', { count: session.prs })}</Text>
             </View>
           )}
           {onResumeWorkout && (
@@ -116,7 +118,7 @@ const SessionCard: React.FC<{
               accessibilityLabel={`Resume or edit ${session.title} workout`}
             >
               <Ionicons name="play" size={10} color={colors.accent} style={{ marginRight: 2 }} />
-              <Text style={styles.resumeBtnText}>EDIT / RESUME</Text>
+              <Text style={styles.resumeBtnText}>{i18n.t('extras.editResume')}</Text>
             </Pressable>
           )}
         </View>
@@ -128,8 +130,8 @@ const SessionCard: React.FC<{
 
       {/* Exercise table header */}
       <View style={styles.tableHeader}>
-        <Text style={styles.tableCol}>Sets</Text>
-        <Text style={styles.tableCol}>Best set</Text>
+        <Text style={styles.tableCol}>{i18n.t('extras.sets')}</Text>
+        <Text style={styles.tableCol}>{i18n.t('extras.bestSet')}</Text>
       </View>
 
       {session.exercises.map((ex, i) => (
@@ -241,7 +243,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
           <View style={styles.monthDot} />
           <Text style={styles.monthLabel}>{section.title.toUpperCase()}</Text>
         </View>
-        <Text style={styles.monthCount}>{section.count} workouts</Text>
+        <Text style={styles.monthCount}>{i18n.t('extras.workoutsCount', { count: section.count })}</Text>
       </View>
     ),
     []
@@ -348,13 +350,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const headerActions = useMemo(() => [
     {
       icon: isCalendarVisible ? 'calendar' as const : 'calendar-outline' as const,
-      label: 'Calendar view',
+      label: i18n.t('history.calendarView'),
       onPress: handleToggleCalendar,
       color: isCalendarVisible ? colors.highlight : colors.textPrimary
     },
     {
       icon: isSearching ? 'close-outline' as const : 'search-outline' as const,
-      label: 'Search history',
+      label: i18n.t('history.searchHistory'),
       onPress: handleToggleSearch,
       color: isSearching ? colors.accent : colors.textPrimary
     },
@@ -363,14 +365,14 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const subtitle = useMemo(() => {
     const isFiltered = searchQuery.trim() || selectedCalendarDate !== null;
     return isFiltered
-      ? `Found ${filteredSessions.length} results`
-      : `${sessions.length} total sessions`;
+      ? i18n.t('history.foundResults', { count: filteredSessions.length })
+      : i18n.t('history.totalSessions', { count: sessions.length });
   }, [sessions.length, filteredSessions.length, searchQuery, selectedCalendarDate]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title="History"
+        title={i18n.t('history.title')}
         subtitle={subtitle}
         actions={headerActions}
         testID="history.header"
@@ -383,7 +385,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
             <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search routine, exercise, or comments..."
+              placeholder={i18n.t('history.searchPlaceholder')}
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -417,14 +419,14 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
                 onPress={() => setSelectedCalendarDate(null)}
                 style={styles.calResetBtn}
               >
-                <Text style={styles.calResetBtnText}>Show All</Text>
+                <Text style={styles.calResetBtnText}>{i18n.t('history.showAll')}</Text>
               </Pressable>
             )}
           </View>
 
           {/* Weekday Labels */}
           <View style={styles.weekdayRow}>
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+            {(i18n.t('extras.weekDaysShort') as unknown as string[]).map((d: string, i: number) => (
               <Text key={i} style={styles.weekdayText}>{d}</Text>
             ))}
           </View>
@@ -540,11 +542,7 @@ const styles = StyleSheet.create({
     height:          6,
     borderRadius:    3,
     backgroundColor: colors.accent,
-    shadowColor:     colors.accent,
-    shadowOpacity:   0.8,
-    shadowRadius:    4,
-    shadowOffset:    { width: 0, height: 0 },
-    elevation:       3,
+    boxShadow:       '0px 0px 4px ' + colors.accent + 'CC',
   },
   monthLabel: {
     color:         colors.textSecondary,

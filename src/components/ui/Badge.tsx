@@ -24,7 +24,7 @@ const Badge: React.FC<BadgeProps> = ({
       {
         backgroundColor: color + '22',
         borderColor:     color,
-        shadowColor:     color,
+        boxShadow:       '0px 0px 6px ' + color + '73',
       },
       style,
     ]}
@@ -40,10 +40,6 @@ const styles = StyleSheet.create({
     borderWidth:     1,
     paddingVertical: 2,
     paddingHorizontal: spacing.sm,
-    shadowOpacity:   0.45,
-    shadowRadius:    6,
-    shadowOffset:    { width: 0, height: 0 },
-    elevation:       4,
     alignSelf:       'flex-start',
   },
   text: {

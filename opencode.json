@@ -1,28 +1,40 @@
 {
-  "mcpServers": {
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
     "mobile-mcp": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mobilenext/mobile-mcp@latest"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@mobilenext/mobile-mcp@latest"],
+      "enabled": true
     },
     "react-native-mcp": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@ohah/react-native-mcp-server"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@ohah/react-native-mcp-server"],
+      "enabled": true
     },
     "sequential-thinking": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-sequential-thinking"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
     },
     "filesystem": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\Antigravity\\strongerN"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\Antigravity\\strongerN"],
+      "enabled": true
     },
     "playwright": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@playwright/mcp@latest"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@playwright/mcp@latest"],
+      "enabled": true
     },
     "memory": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-memory"]
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
+    },
+    "android-adb": {
+      "type": "local",
+      "command": ["cmd", "/c", "set PATH=C:\\Users\\NAORA\\AppData\\Local\\Android\\Sdk\\platform-tools;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;D:\\Node2\\;C:\\Users\\NAORA\\AppData\\Roaming\\npm && npx -y @landicefu/android-adb-mcp-server"],
+      "enabled": true
     }
   }
 }

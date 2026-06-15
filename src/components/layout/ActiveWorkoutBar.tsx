@@ -5,12 +5,14 @@ import {
   View,
   Text,
   StyleSheet,
-  Animated,
-  Easing,
   Pressable,
 } from 'react-native';
+import * as RN from 'react-native';
+const Animated = RN.Animated;
+const Easing = RN.Easing;
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, ripple as rippleTokens, radius, globalAnimation, getScaledDuration } from '../../theme';
+import i18n from '../../utils/i18n';
 
 interface ActiveWorkoutBarProps {
   workoutName: string;
@@ -35,7 +37,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
 }) => {
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
 
-  // Pulsing dot animation
+  // Pulsing dot animation using standard React Native Animated via namespace
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -44,10 +46,15 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   }, [startTime]);
 
   useEffect(() => {
-    if (globalAnimation.speed === 0) {
+    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+      ? globalAnimation.speed
+      : 1;
+
+    if (speed === 0) {
       pulseAnim.setValue(1);
       return;
     }
+
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -61,14 +68,17 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
           duration:        getScaledDuration(700),
           useNativeDriver: true,
           easing:          Easing.inOut(Easing.ease),
-        }),
+        })
       ])
     );
     anim.start();
-    return () => anim.stop();
-  }, [pulseAnim, globalAnimation.speed]);
 
-  const label = `Active workout: ${workoutName}. Elapsed ${elapsed}`;
+    return () => {
+      anim.stop();
+    };
+  }, [pulseAnim, globalAnimation?.speed]);
+
+  const label = i18n.t('extras.activeWorkoutA11y', { name: workoutName, time: elapsed });
 
   return (
     <View style={styles.bar}>
@@ -97,10 +107,10 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
             style={styles.finishBtn}
             onPress={onFinish}
             android_ripple={rippleTokens.accent}
-            accessibilityLabel="Finish workout"
+            accessibilityLabel={i18n.t('extras.finishWorkoutBarA11y')}
             testID="active-workout-bar.finish"
           >
-            <Text style={styles.finishText}>FINISH</Text>
+            <Text style={styles.finishText}>{i18n.t('activeWorkoutBar.finish')}</Text>
           </Pressable>
           <Ionicons name="chevron-up-outline" size={18} color={colors.textSecondary} style={{ marginLeft: spacing.sm }} />
         </View>
@@ -119,11 +129,7 @@ const styles = StyleSheet.create({
   glowBar: {
     width:           3,
     backgroundColor: colors.accent,
-    shadowColor:     colors.accent,
-    shadowOpacity:   0.8,
-    shadowRadius:    8,
-    shadowOffset:    { width: 0, height: 0 },
-    elevation:       8,
+    boxShadow:       '0px 0px 8px ' + colors.accent + 'CC',
   },
   inner: {
     flex:              1,
@@ -144,11 +150,7 @@ const styles = StyleSheet.create({
     height:          10,
     borderRadius:    5,
     backgroundColor: colors.accent,
-    shadowColor:     colors.accent,
-    shadowOpacity:   0.8,
-    shadowRadius:    6,
-    shadowOffset:    { width: 0, height: 0 },
-    elevation:       4,
+    boxShadow:       '0px 0px 6px ' + colors.accent + 'CC',
   },
   textBlock: {
     flex: 1,
