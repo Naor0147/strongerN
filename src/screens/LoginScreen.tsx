@@ -17,9 +17,10 @@ import {
   Alert,
   Dimensions,
   Image,
+  Animated,
+  useWindowDimensions,
 } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -58,7 +59,9 @@ const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CL
 // Reverse client ID redirect URI — registered in AndroidManifest.xml as an intent filter
 const ANDROID_REDIRECT_URI = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+
+
 
 interface LoginScreenProps {
   onComplete: (authMode: AuthMode, username: string) => void;
@@ -77,8 +80,12 @@ interface LoginScreenProps {
 // Sub-component: Animated pulsing dumbbell logo
 // ─────────────────────────────────────────────────────────────────
 const AnimatedLogo: React.FC = () => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnimRef = useRef<Animated.Value | null>(null);
+  if (pulseAnimRef.current === null) pulseAnimRef.current = new Animated.Value(1);
+  const pulseAnim = pulseAnimRef.current;
+  const glowAnimRef = useRef<Animated.Value | null>(null);
+  if (glowAnimRef.current === null) glowAnimRef.current = new Animated.Value(0);
+  const glowAnim = glowAnimRef.current;
 
   useEffect(() => {
     if (globalAnimation.speed === 0) {
@@ -120,7 +127,7 @@ const AnimatedLogo: React.FC = () => {
     );
     anim.start();
     return () => anim.stop();
-  }, [globalAnimation.speed]);
+  }, [globalAnimation.speed, pulseAnim, glowAnim]);
 
   const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
@@ -164,7 +171,9 @@ const AnimatedLogo: React.FC = () => {
 // ─────────────────────────────────────────────────────────────────
 const DataInfoCard: React.FC = () => {
   const [expanded, setExpanded] = useState(false);
-  const heightAnim = useRef(new Animated.Value(0)).current;
+  const heightAnimRef = useRef<Animated.Value | null>(null);
+  if (heightAnimRef.current === null) heightAnimRef.current = new Animated.Value(0);
+  const heightAnim = heightAnimRef.current;
 
   const toggle = () => {
     const toValue = expanded ? 0 : 1;
@@ -234,10 +243,15 @@ const DataInfoRow: React.FC<{ icon: string; text: string }> = ({ icon, text }) =
 // ─────────────────────────────────────────────────────────────────
 const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, onRestoreBackup }) => {
   const insets = useSafeAreaInsets();
+  const { height: layoutHeight } = useWindowDimensions();
 
   // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(32)).current;
+  const fadeAnimRef = useRef<Animated.Value | null>(null);
+  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
+  const fadeAnim = fadeAnimRef.current;
+  const slideAnimRef = useRef<Animated.Value | null>(null);
+  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(32);
+  const slideAnim = slideAnimRef.current;
 
   // Local username flow
   const [showLocalForm, setShowLocalForm] = useState(false);
@@ -438,7 +452,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       {/* Background gradient top glow */}
       <LinearGradient
         colors={[colors.accent + '28', 'transparent']}
-        style={styles.topGradient}
+        style={[styles.topGradient, { height: layoutHeight * 0.45 }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         pointerEvents="none"
@@ -743,7 +757,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: SCREEN_HEIGHT * 0.45,
   },
   scroll: {
     flexGrow: 1,

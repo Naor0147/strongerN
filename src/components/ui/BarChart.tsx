@@ -77,9 +77,10 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     hasAnimated.current = false;
     animValuesRef.current.forEach(anim => anim.setValue(0));
     startAnimation();
+    const activeAnim = activeAnimRef.current;
     return () => {
-      if (activeAnimRef.current) {
-        activeAnimRef.current.stop();
+      if (activeAnim) {
+        activeAnim.stop();
       }
     };
   }, [data, startAnimation]);
@@ -101,7 +102,7 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
           {/* Y-axis */}
           <View style={[styles.yAxis, { height: chartHeight }]}>
             {[maxValue, Math.ceil(maxValue / 2), 0].map((val, i) => (
-              <Text key={i} style={styles.yLabel}>{val}</Text>
+              <Text key={`y-label-${i}-${val}`} style={styles.yLabel}>{val}</Text>
             ))}
           </View>
 

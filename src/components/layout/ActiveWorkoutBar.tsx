@@ -6,9 +6,9 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  Animated,
 } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 const Easing = RN.Easing;
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, ripple as rippleTokens, radius, globalAnimation, getScaledDuration } from '../../theme';
@@ -38,7 +38,9 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
 
   // Pulsing dot animation using standard React Native Animated via namespace
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnimRef = useRef<Animated.Value | null>(null);
+  if (pulseAnimRef.current === null) pulseAnimRef.current = new Animated.Value(1);
+  const pulseAnim = pulseAnimRef.current;
 
   useEffect(() => {
     const id = setInterval(() => setElapsed(formatElapsed(startTime)), 1000);

@@ -598,6 +598,28 @@ const ZOOM_OFFSETS: Record<string, { scale: number; x: number; y: number }> = {
   Forearms:   { scale: 1.6, x: 0,   y: 0 },
 };
 
+const springScale = (anim: RN.Animated.Value, toValue: number, speedMultiplier = 1) => {
+  const s = globalAnimation.speed * speedMultiplier;
+  if (s === 0) {
+    return Animated.timing(anim, { toValue, duration: 0, useNativeDriver: true });
+  }
+  return Animated.spring(anim, {
+    toValue,
+    stiffness: 140 / (s * s),
+    damping: 16 / s,
+    mass: 0.9,
+    useNativeDriver: true,
+  });
+};
+
+const timingSheet = (anim: RN.Animated.Value, toValue: number, baseDuration = 250) => {
+  return Animated.timing(anim, {
+    toValue,
+    duration: getScaledDuration(baseDuration),
+    useNativeDriver: true,
+  });
+};
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList, exerciseNameLanguage = 'en' }) => {
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
@@ -615,33 +637,23 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [sheetState, setSheetState] = useState<'closed' | 'collapsed' | 'expanded'>('closed');
   
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const translateXAnim = useRef(new Animated.Value(0)).current;
-  const translateYAnim = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(T_CLOSED)).current;
+  const scaleAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (scaleAnimRef.current === null) scaleAnimRef.current = new Animated.Value(1);
+  const scaleAnim = scaleAnimRef.current;
+
+  const translateXAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (translateXAnimRef.current === null) translateXAnimRef.current = new Animated.Value(0);
+  const translateXAnim = translateXAnimRef.current;
+
+  const translateYAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (translateYAnimRef.current === null) translateYAnimRef.current = new Animated.Value(0);
+  const translateYAnim = translateYAnimRef.current;
+
+  const sheetTranslateYRef = useRef<RN.Animated.Value | null>(null);
+  if (sheetTranslateYRef.current === null) sheetTranslateYRef.current = new Animated.Value(T_CLOSED);
+  const sheetTranslateY = sheetTranslateYRef.current;
+
   const scrollViewRef = useRef<ScrollView>(null);
-
-  const springScale = (anim: RN.Animated.Value, toValue: number, speedMultiplier = 1) => {
-    const s = globalAnimation.speed * speedMultiplier;
-    if (s === 0) {
-      return Animated.timing(anim, { toValue, duration: 0, useNativeDriver: true });
-    }
-    return Animated.spring(anim, {
-      toValue,
-      stiffness: 140 / (s * s),
-      damping: 16 / s,
-      mass: 0.9,
-      useNativeDriver: true,
-    });
-  };
-
-  const timingSheet = (anim: RN.Animated.Value, toValue: number, baseDuration = 250) => {
-    return Animated.timing(anim, {
-      toValue,
-      duration: getScaledDuration(baseDuration),
-      useNativeDriver: true,
-    });
-  };
 
   const snapTo = (state: 'expanded' | 'collapsed' | 'closed') => {
     let toValue = T_CLOSED;
@@ -658,6 +670,64 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       }
     });
   };
+
+  const panResponderRef = useRef<any>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        sheetTranslateY.extractOffset();
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const offset = (sheetTranslateY as any)._offset || 0;
+        const nextVal = gestureState.dy;
+        if (offset + nextVal < T_EXPANDED) {
+          // Add friction if pulled past top boundary
+          const overflow = T_EXPANDED - (offset + nextVal);
+          sheetTranslateY.setValue(T_EXPANDED - offset - (overflow * 0.35));
+        } else {
+          sheetTranslateY.setValue(nextVal);
+        }
+        
+        // Dynamic pinch-to-scale effect of top content
+        const currentY = offset + nextVal;
+        if (currentY > T_COLLAPSED) {
+          const delta = Math.min(1.0, (currentY - T_COLLAPSED) / (T_CLOSED - T_COLLAPSED));
+          scaleAnim.setValue(1.0 - (delta * 0.1));
+        } else {
+          scaleAnim.setValue(1.0);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        sheetTranslateY.flattenOffset();
+        const currentTranslateY = (sheetTranslateY as any)._value || T_COLLAPSED;
+        const velocityY = gestureState.vy;
+        const dy = gestureState.dy;
+
+        if (dy < -40 || (dy < 0 && velocityY < -0.3)) {
+          snapTo('expanded');
+        } else if (dy > 40 || (dy > 0 && velocityY > 0.3)) {
+          if (currentTranslateY > T_COLLAPSED + 60) {
+            handleClose();
+          } else {
+            snapTo('collapsed');
+          }
+        } else {
+          if (currentTranslateY < T_COLLAPSED / 2) {
+            snapTo('expanded');
+          } else if (currentTranslateY < (T_COLLAPSED + T_CLOSED) / 2) {
+            snapTo('collapsed');
+          } else {
+            handleClose();
+          }
+        }
+      },
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   const handleMusclePress = (muscle: string) => {
     setSelectedMuscle(muscle);
@@ -686,70 +756,6 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       setSheetState('closed');
     });
   };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
-      },
-      onPanResponderGrant: () => {
-        sheetTranslateY.extractOffset();
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const offset = (sheetTranslateY as any)._offset || 0;
-        const targetValue = offset + gestureState.dy;
-        
-        if (targetValue < T_EXPANDED) {
-          sheetTranslateY.setValue(T_EXPANDED - offset);
-        } else if (targetValue > T_CLOSED) {
-          sheetTranslateY.setValue(T_CLOSED - offset);
-        } else {
-          sheetTranslateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        sheetTranslateY.flattenOffset();
-        const currentTranslateY = (sheetTranslateY as any)._value || T_COLLAPSED;
-        const velocityY = gestureState.vy;
-        const dy = gestureState.dy;
-
-        if (dy < -40 || (dy < 0 && velocityY < -0.3)) {
-          snapTo('expanded');
-        } else if (dy > 40 || (dy > 0 && velocityY > 0.3)) {
-          if (currentTranslateY > T_COLLAPSED + 60) {
-            Animated.parallel([
-              springScale(scaleAnim, 1.0),
-              springScale(translateXAnim, 0),
-              springScale(translateYAnim, 0),
-              timingSheet(sheetTranslateY, T_CLOSED, 250),
-            ]).start(() => {
-              setSelectedMuscle(null);
-              setSheetState('closed');
-            });
-          } else {
-            snapTo('collapsed');
-          }
-        } else {
-          if (currentTranslateY < T_COLLAPSED / 2) {
-            snapTo('expanded');
-          } else if (currentTranslateY < (T_COLLAPSED + T_CLOSED) / 2) {
-            snapTo('collapsed');
-          } else {
-            Animated.parallel([
-              springScale(scaleAnim, 1.0),
-              springScale(translateXAnim, 0),
-              springScale(translateYAnim, 0),
-              timingSheet(sheetTranslateY, T_CLOSED, 250),
-            ]).start(() => {
-              setSelectedMuscle(null);
-              setSheetState('closed');
-            });
-          }
-        }
-      },
-    })
-  ).current;
 
   // Interpolations for transitioning top screen content
   const topOpacity = sheetTranslateY.interpolate({
@@ -1199,11 +1205,11 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                 <Text style={styles.sheetEmptyText}>{i18n.t('extras.noExercisesLogged', { muscle: selectedMuscle })}</Text>
               ) : (
                 <View style={styles.breakdownList}>
-                  {detailedExerciseBreakdown.map((ex, idx) => {
+                  {detailedExerciseBreakdown.map((ex) => {
                     const setsSummary = ex.setsList.map(s => `${s.weight}kg × ${s.reps}`).slice(0, 3).join('  ·  ');
                     const hasMore = ex.setsList.length > 3;
                     return (
-                      <View key={idx} style={styles.breakdownItem}>
+                      <View key={ex.name} style={styles.breakdownItem}>
                         <View style={styles.breakdownLeft}>
                           <View style={styles.breakdownIconWrap}>
                             <Ionicons name="barbell-outline" size={18} color={colors.accent} />
@@ -1228,9 +1234,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                 {suggestedExercisesForMuscle.length === 0 ? (
                   <Text style={styles.sheetEmptyText}>{i18n.t('extras.noSuggestedExercises')}</Text>
                 ) : (
-                  suggestedExercisesForMuscle.map((ex, idx) => (
+                  suggestedExercisesForMuscle.map((ex) => (
                     <Pressable 
-                      key={idx} 
+                      key={ex.name} 
                       style={styles.suggestionChip}
                       onPress={() => {
                         Alert.alert(ex.name, i18n.t('muscleMap.exerciseInfo', { name: ex.name, equipment: ex.equipment?.toLowerCase() || i18n.t('muscleMap.otherEquipment'), muscle: ex.muscleGroup }));
@@ -1412,7 +1418,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: Dimensions.get('window').height * 0.88,
     backgroundColor: '#0D0F14',
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,

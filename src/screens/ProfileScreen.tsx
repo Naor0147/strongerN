@@ -30,6 +30,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+const EMPTY_ARRAY: any[] = [];
+const EMPTY_OBJECT: Record<string, any> = {};
 import { pickAndReadBackupFile } from '../utils/backupManager';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation } from '../theme';
@@ -219,10 +221,12 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
 }) => {
   const [sliderWidth, setSliderWidth] = useState(200);
   const [localVolume, setLocalVolume] = useState(soundVolume);
+  const [prevSoundVolume, setPrevSoundVolume] = useState(soundVolume);
 
-  React.useEffect(() => {
+  if (soundVolume !== prevSoundVolume) {
     setLocalVolume(soundVolume);
-  }, [soundVolume]);
+    setPrevSoundVolume(soundVolume);
+  }
 
   const startVolumeRef = useRef(0);
   const localVolumeRef = useRef(localVolume);
@@ -298,10 +302,12 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
 }) => {
   const [sliderWidth, setSliderWidth] = useState(200);
   const [localSpeed, setLocalSpeed] = useState(animationSpeed);
+  const [prevAnimationSpeed, setPrevAnimationSpeed] = useState(animationSpeed);
 
-  React.useEffect(() => {
+  if (animationSpeed !== prevAnimationSpeed) {
     setLocalSpeed(animationSpeed);
-  }, [animationSpeed]);
+    setPrevAnimationSpeed(animationSpeed);
+  }
 
   const startSpeedRef = useRef(0);
   const localSpeedRef = useRef(localSpeed);
@@ -392,8 +398,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setAnimationSpeed,
   onWipeAllData,
   lastSynced,
-  weeklyMuscleSets = {},
-  exercises = [],
+  weeklyMuscleSets = EMPTY_OBJECT,
+  exercises = EMPTY_ARRAY,
   isWatchSimulatorVisible,
   setIsWatchSimulatorVisible,
   isHealthSyncEnabled,
@@ -401,7 +407,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   isLiveHeartRateEnabled,
   setIsLiveHeartRateEnabled,
   onStartWorkout,
-  templates = [],
+  templates = EMPTY_ARRAY,
   activeProgramId = null,
   isPlateCalculatorEnabled = false,
   setIsPlateCalculatorEnabled,
@@ -417,7 +423,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setSoundWorkoutFinished,
   soundTimerCompleted = 'beep',
   setSoundTimerCompleted,
-  customSounds = [],
+  customSounds = EMPTY_ARRAY,
   setCustomSounds,
   soundVolume = 0.8,
   setSoundVolume,
@@ -494,7 +500,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Timer selector overlay states
   const [isTimerPickerVisible, setIsTimerPickerVisible] = useState(false);
-  const [customTimerValue, setCustomTimerValue] = useState(defaultRestDuration.toString());
+  const [customTimerValue, setCustomTimerValue] = useState(() => defaultRestDuration.toString());
 
 
 
@@ -1384,15 +1390,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}
               >
-                {topPrs.map((pr, idx) => (
+                {topPrs.map((pr) => (
                   <Card 
-                    key={idx} 
+                    key={`${pr.name}-${pr.date}`} 
                     padding={spacing.md} 
                     style={{ width: 140, borderColor: colors.border, borderWidth: 1, backgroundColor: 'transparent' }}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
                       <Ionicons name="trophy" size={14} color={colors.gold} />
-                      <Text style={{ color: colors.textMuted, fontSize: 9, fontFamily: font.bold }}>{pr.date}</Text>
+                      <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, fontFamily: font.bold }}>{pr.date}</Text>
                     </View>
                     <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.bold, marginBottom: 2 }} numberOfLines={1}>
                       {pr.name}
@@ -1400,7 +1406,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     <Text style={{ color: colors.accent, fontSize: font.sizes.md, fontFamily: font.bold }}>
                       {pr.weight} kg
                     </Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 10, fontFamily: font.medium }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.medium }}>
                       {i18n.t('profile.forReps', { weight: pr.weight, reps: pr.reps })}
                     </Text>
                   </Card>
@@ -1425,12 +1431,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Text>
               ) : (
                 <View style={{ gap: spacing.md }}>
-                  {Object.keys(weeklyMuscleSets).map((muscle, idx) => {
+                  {Object.keys(weeklyMuscleSets).map((muscle) => {
                     const sets = weeklyMuscleSets[muscle] || 0;
                     const maxVal = Math.max(...Object.values(weeklyMuscleSets), 1);
                     const percentage = Math.round((sets / maxVal) * 100);
                     return (
-                      <View key={idx} style={{ gap: 4 }}>
+                      <View key={muscle} style={{ gap: 4 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.semibold }}>
                             {muscle.toUpperCase()}
@@ -3068,10 +3074,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             style={styles.settingRow}
                             onPress={async () => {
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                              const { loadAuthState } = await import('../utils/authStore');
-                              const { getSecureItem } = await import('../utils/secureStore');
-                              const savedAuth = await loadAuthState();
-                              const secureToken = await getSecureItem('google_oauth_token');
+                              const [
+                                { loadAuthState },
+                                { getSecureItem }
+                              ] = await Promise.all([
+                                import('../utils/authStore'),
+                                import('../utils/secureStore')
+                              ]);
+                              const [savedAuth, secureToken] = await Promise.all([
+                                loadAuthState(),
+                                getSecureItem('google_oauth_token')
+                              ]);
                               Alert.alert(
                                 i18n.t('profile.inspectSession'),
                                 `[Active Profile State]\n` +

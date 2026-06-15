@@ -9,6 +9,24 @@ import {
 import * as RN from 'react-native';
 const Animated = RN.Animated;
 
+interface RenderItemWrapperProps<T> {
+  renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
+  item: T;
+  index: number;
+  dragHandlers: any;
+  isActive: boolean;
+}
+
+function RenderItemWrapper<T>({
+  renderItem,
+  item,
+  index,
+  dragHandlers,
+  isActive,
+}: RenderItemWrapperProps<T>) {
+  return renderItem({ item, index, dragHandlers, isActive });
+}
+
 interface DraggableListProps<T> {
   data: T[];
   renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
@@ -23,23 +41,27 @@ export function DraggableList<T>({
   keyExtractor,
 }: DraggableListProps<T>) {
   const [localData, setLocalData] = useState<T[]>(data);
+  const [prevData, setPrevData] = useState<T[]>(data);
   const [activeId, setActiveId] = useState<string | null>(null);
-  
+
   // Track Y position of each item by their key/ID
   const itemLayouts = useRef<{ [key: string]: { y: number; height: number } }>({});
   
   // Animated value for the translation of the dragged item
-  const dragY = useRef(new Animated.Value(0)).current;
+  const dragYRef = useRef<RN.Animated.Value | null>(null);
+  if (dragYRef.current === null) dragYRef.current = new Animated.Value(0);
+  const dragY = dragYRef.current;
   
   // Keep track of the current index during dragging
   const dragIdx = useRef<number>(-1);
   const hoverIdx = useRef<number>(-1);
 
-  useEffect(() => {
+  if (data !== prevData) {
     if (!activeId) {
       setLocalData(data);
     }
-  }, [data, activeId]);
+    setPrevData(data);
+  }
 
   // Handle reordering while dragging
   const handleMove = (gestureStateY: number) => {
@@ -138,8 +160,7 @@ export function DraggableList<T>({
                 };
               }
             }}
-            style={[
-              isActive && {
+            style={isActive ? {
                 transform: [{ translateY: dragY }],
                 zIndex: 999,
                 opacity: 0.85,
@@ -149,10 +170,15 @@ export function DraggableList<T>({
                 shadowOpacity: 0.45,
                 shadowRadius: 10,
                 elevation: 8,
-              },
-            ]}
+              } : undefined}
           >
-            {renderItem({ item, index, dragHandlers, isActive })}
+            <RenderItemWrapper
+              renderItem={renderItem}
+              item={item}
+              index={index}
+              dragHandlers={dragHandlers}
+              isActive={isActive}
+            />
           </Animated.View>
         );
       })}

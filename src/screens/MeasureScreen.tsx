@@ -263,9 +263,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
     },
   ], []);
 
-  const totalCount = useMemo(() => {
-    return primaryMetrics.length + bodyPartMetrics.length;
-  }, [primaryMetrics.length, bodyPartMetrics.length]);
+  const totalCount = primaryMetrics.length + bodyPartMetrics.length;
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -332,10 +330,10 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                         };
                         const unit = getUnit(selectedMetric.label);
 
-                        return history.slice(-5).map((entry, idx) => {
+                        return history.slice(-5).map((entry) => {
                           const pct = getPercentage(entry.value);
                           return (
-                            <View key={idx} style={styles.chartRow}>
+                            <View key={entry.date} style={styles.chartRow}>
                               <Text style={styles.chartDate}>{formatDateString(entry.date)}</Text>
                               <View style={styles.chartBarTrack}>
                                 <View 

@@ -37,6 +37,9 @@ import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
 import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound } from '../../utils/soundPlayer';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 
+const EMPTY_ARRAY: any[] = [];
+const EMPTY_OBJECT: Record<string, any> = {};
+
 interface SetRecord {
   id:        string;
   weight:    string;
@@ -105,7 +108,9 @@ interface SwipeableRowProps {
 }
 
 const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
-  const translateX = useRef(new Animated.Value(0)).current;
+  const translateXRef = useRef<RN.Animated.Value | null>(null);
+  if (translateXRef.current === null) translateXRef.current = new Animated.Value(0);
+  const translateX = translateXRef.current;
   const isOpen = useRef(false);
   const [width, setWidth] = useState(0);
   const [isPastThreshold, setIsPastThreshold] = useState(false);
@@ -131,8 +136,9 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
 
   const currentThreshold = width ? -width * 0.45 : -150;
 
-  const panResponder = useRef(
-    PanResponder.create({
+  const panResponderRef = useRef<any>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 8;
@@ -181,8 +187,9 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
           setIsPastThreshold(false);
         }
       },
-    })
-  ).current;
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   const triggerDeleteFlow = () => {
     if (Platform.OS !== 'web') {
@@ -300,9 +307,15 @@ const getProgressiveOverloadSuggestionForSet = (
   templateSet?: any
 ): SetSuggestion => {
   const matchingSessions = (sessions || [])
-    .filter((s: any) =>
-      s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
-    )
+    .reduce<any[]>((acc, s) => {
+      if (s.exercises) {
+        const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+        if (ex) {
+          acc.push({ datetime: s.datetime, ex });
+        }
+      }
+      return acc;
+    }, [])
     .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
   if (matchingSessions.length === 0) {
@@ -318,14 +331,11 @@ const getProgressiveOverloadSuggestionForSet = (
 
   // Build history of this specific set index across sessions (oldest to newest)
   const history: any[] = [];
-  for (const sess of matchingSessions) {
-    const ex = sess.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-    if (ex) {
-      const setsDetails = ex.setsDetails || [];
-      const s = setsDetails[setIdx] || setsDetails[setsDetails.length - 1];
-      if (s) {
-        history.push(s);
-      }
+  for (const item of matchingSessions) {
+    const setsDetails = item.ex.setsDetails || [];
+    const s = setsDetails[setIdx] || setsDetails[setsDetails.length - 1];
+    if (s) {
+      history.push(s);
     }
   }
 
@@ -527,7 +537,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onFinish,
   onDiscard,
-  exerciseLibrary = [],
+  exerciseLibrary = EMPTY_ARRAY,
   onUpdateActiveExercises,
   onUpdateExerciseNotes,
   onAddCustomExercise,
@@ -535,7 +545,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isPlateCalculatorEnabled = true,
   defaultRestDuration = 90,
   onRenameWorkout,
-  sessions = [],
+  sessions = EMPTY_ARRAY,
   isProgressiveOverloadEnabled = false,
   isAutoFinishSetEnabled = true,
   isKeyboardDismissOnNextEnabled = true,
@@ -560,8 +570,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const inputRefs = useRef<{ [key: string]: any }>({});
 
   const [showSecondsOnly, setShowSecondsOnly] = useState(false);
-  const timerFadeAnim = useRef(new Animated.Value(1)).current;
-  const timerScaleAnim = useRef(new Animated.Value(1)).current;
+  const timerFadeAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (timerFadeAnimRef.current === null) timerFadeAnimRef.current = new Animated.Value(1);
+  const timerFadeAnim = timerFadeAnimRef.current;
+
+  const timerScaleAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (timerScaleAnimRef.current === null) timerScaleAnimRef.current = new Animated.Value(1);
+  const timerScaleAnim = timerScaleAnimRef.current;
 
   const toggleTimerFormat = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -634,7 +649,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [customEquipment, setCustomEquipment] = useState('Barbell');
 
   // Drag-and-drop reorder state for exercises
-  const exDragY       = useRef(new Animated.Value(0)).current;
+  const exDragYRef    = useRef<RN.Animated.Value | null>(null);
+  if (exDragYRef.current === null) exDragYRef.current = new Animated.Value(0);
+  const exDragY       = exDragYRef.current;
   const exDragIdx     = useRef(-1);
   const exHoverIdx    = useRef(-1);
   const [exActiveKey, setExActiveKey] = useState<string | null>(null);
@@ -707,6 +724,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [activeExercises]);
 
   const lastStartTimeRef = useRef<string | null>(null);
+  // Inline render-phase adjustment: reset workout/timer state when a new workout session starts
+  const prevStartKeyForResetRef = useRef<string | null>(null);
+  const currentStartKey = startTime.toISOString();
+  if (visible && prevStartKeyForResetRef.current !== currentStartKey && prevStartKeyForResetRef.current !== null) {
+    prevStartKeyForResetRef.current = currentStartKey;
+    setWorkoutFinished(false);
+    setIsTimerActive(false);
+  } else if (prevStartKeyForResetRef.current === null) {
+    prevStartKeyForResetRef.current = currentStartKey;
+  }
 
   // Sync props to state when modal becomes visible or when a new workout session actually starts
   useEffect(() => {
@@ -839,8 +866,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         });
         setActiveExercises(initial);
         hasSyncedPropsRef.current = true;
-        setWorkoutFinished(false);
-        setIsTimerActive(false);
       }
     }
   }, [visible, startTime]);
@@ -1036,7 +1061,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   };
 
-  const timerPulseAnim = useRef(new Animated.Value(1)).current;
+  const timerPulseAnimRef = useRef<RN.Animated.Value | null>(null);
+  if (timerPulseAnimRef.current === null) timerPulseAnimRef.current = new Animated.Value(1);
+  const timerPulseAnim = timerPulseAnimRef.current;
   useEffect(() => {
     if (!isTimerActive) return;
     if (globalAnimation.speed === 0) {
@@ -1951,8 +1978,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           };
                         }
                       }}
-                      style={[
-                        isExActive && {
+                      style={isExActive ? {
                           transform:     [{ translateY: exDragY }],
                           zIndex:        999,
                           opacity:       0.88,
@@ -1961,8 +1987,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           shadowOpacity: 0.55,
                           shadowRadius:  16,
                           elevation:     14,
-                        },
-                      ]}
+                        } : undefined}
                     >
                     <SwipeableRow 
                       borderRadius={radius.md}
@@ -2388,7 +2413,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               
                               {/* Plates array stacked on sleeve */}
                               <View style={styles.stackedPlatesContainer}>
-                                {calculatedPlates.map((plate, idx) => {
+                                {calculatedPlates.map((plate, idx) => { // idx safe here: list is derived from weight and never reordered
                                   const scaleFactor = plate.size >= 25 ? 1.0 : plate.size >= 20 ? 0.93 : plate.size >= 15 ? 0.86 : plate.size >= 10 ? 0.79 : plate.size >= 5 ? 0.72 : 0.65;
                                   const heightVal = 86 * scaleFactor;
                                   const widthVal = 13 * scaleFactor;
@@ -2594,7 +2619,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
             {/* Left Row */}
             <View style={styles.unilateralRow}>
               <Text style={styles.unilateralLabel}>L</Text>
-              <View style={[styles.unilateralInputWrapper]}>
+              <View style={styles.unilateralInputWrapper}>
                 <TextInput
                   ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
                   style={[
@@ -2610,7 +2635,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                   selectTextOnFocus
                 />
               </View>
-              <View style={[styles.unilateralInputWrapper]}>
+              <View style={styles.unilateralInputWrapper}>
                 <TextInput
                   ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
                   style={[
@@ -2631,7 +2656,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
             {/* Right Row */}
             <View style={styles.unilateralRow}>
               <Text style={styles.unilateralLabel}>R</Text>
-              <View style={[styles.unilateralInputWrapper]}>
+              <View style={styles.unilateralInputWrapper}>
                 <TextInput
                   ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
                   style={[
@@ -2647,7 +2672,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                   selectTextOnFocus
                 />
               </View>
-              <View style={[styles.unilateralInputWrapper]}>
+              <View style={styles.unilateralInputWrapper}>
                 <TextInput
                   ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
                   style={[

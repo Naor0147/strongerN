@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Pressable, PanResponder, StyleSheet, Platform } from 'react-native';
+import { View, Pressable, PanResponder, StyleSheet, Platform, Animated } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, globalAnimation, getScaledDuration } from '../../theme';
@@ -12,7 +11,9 @@ export const SwipeableRow: React.FC<{
   borderRadius?: number;
   style?: any;
 }> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
-  const translateX = useRef(new Animated.Value(0)).current;
+  const translateXRef = useRef<Animated.Value | null>(null);
+  if (translateXRef.current === null) translateXRef.current = new Animated.Value(0);
+  const translateX = translateXRef.current;
   const isOpen = useRef(false);
   const [width, setWidth] = useState(0);
   const [isPastThreshold, setIsPastThreshold] = useState(false);
@@ -36,8 +37,9 @@ export const SwipeableRow: React.FC<{
     }
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
+  const panResponderRef = useRef<any>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 8;
@@ -88,8 +90,9 @@ export const SwipeableRow: React.FC<{
           setIsPastThreshold(false);
         }
       },
-    })
-  ).current;
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   const handleDeletePress = () => {
     if (Platform.OS !== 'web') {

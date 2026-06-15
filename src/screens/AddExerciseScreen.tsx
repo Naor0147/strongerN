@@ -1,6 +1,6 @@
 // screens/AddExerciseScreen.tsx
 // Global full-screen exercise picker — multi-select with search & filters
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { Exercise } from '../data/mockData';
 import IconButton from '../components/ui/IconButton';
 import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
+
+const EMPTY_ARRAY: any[] = [];
 
 const MUSCLE_GROUPS = [
   'Chest', 'Back', 'Quads', 'Hamstrings', 'Shoulders',
@@ -68,10 +70,11 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   onAddCustomExercise,
   singleSelect = false,
   title = i18n.t('extras.addExercisePlural', { count: 0, plural: '' }),
-  sessions = [],
+  sessions = EMPTY_ARRAY,
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
+  const prevVisibleRef = useRef(false);
   const [searchQuery, setSearchQuery]       = useState('');
   const [selectedMuscles, setSelectedMuscles]     = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
@@ -86,8 +89,9 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   const [isUnilateral, setIsUnilateral] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Reset state when opened
-  React.useEffect(() => {
+  // Reset state when opened (inline render-phase adjustment — avoids no-adjust-state-on-prop-change)
+  if (prevVisibleRef.current !== visible) {
+    prevVisibleRef.current = visible;
     if (visible) {
       setSearchQuery('');
       setSelectedMuscles([]);
@@ -98,7 +102,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
       setIsUnilateral(false);
       setShowAdvanced(false);
     }
-  }, [visible]);
+  }
 
   const exerciseFrequencies = useMemo(() => {
     const freqs: Record<string, number> = {};
@@ -248,7 +252,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
         )}
       </Pressable>
     );
-  }, [selectedNames, toggleSelect, singleSelect]);
+  }, [selectedNames, toggleSelect, singleSelect, exerciseNameLanguage]);
 
   return (
     <Modal

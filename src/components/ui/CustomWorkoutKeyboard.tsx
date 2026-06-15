@@ -30,6 +30,12 @@ interface CustomWorkoutKeyboardProps {
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
 const RIR_OPTIONS = ['0', '1', '2', '3', '4', '5'];
+const KEYBOARD_KEYS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['.', '0', '⌫'],
+];
 
 export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   visible,
@@ -116,13 +122,6 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
     }
   };
 
-  const keys = [
-    ['1', '2', '3'],
-    ['4', '5', '6'],
-    ['7', '8', '9'],
-    ['.', '0', '⌫'],
-  ];
-
   return (
     <View style={styles.container}>
       {/* ── Top Bar / Header ── */}
@@ -202,7 +201,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
       <View style={styles.keyboardBody}>
         {/* Left Side: Number Pad */}
         <View style={styles.numPad}>
-          {keys.map((row, rowIndex) => (
+          {KEYBOARD_KEYS.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {row.map((key) => {
                 const isBackspace = key === '⌫';

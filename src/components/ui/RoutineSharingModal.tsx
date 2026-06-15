@@ -21,6 +21,10 @@ interface RoutineSharingModalProps {
   onClose: () => void;
 }
 
+function handleCopy(text: string, type: string) {
+  Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type }));
+}
+
 export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
   visible,
   template,
@@ -38,10 +42,6 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
   };
   const serialized = JSON.stringify(sharePayload);
   const deepLink = `strongern://share?routine=${encodeURIComponent(serialized)}`;
-
-  const handleCopy = (text: string, type: string) => {
-    Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type }));
-  };
 
   return (
     <Modal

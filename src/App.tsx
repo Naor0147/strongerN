@@ -56,6 +56,28 @@ import {
 
 const Tab = createBottomTabNavigator();
 
+function parseMetricValue(str: string): number {
+  const cleaned = str.replace(/,/g, '');
+  const match = cleaned.match(/[-+]?[0-9]*\.?[0-9]+/);
+  return match ? parseFloat(match[0]) : 0;
+}
+
+function getUnit(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes('fat')) return '%';
+  if (l.includes('caloric') || l.includes('intake')) return ' kcal';
+  if (l.includes('weight')) return ' kg';
+  return ' cm';
+}
+
+function formatMetricValue(val: number, label: string): string {
+  const unit = getUnit(label);
+  if (unit === ' kcal') {
+    return `${val.toLocaleString()} kcal`;
+  }
+  return `${val}${unit}`;
+}
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -461,7 +483,7 @@ export default function App() {
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor, isDataLoaded]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -787,8 +809,10 @@ export default function App() {
     if (accessToken) {
       console.log('[App] Extracted OAuth access token from deep link. Authenticating...');
       try {
-        const profile = await googleDrive.fetchUserProfile(accessToken);
-        const fileId = await googleDrive.findBackupFile(accessToken);
+        const [profile, fileId] = await Promise.all([
+          googleDrive.fetchUserProfile(accessToken),
+          googleDrive.findBackupFile(accessToken),
+        ]);
         
         await handleGoogleLogin(
           profile.email,
@@ -1134,27 +1158,7 @@ export default function App() {
     });
   };
 
-  const parseMetricValue = (str: string): number => {
-    const cleaned = str.replace(/,/g, '');
-    const match = cleaned.match(/[-+]?[0-9]*\.?[0-9]+/);
-    return match ? parseFloat(match[0]) : 0;
-  };
 
-  const getUnit = (label: string): string => {
-    const l = label.toLowerCase();
-    if (l.includes('fat')) return '%';
-    if (l.includes('caloric') || l.includes('intake')) return ' kcal';
-    if (l.includes('weight')) return ' kg';
-    return ' cm';
-  };
-
-  const formatMetricValue = (val: number, label: string): string => {
-    const unit = getUnit(label);
-    if (unit === ' kcal') {
-      return `${val.toLocaleString()} kcal`;
-    }
-    return `${val}${unit}`;
-  };
 
   const mergeMetricsList = (local: any[], remote: any[]) => {
     const merged = [...local];
@@ -1507,39 +1511,39 @@ export default function App() {
     setIsWorkoutModalVisible(true);
   };
 
-  const handleFinishWorkout = (summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
-    const completedExercises = workoutExercises
-      .filter(ex => {
-        const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
-        return count > 0;
-      })
-      .map(ex => {
+  const handleFinishWorkout = React.useCallback((summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
+    const completedExercises = workoutExercises.reduce<any[]>((acc, ex) => {
+      const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
+      if (count > 0) {
         if (typeof ex.sets === 'number') {
-          return {
+          acc.push({
             name: ex.name,
             sets: ex.sets,
             bestWeight: ex.bestWeight || 60,
             bestReps: ex.bestReps || 10,
             setsDetails: (ex as any).setsDetails || [],
-          };
+          });
+        } else {
+          const setsArray: any[] = ex.sets || [];
+          const bestWeight = setsArray.reduce((max, s) => Math.max(max, parseFloat(s.weight) || 0), 0);
+          const bestReps = setsArray.reduce((max, s) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
+          acc.push({
+            name: ex.name,
+            sets: setsArray.length,
+            bestWeight: bestWeight || ex.bestWeight || 60,
+            bestReps: bestReps || ex.bestReps || 10,
+            setsDetails: setsArray.map(s => ({
+              weight: parseFloat(s.weight) || 0,
+              reps: parseInt(s.reps, 10) || 0,
+              completed: s.completed || false,
+              rpe: s.rpe ? parseFloat(s.rpe) : undefined,
+              category: s.category || 'S',
+            })),
+          });
         }
-        const setsArray: any[] = ex.sets || [];
-        const bestWeight = setsArray.reduce((max, s) => Math.max(max, parseFloat(s.weight) || 0), 0);
-        const bestReps = setsArray.reduce((max, s) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
-        return {
-          name: ex.name,
-          sets: setsArray.length,
-          bestWeight: bestWeight || ex.bestWeight || 60,
-          bestReps: bestReps || ex.bestReps || 10,
-          setsDetails: setsArray.map(s => ({
-            weight: parseFloat(s.weight) || 0,
-            reps: parseInt(s.reps, 10) || 0,
-            completed: s.completed || false,
-            rpe: s.rpe ? parseFloat(s.rpe) : undefined,
-            category: s.category || 'S',
-          })),
-        };
-      });
+      }
+      return acc;
+    }, []);
 
     let updatedSessions = [...sessionsList];
     let nextUser = { ...user };
@@ -1587,7 +1591,7 @@ export default function App() {
 
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
-  };
+  }, [workoutExercises, sessionsList, user, editingSessionId, workoutName]);
 
   const handleDiscardWorkout = () => {
     setIsWorkoutActive(false);
@@ -1634,6 +1638,16 @@ export default function App() {
     return () => sub.remove();
   }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible]);
 
+  const workoutExercisesRef = React.useRef(workoutExercises);
+  React.useEffect(() => {
+    workoutExercisesRef.current = workoutExercises;
+  }, [workoutExercises]);
+
+  const handleFinishWorkoutRef = React.useRef(handleFinishWorkout);
+  React.useEffect(() => {
+    handleFinishWorkoutRef.current = handleFinishWorkout;
+  }, [handleFinishWorkout]);
+
   // Auto-close safety timer (3 hours)
   React.useEffect(() => {
     if (!isWorkoutActive) return;
@@ -1645,7 +1659,7 @@ export default function App() {
         // Workout has been active for more than 3 hours, let's auto-save it
         let totalVolume = 0;
         let totalSets = 0;
-        workoutExercises.forEach(ex => {
+        workoutExercisesRef.current.forEach(ex => {
           if (ex.setsDetails) {
             ex.setsDetails.forEach((set: any) => {
               if (set.completed) {
@@ -1673,7 +1687,7 @@ export default function App() {
           [{ text: i18n.t('common.ok') }]
         );
 
-        handleFinishWorkout({
+        handleFinishWorkoutRef.current({
           totalVolume,
           totalSets,
           durationMin: 180, // Cap at 3 hours (180 mins)
@@ -1682,7 +1696,7 @@ export default function App() {
     }, 60000); // Check every minute
 
     return () => clearInterval(interval);
-  }, [isWorkoutActive, startTime, workoutExercises, handleFinishWorkout]);
+  }, [isWorkoutActive, startTime]);
 
   if (!fontsLoaded) {
     return (
@@ -1696,7 +1710,7 @@ export default function App() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <StatusBar style="light" />
-      {authState === null ? (
+      {authState === null || !isDataLoaded || !isWorkoutRestored ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
@@ -1707,7 +1721,7 @@ export default function App() {
           onRestoreBackup={handleRestoreBackup}
         />
       ) : (
-        <NavigationContainer>
+        <NavigationContainer key={languageVersion}>
         <View style={styles.root}>
           <Tab.Navigator
             initialRouteName="Profile"
@@ -2067,7 +2081,7 @@ export default function App() {
                         const isCancel = btn.style === 'cancel';
                         return (
                           <Pressable
-                            key={idx}
+                            key={btn.text}
                             style={[
                               styles.alertBtn,
                               isDestructive && styles.alertBtnDestructive,

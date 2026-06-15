@@ -6,9 +6,9 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,7 +40,9 @@ interface TabItemProps {
 }
 
 const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, index }) => {
-  const scale = useRef(new Animated.Value(isActive ? 1 : 0.88)).current;
+  const scaleRef = useRef<Animated.Value | null>(null);
+  if (scaleRef.current === null) scaleRef.current = new Animated.Value(isActive ? 1 : 0.88);
+  const scale = scaleRef.current;
 
   useEffect(() => {
     if (globalAnimation.speed === 0) {

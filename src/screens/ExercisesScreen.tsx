@@ -11,9 +11,9 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Animated,
 } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -165,13 +165,15 @@ const ExerciseRow: React.FC<{
   );
 });
 
+const EMPTY_SESSIONS: any[] = [];
+
 const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ 
   exercises, 
   onAddExercise, 
   onDeleteExercise, 
   onUpdateExerciseNotes,
   onUpdateExercise,
-  sessions = [],
+  sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
@@ -239,8 +241,12 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     [selectedExercise]
   );
 
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(20)).current;
+  const fadeAnimRef = React.useRef<Animated.Value | null>(null);
+  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
+  const fadeAnim = fadeAnimRef.current;
+  const slideAnimRef = React.useRef<Animated.Value | null>(null);
+  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(20);
+  const slideAnim = slideAnimRef.current;
   const animatedContainerStyle = useMemo(() => ({ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }), [fadeAnim, slideAnim]);
 
   React.useEffect(() => {
@@ -1089,7 +1095,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     {exerciseHistory.length > 0 ? (
                       <View style={styles.trendContainer}>
                         {trendData && trendData.map((item, idx) => (
-                          <View key={idx} style={styles.trendRow}>
+                          <View key={`trend-${item.date}`} style={styles.trendRow}>
                             <Text style={styles.trendDate}>{item.date}</Text>
                             <View style={styles.trendBarContainer}>
                               <View style={[styles.trendBar, { width: `${Math.max(15, item.percentage)}%` }]}>
@@ -1129,7 +1135,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                           <Text style={[styles.prTableHeaderText, { width: '25%', textAlign: 'right' }]}>{i18n.t('extras.thDate')}</Text>
                         </View>
                         {exercisePRs.map((pr, idx) => (
-                          <View key={idx} style={styles.prTableRow}>
+                          <View key={`pr-${pr.date}-${pr.weight}-${pr.reps}`} style={styles.prTableRow}>
                             <Text style={[styles.prTableText, styles.prRank, { width: '15%' }]}>
                               {idx + 1}
                             </Text>

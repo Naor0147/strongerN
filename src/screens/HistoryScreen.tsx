@@ -9,9 +9,9 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Animated,
 } from 'react-native';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -164,8 +164,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
 
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(20)).current;
+  const fadeAnimRef = React.useRef<Animated.Value | null>(null);
+  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
+  const fadeAnim = fadeAnimRef.current;
+  const slideAnimRef = React.useRef<Animated.Value | null>(null);
+  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(20);
+  const slideAnim = slideAnimRef.current;
 
   React.useEffect(() => {
     if (globalAnimation.speed === 0) {
@@ -426,8 +430,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
 
           {/* Weekday Labels */}
           <View style={styles.weekdayRow}>
-            {(i18n.t('extras.weekDaysShort') as unknown as string[]).map((d: string, i: number) => (
-              <Text key={i} style={styles.weekdayText}>{d}</Text>
+            {(i18n.t('extras.weekDaysShort') as unknown as string[]).map((d: string) => (
+              <Text key={d} style={styles.weekdayText}>{d}</Text>
             ))}
           </View>
 
@@ -437,7 +441,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
               const isSelected = selectedCalendarDate === item.day;
               return (
                 <Pressable
-                  key={idx}
+                  key={item.day !== null ? `day-${item.day}` : `empty-${idx}`}
                   disabled={item.day === null}
                   onPress={() => setSelectedCalendarDate(item.day)}
                   style={styles.dayCell}

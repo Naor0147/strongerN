@@ -1,5 +1,5 @@
 // screens/WorkoutScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -148,6 +148,8 @@ const FolderCard: React.FC<FolderCardProps> = React.memo(({ name, count, onPress
   </Card>
 ));
 
+const EMPTY_SESSIONS: any[] = [];
+
 // ─── Screen ────────────────────────────────────────────────────────
 const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   templates,
@@ -166,17 +168,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   isProgramsEnabled = false,
   enableRoutineFolders = false,
   onAddCustomExercise,
-  sessions = [],
+  sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'routines' | 'programs'>('routines');
 
-  useEffect(() => {
+  const prevIsProgramsEnabledRef = useRef(isProgramsEnabled);
+  if (prevIsProgramsEnabledRef.current !== isProgramsEnabled) {
+    prevIsProgramsEnabledRef.current = isProgramsEnabled;
     if (!isProgramsEnabled) {
       setActiveTab('routines');
     }
-  }, [isProgramsEnabled]);
+  }
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isFolderModalVisible, setIsFolderModalVisible] = useState(false);
@@ -227,7 +231,13 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const lastUsed = useMemo(() => {
     if (templates.length === 0) return null;
-    return [...templates].sort((a, b) => b.lastUsed.getTime() - a.lastUsed.getTime())[0];
+    let maxTemplate = templates[0];
+    for (let i = 1; i < templates.length; i++) {
+      if (templates[i].lastUsed.getTime() > maxTemplate.lastUsed.getTime()) {
+        maxTemplate = templates[i];
+      }
+    }
+    return maxTemplate;
   }, [templates]);
 
   // Active Program Memo
@@ -295,9 +305,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     }
   };
 
-  const handleToggleExerciseSelection = (exName: string) => {
-    // legacy compat — no longer used by main flow
-  };
+
 
   // Calendar program week viewer state
   const [viewingWeek, setViewingWeek] = useState(1);
@@ -857,7 +865,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               
               <View style={styles.calendarContainer}>
                 {calendarDays.map((day, idx) => (
-                  <View key={idx} style={styles.calendarDayRow}>
+                  <View key={day.dayName} style={styles.calendarDayRow}>
                     <View style={styles.calendarDayLeft}>
                       <Text style={styles.calendarDayName}>{day.dayName}</Text>
                       {day.isTraining ? (
@@ -905,7 +913,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               <SectionLabel title={i18n.t('workout.trainingProgramsLibrary')} subtitle={i18n.t('workout.subscribeToSplits')} />
               
               {mockPrograms.map((prog, idx) => (
-                <Card key={idx} padding={spacing.lg} style={styles.programCard}>
+                <Card key={prog.id} padding={spacing.lg} style={styles.programCard}>
                   <View style={styles.progCardHeader}>
                     <Ionicons name="calendar-sharp" size={24} color={colors.accent} />
                     <View style={{ flex: 1 }}>
