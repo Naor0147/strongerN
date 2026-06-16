@@ -97,6 +97,7 @@ export function DraggableList<T>({
   const getDragHandlers = useCallback((item: T, index: number) => {
     const id = keyExtractor(item);
     const panGesture = Gesture.Pan()
+      .runOnJS(true)
       .onStart(() => {
         setActiveId(id);
         dragIdx.current = index;

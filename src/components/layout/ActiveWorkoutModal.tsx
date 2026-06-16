@@ -35,6 +35,7 @@ import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
 import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound } from '../../utils/soundPlayer';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
+import RestTimerRuler from '../ui/RestTimerRuler';
 
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
@@ -1589,6 +1590,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const getExerciseDragHandlers = useCallback((itemKey: string) => {
     if (!exGestureMap.current[itemKey]) {
       const panGesture = Gesture.Pan()
+        .runOnJS(true)
         .onStart(() => {
           const currentIndex = exIndicesRef.current[itemKey];
           if (currentIndex !== undefined && currentIndex !== -1) {
@@ -1796,59 +1798,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </View>
             </View>
 
-            {/* Timer Sub-menu */}
-            {isTimerSubMenuVisible && isTimerActive && (
-              <View style={styles.timerSubMenu}>
-                <View style={styles.timerSubMenuInner}>
-                  <View style={styles.timerSubMenuButtons}>
-                    <Pressable
-                      style={styles.timerSubMenuBtn}
-                      onPress={() => adjustRestTimer(-30)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerSubMenuBtnText}>-30</Text>
-                    </Pressable>
-                    
-                    <Pressable
-                      style={styles.timerSubMenuBtn}
-                      onPress={() => adjustRestTimer(-10)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerSubMenuBtnText}>-10</Text>
-                    </Pressable>
-                    
-                    <Pressable
-                      style={[styles.timerSubMenuBtn, styles.timerSubMenuStopBtn]}
-                      onPress={() => {
-                        setIsTimerActive(false);
-                        setIsTimerSubMenuVisible(false);
-                        restTimerEndTarget.current = null;
-                        Notifications.cancelAllScheduledNotificationsAsync();
-                      }}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Ionicons name="stop" size={22} color="#fff" />
-                    </Pressable>
-                    
-                    <Pressable
-                      style={styles.timerSubMenuBtn}
-                      onPress={() => adjustRestTimer(10)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerSubMenuBtnText}>+10</Text>
-                    </Pressable>
-                    
-                    <Pressable
-                      style={styles.timerSubMenuBtn}
-                      onPress={() => adjustRestTimer(30)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={styles.timerSubMenuBtnText}>+30</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            )}
+
+
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
             <ScrollView
@@ -1960,6 +1911,36 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Text style={styles.scrollDiscardText}>DISCARD WORKOUT</Text>
               </Pressable>
             </ScrollView>
+
+            {/* Timer Ruler Sub-menu */}
+            {isTimerSubMenuVisible && isTimerActive && (
+              <View style={styles.timerSubMenu}>
+                <RestTimerRuler
+                  currentSecs={restTimeRemaining}
+                  defaultSecs={defaultRestDuration}
+                  isRunning={isTimerActive}
+                  onSecsChange={(secs) => {
+                    if (!restTimerEndTarget.current) return;
+                    const newTarget = Date.now() + secs * 1000;
+                    restTimerEndTarget.current = newTarget;
+                    setRestTimeRemaining(secs);
+                    cancelAndScheduleRestNotification(secs);
+                  }}
+                  onStop={() => {
+                    setIsTimerActive(false);
+                    setIsTimerSubMenuVisible(false);
+                    restTimerEndTarget.current = null;
+                    Notifications.cancelAllScheduledNotificationsAsync();
+                  }}
+                  onStart={() => {
+                    restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
+                    setRestTimeRemaining(defaultRestDuration);
+                    setIsTimerActive(true);
+                    cancelAndScheduleRestNotification(defaultRestDuration);
+                  }}
+                />
+              </View>
+            )}
 
 
 
@@ -2931,42 +2912,7 @@ const styles = StyleSheet.create({
     zIndex:          1000,
     ...(shadow.card as object),
   },
-  timerSubMenuInner: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: colors.bg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  timerSubMenuButtons: {
-    flex:            1,
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
-    gap:             spacing.sm,
-  },
-  timerSubMenuBtn: {
-    flex:            1,
-    height:          64,
-    borderRadius:    radius.sm,
-    backgroundColor: colors.surface,
-    borderWidth:     1,
-    borderColor:     colors.border,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  timerSubMenuBtnText: {
-    color:           colors.textPrimary,
-    fontSize:        font.sizes.md,
-    fontFamily:      font.bold,
-  },
-  timerSubMenuStopBtn: {
-    backgroundColor: colors.error,
-    borderColor:     colors.error,
-    borderRadius:    radius.sm,
-  },
+
   minimizeBtn: {
     padding: spacing.xs,
   },

@@ -652,7 +652,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       toValue = T_COLLAPSED;
     }
 
-    sheetTranslateY.value = withSpring(toValue, getSpringConfig(globalAnimation.speed), () => {
+    sheetTranslateY.value = withSpring(toValue, getSpringConfig(), () => {
       runOnJS(setSheetState)(state);
       if (state === 'closed') {
         runOnJS(setSelectedMuscle)(null);
@@ -711,18 +711,18 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     setSheetState('collapsed');
     const zoom = ZOOM_OFFSETS[muscle] ?? { scale: 1.0, x: 0, y: 0 };
     
-    scaleAnim.value = withSpring(zoom.scale, getSpringConfig(globalAnimation.speed));
-    translateXAnim.value = withSpring(zoom.x, getSpringConfig(globalAnimation.speed));
-    translateYAnim.value = withSpring(zoom.y, getSpringConfig(globalAnimation.speed));
-    sheetTranslateY.value = withSpring(T_COLLAPSED, getSpringConfig(globalAnimation.speed));
+    scaleAnim.value = withSpring(zoom.scale, getSpringConfig());
+    translateXAnim.value = withSpring(zoom.x, getSpringConfig());
+    translateYAnim.value = withSpring(zoom.y, getSpringConfig());
+    sheetTranslateY.value = withSpring(T_COLLAPSED, getSpringConfig());
 
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const handleClose = useCallback(() => {
-    scaleAnim.value = withSpring(1.0, getSpringConfig(globalAnimation.speed));
-    translateXAnim.value = withSpring(0, getSpringConfig(globalAnimation.speed));
-    translateYAnim.value = withSpring(0, getSpringConfig(globalAnimation.speed));
+    scaleAnim.value = withSpring(1.0, getSpringConfig());
+    translateXAnim.value = withSpring(0, getSpringConfig());
+    translateYAnim.value = withSpring(0, getSpringConfig());
     sheetTranslateY.value = withTiming(T_CLOSED, { duration: getScaledDuration(250) }, () => {
       runOnJS(setSelectedMuscle)(null);
       runOnJS(setSheetState)('closed');

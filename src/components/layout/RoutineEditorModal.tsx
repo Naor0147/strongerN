@@ -453,6 +453,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const getDragHandlers = useCallback((itemKey: string, index: number) => {
     if (!gestureMap.current[itemKey]) {
       const panGesture = Gesture.Pan()
+        .runOnJS(true)
         .onStart(() => {
           setActiveId(itemKey);
           dragIdx.current   = index;

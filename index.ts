@@ -1,5 +1,6 @@
 import 'react-native-gesture-handler';
 import './src/utils/alertOverride'; // Override Alert.alert globally
+import './src/utils/crashLogger'; // Initialize global error trackers
 import { registerRootComponent } from 'expo';
 
 import App from './src/App';
