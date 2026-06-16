@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureDetector } from 'react-native-gesture-handler';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
@@ -96,11 +97,17 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
             >
               <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
             </Pressable>
-            {dragHandlers && (
+            {dragHandlers && dragHandlers.panGesture ? (
+              <GestureDetector gesture={dragHandlers.panGesture}>
+                <View style={styles.tplDragHandle} accessibilityLabel="Drag to reorder template">
+                  <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+                </View>
+              </GestureDetector>
+            ) : dragHandlers ? (
               <View {...dragHandlers} style={styles.tplDragHandle}>
                 <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
               </View>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -485,6 +492,25 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     });
   }, [activeProgram, viewingWeek]);
 
+  const folderPressHandlers = useMemo(() => {
+    const map: Record<string, () => void> = {};
+    uniqueFolders.forEach(name => {
+      map[name] = () => {
+        setCurrentFolder(name);
+        setSelectedFolderFilter(name);
+      };
+    });
+    return map;
+  }, [uniqueFolders]);
+
+  const renderFolderItem = useCallback(({ item }: { item: { name: string; count: number } }) => (
+    <FolderCard
+      name={item.name}
+      count={item.count}
+      onPress={folderPressHandlers[item.name]}
+    />
+  ), [folderPressHandlers]);
+
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
@@ -653,16 +679,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             <FlatList
               data={folderListData}
               keyExtractor={item => item.name}
-              renderItem={({ item }) => (
-                <FolderCard
-                  name={item.name}
-                  count={item.count}
-                  onPress={() => {
-                    setCurrentFolder(item.name);
-                    setSelectedFolderFilter(item.name);
-                  }}
-                />
-              )}
+              renderItem={renderFolderItem}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.list}
               ItemSeparatorComponent={() => <View style={styles.rowSep} />}
@@ -778,7 +795,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   }
                 }}
                 renderItem={({ item, dragHandlers }) => (
-                  <View style={{ marginBottom: spacing.md }}>
+                  <View style={styles.templateCardWrap}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
@@ -1152,6 +1169,9 @@ const styles = StyleSheet.create({
   safe: {
     flex:            1,
     backgroundColor: colors.bg,
+  },
+  templateCardWrap: {
+    marginBottom: spacing.md,
   },
   list: {
     paddingHorizontal: spacing.lg,

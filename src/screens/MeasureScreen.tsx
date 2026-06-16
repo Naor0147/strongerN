@@ -10,10 +10,10 @@ import {
   Pressable,
   Alert,
   ScrollView,
-  PanResponder,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -89,45 +89,46 @@ const SwipeableHistoryItem: React.FC<{
   unit: string;
   onDelete: () => void;
 }> = ({ entry, unit, onDelete }) => {
-  const swipeX = React.useRef(new Animated.Value(0)).current;
+  const swipeX = useSharedValue(0);
 
   const animateTranslation = (toVal: number, callback?: () => void) => {
+    'worklet';
     if (globalAnimation.speed === 0) {
-      Animated.timing(swipeX, {
-        toValue: toVal,
-        duration: 0,
-        useNativeDriver: true,
-      }).start(callback);
+      swipeX.value = toVal;
+      if (callback) callback();
     } else {
-      Animated.spring(swipeX, {
-        toValue: toVal,
-        useNativeDriver: true,
-        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
-        damping: 16 / globalAnimation.speed,
-        mass: 0.9,
-      }).start(callback);
+      swipeX.value = withSpring(
+        toVal,
+        {
+          stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
+          damping: 16 / globalAnimation.speed,
+          mass: 0.9,
+        },
+        () => {
+          if (callback) callback();
+        }
+      );
     }
   };
-  
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx < 0) {
-          const limitedX = Math.max(gestureState.dx, -120);
-          swipeX.setValue(limitedX);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx < -60) {
-          animateTranslation(-80);
-        } else {
-          animateTranslation(0);
-        }
-      },
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((e) => {
+      if (e.translationX < 0) {
+        swipeX.value = Math.max(e.translationX, -120);
+      }
     })
-  ).current;
+    .onEnd((e) => {
+      if (e.translationX < -60) {
+        animateTranslation(-80);
+      } else {
+        animateTranslation(0);
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: swipeX.value }],
+  }));
 
   return (
     <View style={styles.swipeContainer}>
@@ -135,26 +136,23 @@ const SwipeableHistoryItem: React.FC<{
         style={styles.deleteBackground} 
         onPress={() => {
           onDelete();
-          Animated.timing(swipeX, {
-            toValue: 0,
-            duration: getScaledDuration(100),
-            useNativeDriver: true,
-          }).start();
+          swipeX.value = withTiming(0, { duration: getScaledDuration(100) });
         }}
         testID={`measure.delete-log-${entry.date}`}
       >
         <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
       </Pressable>
 
-      <Animated.View
-        style={[styles.swipeForeground, { transform: [{ translateX: swipeX }] }]}
-        {...panResponder.panHandlers}
-      >
-        <View style={styles.historyRow}>
-          <Text style={styles.historyDate}>{formatDateString(entry.date)}</Text>
-          <Text style={styles.historyValue}>{entry.value}{unit}</Text>
-        </View>
-      </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[styles.swipeForeground, animatedStyle]}
+        >
+          <View style={styles.historyRow}>
+            <Text style={styles.historyDate}>{formatDateString(entry.date)}</Text>
+            <Text style={styles.historyValue}>{entry.value}{unit}</Text>
+          </View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 };

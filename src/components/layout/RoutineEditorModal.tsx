@@ -12,13 +12,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  PanResponder,
   Vibration,
   Alert,
   LayoutAnimation,
 } from 'react-native';
+import Animated, { useSharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
@@ -109,11 +109,14 @@ function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_ANY_ARRAY: any[] = [];
+
 const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   visible,
   initialName = '',
-  initialExercises = [],
-  initialExercisesDetails = [],
+  initialExercises = EMPTY_STRING_ARRAY,
+  initialExercisesDetails = EMPTY_ANY_ARRAY,
   initialFolder = '',
   editingId = null,
   exercises,
@@ -121,7 +124,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   onSave,
   onClose,
   onAddCustomExercise,
-  sessions = [],
+  sessions = EMPTY_ANY_ARRAY,
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
@@ -143,7 +146,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const initialRef = useRef<{ name: string; folder: string; exercisesStr: string } | null>(null);
 
   // Drag state
-  const dragY         = useRef(new Animated.Value(0)).current;
+  const dragY = useSharedValue(0);
   const dragIdx       = useRef(-1);
   const hoverIdx      = useRef(-1);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -270,7 +273,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         }))),
       };
 
-      dragY.setValue(0);
+      dragY.value = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -446,37 +449,39 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     });
   }, [activeId]);
 
+  const gestureMap = useRef<{ [id: string]: any }>({});
   const getDragHandlers = useCallback((itemKey: string, index: number) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: () => {
-        setActiveId(itemKey);
-        dragIdx.current   = index;
-        hoverIdx.current  = index;
-        dragY.setValue(0);
-        if (Platform.OS !== 'web') Vibration.vibrate(20);
-      },
-      onPanResponderMove: (_, gs) => {
-        dragY.setValue(gs.dy);
-        handleMove(gs.dy);
-      },
-      onPanResponderRelease: () => {
-        setActiveId(null);
-        dragIdx.current  = -1;
-        hoverIdx.current = -1;
-        dragY.setValue(0);
-        setEditorExercises(prev => sanitizeSuperSets(prev));
-      },
-      onPanResponderTerminate: () => {
-        setActiveId(null);
-        dragIdx.current  = -1;
-        hoverIdx.current = -1;
-        dragY.setValue(0);
-        setEditorExercises(prev => sanitizeSuperSets(prev));
-      },
-    }).panHandlers;
-  }, [handleMove, dragY]);
+    if (!gestureMap.current[itemKey]) {
+      const panGesture = Gesture.Pan()
+        .onStart(() => {
+          setActiveId(itemKey);
+          dragIdx.current   = index;
+          hoverIdx.current  = index;
+          dragY.value = 0;
+          if (Platform.OS !== 'web') Vibration.vibrate(20);
+        })
+        .onUpdate((e) => {
+          dragY.value = e.translationY;
+          handleMove(e.translationY);
+        })
+        .onEnd(() => {
+          setActiveId(null);
+          dragIdx.current  = -1;
+          hoverIdx.current = -1;
+          dragY.value = 0;
+          setEditorExercises(prev => sanitizeSuperSets(prev));
+        })
+        .onFinalize(() => {
+          setActiveId(null);
+          dragIdx.current  = -1;
+          hoverIdx.current = -1;
+          dragY.value = 0;
+          setEditorExercises(prev => sanitizeSuperSets(prev));
+        });
+      gestureMap.current[itemKey] = panGesture;
+    }
+    return gestureMap.current[itemKey];
+  }, [handleMove]);
 
   // ── Add exercises callback ────────────────────────────────────────────────────
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {

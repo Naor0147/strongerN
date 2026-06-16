@@ -1,5 +1,5 @@
 // components/ui/CustomWorkoutKeyboard.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,16 @@ const KEYBOARD_KEYS = [
   ['.', '0', '⌫'],
 ];
 
+const playFeedback = (type: 'tap' | 'heavy' = 'tap') => {
+  if (Platform.OS !== 'web') {
+    if (type === 'heavy') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+  }
+};
+
 export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   visible,
   value,
@@ -51,35 +61,25 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   isRpeMode = true,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
-  const [lastInputKey, setLastInputKey] = useState<string | undefined>(undefined);
-  const [lastVisible, setLastVisible] = useState<boolean>(false);
-  const [isFirstKey, setIsFirstKey] = useState(true);
+  const lastInputKeyRef = useRef<string | undefined>(undefined);
+  const lastVisibleRef = useRef<boolean>(false);
+  const isFirstKeyRef = useRef(true);
 
-  if (inputKey !== lastInputKey || visible !== lastVisible) {
-    setLastInputKey(inputKey);
-    setLastVisible(visible);
+  if (inputKey !== lastInputKeyRef.current || visible !== lastVisibleRef.current) {
+    lastInputKeyRef.current = inputKey;
+    lastVisibleRef.current = visible;
     if (visible) {
-      setIsFirstKey(true);
+      isFirstKeyRef.current = true;
     }
   }
 
   if (!visible) return null;
 
-  const playFeedback = (type: 'tap' | 'heavy' = 'tap') => {
-    if (Platform.OS !== 'web') {
-      if (type === 'heavy') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      } else {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-    }
-  };
-
   const handleKeyPress = (key: string) => {
     playFeedback('tap');
 
-    if (isFirstKey) {
-      setIsFirstKey(false);
+    if (isFirstKeyRef.current) {
+      isFirstKeyRef.current = false;
       if (key === '⌫') {
         onChange('');
       } else if (key === '.') {

@@ -5,5 +5,8 @@ module.exports = function(api) {
       'babel-preset-expo',
       '@ohah/react-native-mcp-server/babel-preset',
     ],
+    plugins: [
+      'react-native-reanimated/plugin',
+    ],
   };
 };

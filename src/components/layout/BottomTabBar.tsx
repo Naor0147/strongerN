@@ -1,14 +1,13 @@
 // components/layout/BottomTabBar.tsx
 // Premium floating tab bar — pill active indicator, accent icon colour, ripple feedback
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
-  Animated,
 } from 'react-native';
-import * as RN from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,23 +39,26 @@ interface TabItemProps {
 }
 
 const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, index }) => {
-  const scaleRef = useRef<Animated.Value | null>(null);
-  if (scaleRef.current === null) scaleRef.current = new Animated.Value(isActive ? 1 : 0.88);
-  const scale = scaleRef.current;
+  const scale = useSharedValue(isActive ? 1 : 0.88);
 
   useEffect(() => {
     if (globalAnimation.speed === 0) {
-      scale.setValue(isActive ? 1 : 0.88);
+      scale.value = isActive ? 1 : 0.88;
       return;
     }
-    Animated.spring(scale, {
-      toValue:         isActive ? 1 : 0.88,
-      useNativeDriver: true,
-      stiffness:       animation.spring.stiffness / (globalAnimation.speed * globalAnimation.speed),
-      damping:         animation.spring.damping / globalAnimation.speed,
-      mass:            animation.spring.mass,
-    }).start();
+    scale.value = withSpring(
+      isActive ? 1 : 0.88,
+      {
+        stiffness: animation.spring.stiffness / (globalAnimation.speed * globalAnimation.speed),
+        damping: animation.spring.damping / globalAnimation.speed,
+        mass: animation.spring.mass,
+      }
+    );
   }, [isActive, scale, globalAnimation.speed]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   const iconColor = isActive ? colors.accent      : colors.iconInactive;
   const iconName  = isActive ? tab.iconActive     : tab.icon;
@@ -72,7 +74,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, in
       accessibilityState={{ selected: isActive }}
       testID={`tab.${tab.route.toLowerCase()}`}
     >
-      <Animated.View style={[styles.tabInner, { transform: [{ scale }] }]}>
+      <Animated.View style={[styles.tabInner, animatedStyle]}>
         {/* Active pill indicator */}
         {isActive && (
           <View style={styles.activePill} />
@@ -89,6 +91,16 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, in
 const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
   const insets = useSafeAreaInsets();
 
+  const tabConfigs = useMemo(() => getTabConfig(), []);
+
+  const navigateTo = useMemo(() => {
+    const map: Record<string, () => void> = {};
+    state.routes.forEach(route => {
+      map[route.name] = () => navigation.navigate(route.name);
+    });
+    return map;
+  }, [state.routes, navigation]);
+
   return (
     <View
       style={[
@@ -102,7 +114,6 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
 
       <View style={styles.row}>
         {state.routes.map((route, index) => {
-          const tabConfigs = getTabConfig();
           const tab = tabConfigs.find(t => t.route === route.name);
           if (!tab) return null;
           
@@ -111,7 +122,7 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
               key={route.key}
               tab={tab}
               isActive={state.index === index}
-              onPress={() => navigation.navigate(route.name)}
+              onPress={navigateTo[route.name]}
               index={index}
             />
           );

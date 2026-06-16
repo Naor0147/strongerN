@@ -1,15 +1,13 @@
 // components/layout/ActiveWorkoutBar.tsx
 // Premium live workout status bar — accent left glow, pulsing dot, finish button
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  Animated,
 } from 'react-native';
-import * as RN from 'react-native';
-const Easing = RN.Easing;
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, ripple as rippleTokens, radius, globalAnimation, getScaledDuration } from '../../theme';
 import i18n from '../../utils/i18n';
@@ -37,10 +35,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
 }) => {
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
 
-  // Pulsing dot animation using standard React Native Animated via namespace
-  const pulseAnimRef = useRef<Animated.Value | null>(null);
-  if (pulseAnimRef.current === null) pulseAnimRef.current = new Animated.Value(1);
-  const pulseAnim = pulseAnimRef.current;
+  const pulseAnim = useSharedValue(1);
 
   useEffect(() => {
     const id = setInterval(() => setElapsed(formatElapsed(startTime)), 1000);
@@ -53,32 +48,28 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       : 1;
 
     if (speed === 0) {
-      pulseAnim.setValue(1);
+      pulseAnim.value = 1;
       return;
     }
 
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue:         0.2,
-          duration:        getScaledDuration(700),
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        }),
-        Animated.timing(pulseAnim, {
-          toValue:         1,
-          duration:        getScaledDuration(700),
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        })
-      ])
+    const dur = getScaledDuration(700);
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(0.2, { duration: dur, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: dur, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
     );
-    anim.start();
 
     return () => {
-      anim.stop();
+      pulseAnim.value = 1;
     };
   }, [pulseAnim, globalAnimation?.speed]);
+
+  const dotStyle = useAnimatedStyle(() => ({
+    opacity: pulseAnim.value,
+  }));
 
   const label = i18n.t('extras.activeWorkoutA11y', { name: workoutName, time: elapsed });
 
@@ -96,7 +87,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       >
         {/* Left: live indicator + info */}
         <View style={styles.left}>
-          <Animated.View style={[styles.dot, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.dot, dotStyle]} />
           <View style={styles.textBlock}>
             <Text style={styles.name} numberOfLines={1}>{workoutName}</Text>
             <Text style={styles.timer}>{elapsed}</Text>

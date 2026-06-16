@@ -20,10 +20,12 @@ interface WatchCompanionSimulatorProps {
   onClose: () => void;
 }
 
+const EMPTY_EXERCISES: any[] = [];
+
 export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = ({
   workoutName,
   startTime,
-  activeExercises = [],
+  activeExercises = EMPTY_EXERCISES,
   onCheckSet,
   onClose,
 }) => {
@@ -31,7 +33,9 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
   const [heartRate, setHeartRate] = useState(132);
 
   // Heart rate pulse animation
-  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseScaleRef = useRef<RN.Animated.Value | null>(null);
+  if (pulseScaleRef.current === null) pulseScaleRef.current = new Animated.Value(1);
+  const pulseScale = pulseScaleRef.current;
 
   // Elapsed workout timer ticking
   useEffect(() => {

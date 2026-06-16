@@ -9,8 +9,8 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Animated,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -164,32 +164,24 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
 
-  const fadeAnimRef = React.useRef<Animated.Value | null>(null);
-  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
-  const fadeAnim = fadeAnimRef.current;
-  const slideAnimRef = React.useRef<Animated.Value | null>(null);
-  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(20);
-  const slideAnim = slideAnimRef.current;
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(20);
 
   React.useEffect(() => {
     if (globalAnimation.speed === 0) {
-      fadeAnim.setValue(1);
-      slideAnim.setValue(0);
+      fadeAnim.value = 1;
+      slideAnim.value = 0;
       return;
     }
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: getScaledDuration(350),
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: getScaledDuration(350),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    const dur = getScaledDuration(350);
+    fadeAnim.value = withTiming(1, { duration: dur });
+    slideAnim.value = withTiming(0, { duration: dur });
   }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
 
   // 1. Search filter
   const filteredSessions = useMemo(() => {
@@ -215,7 +207,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
     }
 
     return result;
-  }, [sessions, searchQuery, selectedCalendarDate]);
+  }, [sessions, searchQuery, selectedCalendarDate, calendarMonth, calendarYear]);
 
   // 2. Sections grouping
   const sections: SectionData[] = useMemo(() => {
@@ -472,7 +464,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
         </View>
       )}
 
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>
+      <Animated.View style={[{ flex: 1 }, animatedStyle]}>
         <SectionList
           sections={sections}
           keyExtractor={keyExtractor}

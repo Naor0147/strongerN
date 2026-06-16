@@ -10,16 +10,15 @@ import {
   Pressable,
   TextInput,
   ScrollView,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
   Dimensions,
   Image,
-  Animated,
   useWindowDimensions,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withSpring, interpolate, Easing } from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,83 +79,51 @@ interface LoginScreenProps {
 // Sub-component: Animated pulsing dumbbell logo
 // ─────────────────────────────────────────────────────────────────
 const AnimatedLogo: React.FC = () => {
-  const pulseAnimRef = useRef<Animated.Value | null>(null);
-  if (pulseAnimRef.current === null) pulseAnimRef.current = new Animated.Value(1);
-  const pulseAnim = pulseAnimRef.current;
-  const glowAnimRef = useRef<Animated.Value | null>(null);
-  if (glowAnimRef.current === null) glowAnimRef.current = new Animated.Value(0);
-  const glowAnim = glowAnimRef.current;
+  const pulseAnim = useSharedValue(1);
+  const glowAnim = useSharedValue(0);
 
   useEffect(() => {
     if (globalAnimation.speed === 0) {
-      pulseAnim.setValue(1);
-      glowAnim.setValue(0);
+      pulseAnim.value = 1;
+      glowAnim.value = 0;
       return;
     }
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(pulseAnim, {
-            toValue: 1.08,
-            duration: getScaledDuration(1400),
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: getScaledDuration(1400),
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: false,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: getScaledDuration(1400),
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: getScaledDuration(1400),
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: false,
-          }),
-        ]),
-      ])
+    const dur = getScaledDuration(1400);
+    const easing = Easing.inOut(Easing.sin);
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: dur, easing }),
+        withTiming(1, { duration: dur, easing })
+      ),
+      -1,
+      true
     );
-    anim.start();
-    return () => anim.stop();
-  }, [globalAnimation.speed, pulseAnim, glowAnim]);
+    glowAnim.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: dur, easing }),
+        withTiming(0, { duration: dur, easing })
+      ),
+      -1,
+      true
+    );
+  }, [globalAnimation.speed]);
 
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.15, 0.4],
-  });
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glowAnim.value, [0, 1], [0.15, 0.4]),
+  }));
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseAnim.value }],
+  }));
 
   return (
     <View style={styles.logoContainer}>
-      {/* Outer glow ring — two nested views to separate JS (opacity) and native (scale) drivers */}
-      <Animated.View
-        style={[
-          styles.logoGlowWrapper,
-          { opacity: glowOpacity },   // JS driver: opacity only
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.logoGlow,
-            { transform: [{ scale: pulseAnim }] }, // native driver: scale only
-          ]}
-        />
+      {/* Outer glow ring */}
+      <Animated.View style={[styles.logoGlowWrapper, glowStyle]}>
+        <Animated.View style={[styles.logoGlow, pulseStyle]} />
       </Animated.View>
       {/* Inner icon circle */}
-      <Animated.View
-        style={[
-          styles.logoCircle,
-          { transform: [{ scale: pulseAnim }] },
-        ]}
-      >
+      <Animated.View style={[styles.logoCircle, pulseStyle]}>
         <Image
           source={require('../../assets/StorngNLogo.png')}
           style={styles.logoImage}
@@ -171,29 +138,25 @@ const AnimatedLogo: React.FC = () => {
 // ─────────────────────────────────────────────────────────────────
 const DataInfoCard: React.FC = () => {
   const [expanded, setExpanded] = useState(false);
-  const heightAnimRef = useRef<Animated.Value | null>(null);
-  if (heightAnimRef.current === null) heightAnimRef.current = new Animated.Value(0);
-  const heightAnim = heightAnimRef.current;
+  const heightAnim = useSharedValue(0);
 
   const toggle = () => {
     const toValue = expanded ? 0 : 1;
     if (globalAnimation.speed === 0) {
-      heightAnim.setValue(toValue);
+      heightAnim.value = toValue;
     } else {
-      Animated.timing(heightAnim, {
-        toValue,
+      heightAnim.value = withTiming(toValue, {
         duration: getScaledDuration(250),
         easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
-      }).start();
+      });
     }
     setExpanded(!expanded);
   };
 
-  const expandedHeight = heightAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 160],
-  });
+  const expandedStyle = useAnimatedStyle(() => ({
+    height: interpolate(heightAnim.value, [0, 1], [0, 160]),
+    overflow: 'hidden',
+  }));
 
   return (
     <View style={styles.infoCard}>
@@ -211,7 +174,7 @@ const DataInfoCard: React.FC = () => {
         />
       </Pressable>
 
-      <Animated.View style={{ height: expandedHeight, overflow: 'hidden' }}>
+      <Animated.View style={expandedStyle}>
         <View style={styles.infoCardBody}>
           <DataInfoRow
             icon="phone-portrait-outline"
@@ -246,12 +209,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const { height: layoutHeight } = useWindowDimensions();
 
   // Animation refs
-  const fadeAnimRef = useRef<Animated.Value | null>(null);
-  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
-  const fadeAnim = fadeAnimRef.current;
-  const slideAnimRef = useRef<Animated.Value | null>(null);
-  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(32);
-  const slideAnim = slideAnimRef.current;
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(32);
 
   // Local username flow
   const [showLocalForm, setShowLocalForm] = useState(false);
@@ -305,25 +264,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   // Mount animation
   useEffect(() => {
     if (globalAnimation.speed === 0) {
-      fadeAnim.setValue(1);
-      slideAnim.setValue(0);
+      fadeAnim.value = 1;
+      slideAnim.value = 0;
       return;
     }
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: getScaledDuration(600),
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: getScaledDuration(600),
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    const dur = getScaledDuration(600);
+    const easing = Easing.out(Easing.cubic);
+    fadeAnim.value = withTiming(1, { duration: dur, easing });
+    slideAnim.value = withTiming(0, { duration: dur, easing });
   }, []);
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -474,10 +428,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
             <Animated.View
               style={[
                 styles.content,
-                {
-                  opacity: fadeAnim,
-                  transform: [{ translateY: slideAnim }],
-                },
+                contentStyle,
               ]}
             >
               {/* ── Logo ─────────────────────────────────────── */}

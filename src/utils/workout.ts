@@ -20,11 +20,16 @@ export const getNextWorkout = (
     if (activeProgram && activeProgram.days && activeProgram.days.length > 0) {
       const programDayNames = activeProgram.days.map(d => d.workoutName.toLowerCase().trim());
       
+      const dayNameToIndex = new Map<string, number>();
+      programDayNames.forEach((name, i) => {
+        if (!dayNameToIndex.has(name)) dayNameToIndex.set(name, i);
+      });
+      
       let lastMatchingDayIndex = -1;
       for (let i = 0; i < sessions.length; i++) {
         const titleClean = sessions[i].title.toLowerCase().trim();
-        const matchIdx = programDayNames.findIndex(name => name === titleClean);
-        if (matchIdx > -1) {
+        const matchIdx = dayNameToIndex.get(titleClean);
+        if (matchIdx !== undefined && matchIdx > -1) {
           lastMatchingDayIndex = matchIdx;
           break;
         }

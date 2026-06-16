@@ -12,16 +12,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Easing,
   FlatList,
-  PanResponder,
   Vibration,
   LayoutAnimation,
   UIManager,
   AppState,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -108,90 +107,35 @@ interface SwipeableRowProps {
 }
 
 const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
-  const translateXRef = useRef<RN.Animated.Value | null>(null);
-  if (translateXRef.current === null) translateXRef.current = new Animated.Value(0);
-  const translateX = translateXRef.current;
-  const isOpen = useRef(false);
+  const translateX = useSharedValue(0);
+  const isOpen = useSharedValue(false);
   const [width, setWidth] = useState(0);
   const [isPastThreshold, setIsPastThreshold] = useState(false);
-  const hasTriggeredHaptic = useRef(false);
-
-  const animateTranslation = (toVal: number, callback?: () => void) => {
-    if (globalAnimation.speed === 0) {
-      Animated.timing(translateX, {
-        toValue: toVal,
-        duration: 0,
-        useNativeDriver: true,
-      }).start(callback);
-    } else {
-      Animated.spring(translateX, {
-        toValue: toVal,
-        useNativeDriver: true,
-        stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
-        damping: 16 / globalAnimation.speed,
-        mass: 0.9,
-      }).start(callback);
-    }
-  };
+  const hasTriggeredHaptic = useSharedValue(false);
 
   const currentThreshold = width ? -width * 0.45 : -150;
 
-  const panResponderRef = useRef<any>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 8;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        let newX = gestureState.dx;
-        if (isOpen.current) {
-          newX = -70 + gestureState.dx;
+  const animateTranslation = useCallback((toVal: number, callback?: () => void) => {
+    'worklet';
+    if (globalAnimation.speed === 0) {
+      translateX.value = toVal;
+      if (callback) runOnJS(callback)();
+    } else {
+      translateX.value = withSpring(
+        toVal,
+        {
+          stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
+          damping: 16 / globalAnimation.speed,
+          mass: 0.9,
+        },
+        () => {
+          if (callback) runOnJS(callback)();
         }
-        if (newX > 0) newX = 0;
-        translateX.setValue(newX);
+      );
+    }
+  }, []);
 
-        // Check threshold
-        const past = newX < currentThreshold;
-        if (past) {
-          if (!hasTriggeredHaptic.current) {
-            if (Platform.OS !== 'web') {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }
-            hasTriggeredHaptic.current = true;
-          }
-        } else {
-          if (hasTriggeredHaptic.current && newX > currentThreshold + 15) {
-            hasTriggeredHaptic.current = false;
-          }
-        }
-        setIsPastThreshold(past);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const currentX = isOpen.current ? -70 + gestureState.dx : gestureState.dx;
-
-        if (currentX < currentThreshold || gestureState.vx < -0.5) {
-          triggerDeleteFlow();
-        } else {
-          const threshold = isOpen.current ? -30 : -45;
-          if (gestureState.dx < threshold) {
-            animateTranslation(-70, () => {
-              isOpen.current = true;
-            });
-          } else {
-            animateTranslation(0, () => {
-              isOpen.current = false;
-            });
-          }
-          hasTriggeredHaptic.current = false;
-          setIsPastThreshold(false);
-        }
-      },
-    });
-  }
-  const panResponder = panResponderRef.current;
-
-  const triggerDeleteFlow = () => {
+  const triggerDeleteFlow = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
@@ -201,16 +145,12 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
       const toVal = width ? -(width + 50) : -500;
-      Animated.timing(translateX, {
-        toValue: toVal,
-        duration: getScaledDuration(180),
-        useNativeDriver: true,
-      }).start(() => {
-        translateX.setValue(0);
-        isOpen.current = false;
-        setIsPastThreshold(false);
-        hasTriggeredHaptic.current = false;
-        onCompleted();
+      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+        translateX.value = 0;
+        isOpen.value = false;
+        runOnJS(setIsPastThreshold)(false);
+        hasTriggeredHaptic.value = false;
+        runOnJS(onCompleted)();
       });
     };
 
@@ -220,9 +160,9 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
       };
       const cancel = () => {
         animateTranslation(0, () => {
-          isOpen.current = false;
+          isOpen.value = false;
           setIsPastThreshold(false);
-          hasTriggeredHaptic.current = false;
+          hasTriggeredHaptic.value = false;
         });
       };
       (onDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
@@ -231,27 +171,73 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
         (onDelete as () => void)();
       });
     }
-  };
+  }, [width, onDelete, animateTranslation]);
 
-  const handleOverlayPress = () => {
-    if (isOpen.current) {
-      animateTranslation(0, () => {
-        isOpen.current = false;
-      });
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-8, 8])
+    .onUpdate((e) => {
+      let newX = e.translationX;
+      if (isOpen.value) {
+        newX = -70 + e.translationX;
+      }
+      if (newX > 0) newX = 0;
+      translateX.value = newX;
+
+      const past = newX < currentThreshold;
+      if (past) {
+        if (!hasTriggeredHaptic.value) {
+          if (Platform.OS !== 'web') {
+            runOnJS(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}))();
+          }
+          hasTriggeredHaptic.value = true;
+        }
+      } else {
+        if (hasTriggeredHaptic.value && newX > currentThreshold + 15) {
+          hasTriggeredHaptic.value = false;
+        }
+      }
+      runOnJS(setIsPastThreshold)(past);
+    })
+    .onEnd((e) => {
+      const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
+
+      if (currentX < currentThreshold || e.velocityX < -500) {
+        runOnJS(triggerDeleteFlow)();
+      } else {
+        const threshold = isOpen.value ? -30 : -45;
+        if (e.translationX < threshold) {
+          animateTranslation(-70, () => { isOpen.value = true; });
+        } else {
+          animateTranslation(0, () => { isOpen.value = false; });
+        }
+        hasTriggeredHaptic.value = false;
+        runOnJS(setIsPastThreshold)(false);
+      }
+    });
+
+  const handleOverlayPress = useCallback(() => {
+    if (isOpen.value) {
+      animateTranslation(0, () => { isOpen.value = false; });
     }
-  };
+  }, []);
 
-  const trashScale = translateX.interpolate({
-    inputRange: [currentThreshold, -70, 0],
-    outputRange: [1.3, 1.0, 0.8],
-    extrapolate: 'clamp',
+  const animatedUnderlayStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value < -10 ? 1 : 0,
+  }));
+
+  const animatedTrashStyle = useAnimatedStyle(() => {
+    const scale = translateX.value < currentThreshold
+      ? 1.3
+      : translateX.value < -70
+        ? 1.0
+        : 0.8;
+    return { transform: [{ scale }] };
   });
 
-  const underlayOpacity = translateX.interpolate({
-    inputRange: [-10, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
+  const animatedContentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
     <View 
@@ -259,7 +245,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
     >
       <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: underlayOpacity }]}
+        style={[StyleSheet.absoluteFill, animatedUnderlayStyle]}
       >
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -270,7 +256,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
             { borderRadius },
             isPastThreshold && { backgroundColor: '#FF3B30' }
           ]}>
-            <Animated.View style={{ transform: [{ scale: trashScale }] }}>
+            <Animated.View style={animatedTrashStyle}>
               <Ionicons 
                 name={isPastThreshold ? "trash" : "trash-outline"} 
                 size={20} 
@@ -280,13 +266,14 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
           </View>
         </Pressable>
       </Animated.View>
-      <Animated.View
-        style={{ transform: [{ translateX }] }}
-        {...panResponder.panHandlers}
-        onTouchStart={handleOverlayPress}
-      >
-        {children}
-      </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={animatedContentStyle}
+          onTouchStart={handleOverlayPress}
+        >
+          {children}
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 };
@@ -528,6 +515,23 @@ const getProgressiveOverloadSuggestionForSet = (
   }
 };
 
+const cancelAndScheduleRestNotification = async (duration: number) => {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  if (duration > 0) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Rest Timer Completed! ⏱️",
+        body: "Time's up! Get ready for your next set.",
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: duration,
+      },
+    });
+  }
+};
+
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
   workoutName,
@@ -556,7 +560,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
   const hasSyncedPropsRef = useRef(false);
-  const [workoutFinished, setWorkoutFinished] = useState(false);
   const [heartRate, setHeartRate] = useState(132);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
@@ -570,43 +573,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const inputRefs = useRef<{ [key: string]: any }>({});
 
   const [showSecondsOnly, setShowSecondsOnly] = useState(false);
-  const timerFadeAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (timerFadeAnimRef.current === null) timerFadeAnimRef.current = new Animated.Value(1);
-  const timerFadeAnim = timerFadeAnimRef.current;
-
-  const timerScaleAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (timerScaleAnimRef.current === null) timerScaleAnimRef.current = new Animated.Value(1);
-  const timerScaleAnim = timerScaleAnimRef.current;
+  const timerFadeAnim = useSharedValue(1);
+  const timerScaleAnim = useSharedValue(1);
 
   const toggleTimerFormat = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-    Animated.parallel([
-      Animated.timing(timerFadeAnim, {
-        toValue: 0.2,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(timerScaleAnim, {
-        toValue: 0.85,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setShowSecondsOnly(prev => !prev);
-      Animated.parallel([
-        Animated.timing(timerFadeAnim, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.spring(timerScaleAnim, {
-          toValue: 1,
-          friction: 6,
-          tension: 80,
-          useNativeDriver: true,
-        }),
-      ]).start();
+    timerFadeAnim.value = withTiming(0.2, { duration: 120 });
+    timerScaleAnim.value = withTiming(0.85, { duration: 120 }, () => {
+      runOnJS(setShowSecondsOnly)(!showSecondsOnly);
+      timerFadeAnim.value = withTiming(1, { duration: 180 });
+      timerScaleAnim.value = withSpring(1, { damping: 6, stiffness: 80 });
     });
   }, [timerFadeAnim, timerScaleAnim]);
 
@@ -649,9 +626,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [customEquipment, setCustomEquipment] = useState('Barbell');
 
   // Drag-and-drop reorder state for exercises
-  const exDragYRef    = useRef<RN.Animated.Value | null>(null);
-  if (exDragYRef.current === null) exDragYRef.current = new Animated.Value(0);
-  const exDragY       = exDragYRef.current;
+  const exDragY = useSharedValue(0);
   const exDragIdx     = useRef(-1);
   const exHoverIdx    = useRef(-1);
   const [exActiveKey, setExActiveKey] = useState<string | null>(null);
@@ -729,7 +704,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const currentStartKey = startTime.toISOString();
   if (visible && prevStartKeyForResetRef.current !== currentStartKey && prevStartKeyForResetRef.current !== null) {
     prevStartKeyForResetRef.current = currentStartKey;
-    setWorkoutFinished(false);
     setIsTimerActive(false);
   } else if (prevStartKeyForResetRef.current === null) {
     prevStartKeyForResetRef.current = currentStartKey;
@@ -962,6 +936,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           }
           backgroundNotificationId = null;
         }
+
+        // Clear all notifications in tray
+        try {
+          await Notifications.dismissAllNotificationsAsync();
+        } catch (e) {
+          // Ignore errors
+        }
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
         // Show persistent notification when app goes to background during active workout
         if (visible) {
@@ -1026,23 +1007,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => clearInterval(timerId);
   }, [isTimerActive, restTimeRemaining]);
 
-  const scheduleRestNotification = async (duration: number) => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    if (duration > 0) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Rest Timer Completed! ⏱️",
-          body: "Time's up! Get ready for your next set.",
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: duration,
-        },
-      });
-    }
-  };
-
   const adjustRestTimer = (seconds: number) => {
     if (!restTimerEndTarget.current) return;
     const now = Date.now();
@@ -1057,38 +1021,29 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       restTimerEndTarget.current = newTarget;
       const remaining = Math.ceil((newTarget - now) / 1000);
       setRestTimeRemaining(remaining);
-      scheduleRestNotification(remaining);
+      cancelAndScheduleRestNotification(remaining);
     }
   };
 
-  const timerPulseAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (timerPulseAnimRef.current === null) timerPulseAnimRef.current = new Animated.Value(1);
-  const timerPulseAnim = timerPulseAnimRef.current;
+  const timerPulseAnim = useSharedValue(1);
   useEffect(() => {
     if (!isTimerActive) return;
     if (globalAnimation.speed === 0) {
-      timerPulseAnim.setValue(1);
+      timerPulseAnim.value = 1;
       return;
     }
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(timerPulseAnim, {
-          toValue:         0.4,
-          duration:        getScaledDuration(500),
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        }),
-        Animated.timing(timerPulseAnim, {
-          toValue:         1,
-          duration:        getScaledDuration(500),
-          useNativeDriver: true,
-          easing:          Easing.inOut(Easing.ease),
-        }),
-      ])
+    const dur = getScaledDuration(500);
+    const easing = Easing.inOut(Easing.ease);
+    timerPulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(0.4, { duration: dur, easing }),
+        withTiming(1, { duration: dur, easing })
+      ),
+      -1,
+      true
     );
-    anim.start();
-    return () => anim.stop();
-  }, [isTimerActive, timerPulseAnim, globalAnimation.speed]);
+    return () => { timerPulseAnim.value = 1; };
+  }, [isTimerActive, globalAnimation.speed]);
 
   // Set completeness toggler
   const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
@@ -1102,7 +1057,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
         setRestTimeRemaining(defaultRestDuration);
         setIsTimerActive(true);
-        scheduleRestNotification(defaultRestDuration);
+        cancelAndScheduleRestNotification(defaultRestDuration);
       }
     }
 
@@ -1243,7 +1198,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
           setRestTimeRemaining(defaultRestDuration);
           setIsTimerActive(true);
-          scheduleRestNotification(defaultRestDuration);
+          cancelAndScheduleRestNotification(defaultRestDuration);
         }
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActiveExercises(prev => {
@@ -1629,16 +1584,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     handleExerciseDragMoveRef.current = handleExerciseDragMove;
   }, [handleExerciseDragMove]);
 
-  // Static PanResponder map for reordering exercises (cached per item ID)
+  // Static gesture map for reordering exercises (cached per item ID)
+  const exGestureMap = useRef<{ [id: string]: any }>({});
   const getExerciseDragHandlers = useCallback((itemKey: string) => {
-    if (!exPanRespondersRef.current[itemKey]) {
-      exPanRespondersRef.current[itemKey] = PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
+    if (!exGestureMap.current[itemKey]) {
+      const panGesture = Gesture.Pan()
+        .onStart(() => {
           const currentIndex = exIndicesRef.current[itemKey];
           if (currentIndex !== undefined && currentIndex !== -1) {
-            // Capture initial slot layout positions
             const initialSlots: number[] = [];
             activeExercisesRef.current.forEach((ex) => {
               const layout = exItemLayouts.current[ex.id];
@@ -1650,33 +1603,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             setExActiveKey(itemKey);
             exDragIdx.current  = currentIndex;
             exHoverIdx.current = currentIndex;
-            exDragY.setValue(0);
+            exDragY.value = 0;
             if (Platform.OS !== 'web') Vibration.vibrate(20);
           }
-        },
-        onPanResponderMove: (_, gs) => {
+        })
+        .onUpdate((e) => {
           const yInitial = exInitialYRef.current;
           const currentIdx = exDragIdx.current;
           const yCurrent = exSlotYRef.current[currentIdx] !== undefined ? exSlotYRef.current[currentIdx] : yInitial;
-          const translation = gs.dy + (yInitial - yCurrent);
-          exDragY.setValue(translation);
-          handleExerciseDragMoveRef.current(gs.dy);
-        },
-        onPanResponderRelease: () => {
+          const translation = e.translationY + (yInitial - yCurrent);
+          exDragY.value = translation;
+          handleExerciseDragMoveRef.current(e.translationY);
+        })
+        .onEnd(() => {
           setExActiveKey(null);
           exDragIdx.current  = -1;
           exHoverIdx.current = -1;
-          exDragY.setValue(0);
-        },
-        onPanResponderTerminate: () => {
+          exDragY.value = 0;
+        })
+        .onFinalize(() => {
           setExActiveKey(null);
           exDragIdx.current  = -1;
           exHoverIdx.current = -1;
-          exDragY.setValue(0);
-        },
-      }).panHandlers;
+          exDragY.value = 0;
+        });
+      exGestureMap.current[itemKey] = panGesture;
     }
-    return exPanRespondersRef.current[itemKey];
+    return exGestureMap.current[itemKey];
   }, []);
 
   const handleSaveCustomExercise = () => {
@@ -1750,7 +1703,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
                       setRestTimeRemaining(defaultRestDuration);
                       setIsTimerActive(true);
-                      scheduleRestNotification(defaultRestDuration);
+                      cancelAndScheduleRestNotification(defaultRestDuration);
                     }
                   }}
                   style={[styles.headerStopwatchBtn, isTimerActive && styles.headerTimerBtnActive]}
@@ -1968,155 +1921,31 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   const isExActive = exActiveKey === exItemKey;
 
                   return (
-                    <Animated.View
+                    <ActiveExerciseRow
                       key={exItemKey}
-                      onLayout={e => {
-                        if (!isExActive) {
-                          exItemLayouts.current[exItemKey] = {
-                            y: e.nativeEvent.layout.y,
-                            height: e.nativeEvent.layout.height,
-                          };
-                        }
-                      }}
-                      style={isExActive ? {
-                          transform:     [{ translateY: exDragY }],
-                          zIndex:        999,
-                          opacity:       0.88,
-                          shadowColor:   '#000',
-                          shadowOffset:  { width: 0, height: 8 },
-                          shadowOpacity: 0.55,
-                          shadowRadius:  16,
-                          elevation:     14,
-                        } : undefined}
-                    >
-                    <SwipeableRow 
-                      borderRadius={radius.md}
-                      style={{ marginBottom: spacing.lg }}
-                      onDelete={(confirm, cancel) => {
-                        Alert.alert(
-                          'Remove Exercise',
-                          `Are you sure you want to remove "${exercise.name}"?`,
-                          [
-                            { text: 'Cancel', style: 'cancel', onPress: cancel },
-                            {
-                              text: 'Remove',
-                              style: 'destructive',
-                              onPress: () => {
-                                confirm(() => {
-                                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                                  setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
-                                });
-                              }
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <View style={[
-                        styles.exerciseCard,
-                        isSuperSet && {
-                          borderLeftWidth: 4,
-                          borderLeftColor: superSetColor,
-                        },
-                        nextIsSameSuperSet && {
-                          marginBottom: 0,
-                          borderBottomLeftRadius: 0,
-                          borderBottomRightRadius: 0,
-                          borderBottomWidth: 0,
-                        },
-                        prevIsSameSuperSet && {
-                          borderTopLeftRadius: 0,
-                          borderTopRightRadius: 0,
-                        }
-                      ]}>
-                        <View style={styles.exerciseHeader}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
-                            <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
-                            {isSuperSet && (
-                              <View style={[styles.superSetBadge, { borderColor: superSetColor, backgroundColor: superSetColor + '20' }]}>
-                                <Text style={[styles.superSetBadgeText, { color: superSetColor }]}>SUPER SET</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
-                            <Pressable
-                              onPress={() => handleExerciseMenuPress(exIdx)}
-                              style={styles.exEllipsis}
-                              android_ripple={rippleTokens.borderless}
-                            >
-                              <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
-                            </Pressable>
-                            {/* Drag handle — press-and-hold to reorder */}
-                            <View
-                              {...getExerciseDragHandlers(exItemKey)}
-                              style={styles.dragHandle}
-                              accessibilityLabel="Drag to reorder exercise"
-                            >
-                              <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                            </View>
-                          </View>
-                        </View>
-
-                        {(() => {
-                          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exercise.name.toLowerCase());
-                          if (libEx?.notes) {
-                            return (
-                              <View style={styles.notesContainer}>
-                                <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
-                                <Text style={styles.notesText} numberOfLines={2}>
-                                  {libEx.notes}
-                                </Text>
-                              </View>
-                            );
-                          }
-                          return null;
-                        })()}
-
-                        {/* Sets Column Headers */}
-                        <View style={styles.tableHeader}>
-                          <Text style={[styles.columnLabel, styles.colSet]}>SET</Text>
-                          <Text style={[styles.columnLabel, styles.colWeight, { textAlign: 'center' }]}>KG</Text>
-                          <Text style={[styles.columnLabel, styles.colReps, { textAlign: 'center' }]}>REPS & RPE</Text>
-                          <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>DONE</Text>
-                        </View>
-
-                        {/* Sets Row List */}
-                        {exercise.sets.map((set, setIdx) => {
-                          const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
-                          const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
-                          return (
-                            <ActiveSetRowItem
-                              key={set.id}
-                              set={set}
-                              setIdx={setIdx}
-                              exIdx={exIdx}
-                              activeInput={activeInput}
-                              onFocus={handleSetFocus}
-                              updateSetField={updateSetField}
-                              deleteSet={deleteSet}
-                              toggleSetComplete={toggleSetComplete}
-                              inputRefs={inputRefs}
-                              isPrevCompleted={isPrevCompleted}
-                              isNextCompleted={isNextCompleted}
-                              isRpeMode={isRpeMode}
-                            />
-                          );
-                        })}
-
-                        {/* Add Set Button */}
-                        <Pressable
-                          style={styles.addSetRow}
-                          onPress={() => addSet(exIdx)}
-                          onLongPress={() => addSet(exIdx, true)}
-                          android_ripple={rippleTokens.surface}
-                          accessibilityLabel="Add set, long press for unilateral set"
-                        >
-                          <Ionicons name="add" size={16} color={colors.accent} />
-                          <Text style={styles.addSetText}>ADD SET</Text>
-                        </Pressable>
-                      </View>
-                    </SwipeableRow>
-                    </Animated.View>
+                      exercise={exercise}
+                      exIdx={exIdx}
+                      exItemKey={exItemKey}
+                      isExActive={isExActive}
+                      exDragY={exDragY}
+                      exItemLayouts={exItemLayouts}
+                      isSuperSet={isSuperSet}
+                      nextIsSameSuperSet={nextIsSameSuperSet}
+                      prevIsSameSuperSet={prevIsSameSuperSet}
+                      superSetColor={superSetColor}
+                      handleExerciseMenuPress={handleExerciseMenuPress}
+                      getExerciseDragHandlers={getExerciseDragHandlers}
+                      exerciseLibrary={exerciseLibrary}
+                      activeInput={activeInput}
+                      handleSetFocus={handleSetFocus}
+                      updateSetField={updateSetField}
+                      deleteSet={deleteSet}
+                      toggleSetComplete={toggleSetComplete}
+                      inputRefs={inputRefs}
+                      isRpeMode={isRpeMode}
+                      addSet={addSet}
+                      setActiveExercises={setActiveExercises}
+                    />
                   );
                 })
               )}
@@ -2413,14 +2242,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               
                               {/* Plates array stacked on sleeve */}
                               <View style={styles.stackedPlatesContainer}>
-                                {calculatedPlates.map((plate, idx) => { // idx safe here: list is derived from weight and never reordered
+                                {calculatedPlates.map((plate) => {
                                   const scaleFactor = plate.size >= 25 ? 1.0 : plate.size >= 20 ? 0.93 : plate.size >= 15 ? 0.86 : plate.size >= 10 ? 0.79 : plate.size >= 5 ? 0.72 : 0.65;
                                   const heightVal = 86 * scaleFactor;
                                   const widthVal = 13 * scaleFactor;
                                   
                                   return (
                                     <View
-                                      key={idx}
+                                      key={`${plate.size}-${plate.color}`}
                                       style={[
                                         styles.visualPlate,
                                         {
@@ -2836,6 +2665,208 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
         </Pressable>
       </View>
     </SwipeableRow>
+  );
+});
+
+
+interface ActiveExerciseRowProps {
+  exercise: any;
+  exIdx: number;
+  exItemKey: string;
+  isExActive: boolean;
+  exDragY: any;
+  exItemLayouts: any;
+  isSuperSet: boolean;
+  nextIsSameSuperSet: boolean;
+  prevIsSameSuperSet: boolean;
+  superSetColor: string | undefined;
+  handleExerciseMenuPress: (idx: number) => void;
+  getExerciseDragHandlers: (key: string) => any;
+  exerciseLibrary: any;
+  activeInput: any;
+  handleSetFocus: any;
+  updateSetField: any;
+  deleteSet: any;
+  toggleSetComplete: any;
+  inputRefs: any;
+  isRpeMode: boolean;
+  addSet: (idx: number, unilateral?: boolean) => void;
+  setActiveExercises: React.Dispatch<React.SetStateAction<any[]>>;
+}
+
+const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
+  exercise,
+  exIdx,
+  exItemKey,
+  isExActive,
+  exDragY,
+  exItemLayouts,
+  isSuperSet,
+  nextIsSameSuperSet,
+  prevIsSameSuperSet,
+  superSetColor,
+  handleExerciseMenuPress,
+  getExerciseDragHandlers,
+  exerciseLibrary,
+  activeInput,
+  handleSetFocus,
+  updateSetField,
+  deleteSet,
+  toggleSetComplete,
+  inputRefs,
+  isRpeMode,
+  addSet,
+  setActiveExercises,
+}) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: isExActive ? exDragY.value : 0 }],
+      zIndex: isExActive ? 999 : 1,
+      opacity: isExActive ? 0.88 : 1,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: isExActive ? 8 : 0 },
+      shadowOpacity: isExActive ? 0.55 : 0,
+      shadowRadius: isExActive ? 16 : 0,
+      elevation: isExActive ? 14 : 0,
+    };
+  });
+
+  return (
+    <Animated.View
+      onLayout={e => {
+        if (!isExActive) {
+          exItemLayouts.current[exItemKey] = {
+            y: e.nativeEvent.layout.y,
+            height: e.nativeEvent.layout.height,
+          };
+        }
+      }}
+      style={animatedStyle}
+    >
+      <SwipeableRow 
+        borderRadius={radius.md}
+        style={{ marginBottom: spacing.lg }}
+        onDelete={(confirm, cancel) => {
+          Alert.alert(
+            'Remove Exercise',
+            `Are you sure you want to remove "${exercise.name}"?`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: cancel },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => {
+                  confirm(() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
+                  });
+                }
+              }
+            ]
+          );
+        }}
+      >
+        <View style={[
+          styles.exerciseCard,
+          isSuperSet && {
+            borderLeftWidth: 4,
+            borderLeftColor: superSetColor,
+          },
+          nextIsSameSuperSet && {
+            marginBottom: 0,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            borderBottomWidth: 0,
+          },
+          prevIsSameSuperSet && {
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }
+        ]}>
+          <View style={styles.exerciseHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
+              <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
+              <Pressable
+                onPress={() => handleExerciseMenuPress(exIdx)}
+                style={styles.exEllipsis}
+                android_ripple={rippleTokens.borderless}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+              </Pressable>
+              {/* Drag handle — press-and-hold to reorder */}
+              <GestureDetector gesture={getExerciseDragHandlers(exItemKey)}>
+                <View
+                  style={styles.dragHandle}
+                  accessibilityLabel="Drag to reorder exercise"
+                >
+                  <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+                </View>
+              </GestureDetector>
+            </View>
+          </View>
+
+          {(() => {
+            const libEx = exerciseLibrary?.find((e: any) => e.name.toLowerCase() === exercise.name.toLowerCase());
+            if (libEx?.notes) {
+              return (
+                <View style={styles.notesContainer}>
+                  <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
+                  <Text style={styles.notesText} numberOfLines={2}>
+                    {libEx.notes}
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Sets Column Headers */}
+          <View style={styles.tableHeader}>
+            <Text style={[styles.columnLabel, styles.colSet]}>SET</Text>
+            <Text style={[styles.columnLabel, styles.colWeight, { textAlign: 'center' }]}>KG</Text>
+            <Text style={[styles.columnLabel, styles.colReps, { textAlign: 'center' }]}>REPS & RPE</Text>
+            <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>DONE</Text>
+          </View>
+
+          {/* Sets Row List */}
+          {exercise.sets.map((set: any, setIdx: number) => {
+            const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
+            const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
+            return (
+              <ActiveSetRowItem
+                key={set.id}
+                set={set}
+                setIdx={setIdx}
+                exIdx={exIdx}
+                activeInput={activeInput}
+                onFocus={handleSetFocus}
+                updateSetField={updateSetField}
+                deleteSet={deleteSet}
+                toggleSetComplete={toggleSetComplete}
+                inputRefs={inputRefs}
+                isPrevCompleted={isPrevCompleted}
+                isNextCompleted={isNextCompleted}
+                isRpeMode={isRpeMode}
+              />
+            );
+          })}
+
+          {/* Add Set Button */}
+          <Pressable
+            style={styles.addSetRow}
+            onPress={() => addSet(exIdx)}
+            onLongPress={() => addSet(exIdx, true)}
+            android_ripple={rippleTokens.surface}
+            accessibilityLabel="Add set, long press for unilateral set"
+          >
+            <Ionicons name="add" size={16} color={colors.accent} />
+            <Text style={styles.addSetText}>ADD SET</Text>
+          </Pressable>
+        </View>
+      </SwipeableRow>
+    </Animated.View>
   );
 });
 

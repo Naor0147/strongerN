@@ -1,5 +1,5 @@
 // screens/MuscleMapScreen.tsx
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,12 @@ import {
   Pressable,
   Image,
   Alert,
-  PanResponder,
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, runOnJS, type SharedValue } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Ellipse, Line, Defs, RadialGradient, Stop, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -598,25 +598,24 @@ const ZOOM_OFFSETS: Record<string, { scale: number; x: number; y: number }> = {
   Forearms:   { scale: 1.6, x: 0,   y: 0 },
 };
 
-const springScale = (anim: RN.Animated.Value, toValue: number, speedMultiplier = 1) => {
+const springScale = (sharedVal: SharedValue<number>, toValue: number, speedMultiplier = 1) => {
+  'worklet';
   const s = globalAnimation.speed * speedMultiplier;
   if (s === 0) {
-    return Animated.timing(anim, { toValue, duration: 0, useNativeDriver: true });
+    sharedVal.value = toValue;
+  } else {
+    sharedVal.value = withSpring(toValue, {
+      stiffness: 140 / (s * s),
+      damping: 16 / s,
+      mass: 0.9,
+    });
   }
-  return Animated.spring(anim, {
-    toValue,
-    stiffness: 140 / (s * s),
-    damping: 16 / s,
-    mass: 0.9,
-    useNativeDriver: true,
-  });
 };
 
-const timingSheet = (anim: RN.Animated.Value, toValue: number, baseDuration = 250) => {
-  return Animated.timing(anim, {
-    toValue,
+const timingSheet = (sharedVal: SharedValue<number>, toValue: number, baseDuration = 250) => {
+  'worklet';
+  sharedVal.value = withTiming(toValue, {
     duration: getScaledDuration(baseDuration),
-    useNativeDriver: true,
   });
 };
 
@@ -637,25 +636,15 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [sheetState, setSheetState] = useState<'closed' | 'collapsed' | 'expanded'>('closed');
   
-  const scaleAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (scaleAnimRef.current === null) scaleAnimRef.current = new Animated.Value(1);
-  const scaleAnim = scaleAnimRef.current;
-
-  const translateXAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (translateXAnimRef.current === null) translateXAnimRef.current = new Animated.Value(0);
-  const translateXAnim = translateXAnimRef.current;
-
-  const translateYAnimRef = useRef<RN.Animated.Value | null>(null);
-  if (translateYAnimRef.current === null) translateYAnimRef.current = new Animated.Value(0);
-  const translateYAnim = translateYAnimRef.current;
-
-  const sheetTranslateYRef = useRef<RN.Animated.Value | null>(null);
-  if (sheetTranslateYRef.current === null) sheetTranslateYRef.current = new Animated.Value(T_CLOSED);
-  const sheetTranslateY = sheetTranslateYRef.current;
+  const scaleAnim = useSharedValue(1);
+  const translateXAnim = useSharedValue(0);
+  const translateYAnim = useSharedValue(0);
+  const sheetTranslateY = useSharedValue(T_CLOSED);
+  const sheetOffset = useSharedValue(T_CLOSED);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const snapTo = (state: 'expanded' | 'collapsed' | 'closed') => {
+  const snapTo = useCallback((state: 'expanded' | 'collapsed' | 'closed') => {
     let toValue = T_CLOSED;
     if (state === 'expanded') {
       toValue = T_EXPANDED;
@@ -663,124 +652,108 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       toValue = T_COLLAPSED;
     }
 
-    springScale(sheetTranslateY, toValue).start(() => {
-      setSheetState(state);
+    sheetTranslateY.value = withSpring(toValue, getSpringConfig(globalAnimation.speed), () => {
+      runOnJS(setSheetState)(state);
       if (state === 'closed') {
-        setSelectedMuscle(null);
+        runOnJS(setSelectedMuscle)(null);
       }
     });
-  };
+  }, [T_EXPANDED, T_COLLAPSED, T_CLOSED]);
 
-  const panResponderRef = useRef<any>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
-      },
-      onPanResponderGrant: () => {
-        sheetTranslateY.extractOffset();
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const offset = (sheetTranslateY as any)._offset || 0;
-        const nextVal = gestureState.dy;
-        if (offset + nextVal < T_EXPANDED) {
-          // Add friction if pulled past top boundary
-          const overflow = T_EXPANDED - (offset + nextVal);
-          sheetTranslateY.setValue(T_EXPANDED - offset - (overflow * 0.35));
-        } else {
-          sheetTranslateY.setValue(nextVal);
-        }
-        
-        // Dynamic pinch-to-scale effect of top content
-        const currentY = offset + nextVal;
-        if (currentY > T_COLLAPSED) {
-          const delta = Math.min(1.0, (currentY - T_COLLAPSED) / (T_CLOSED - T_COLLAPSED));
-          scaleAnim.setValue(1.0 - (delta * 0.1));
-        } else {
-          scaleAnim.setValue(1.0);
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        sheetTranslateY.flattenOffset();
-        const currentTranslateY = (sheetTranslateY as any)._value || T_COLLAPSED;
-        const velocityY = gestureState.vy;
-        const dy = gestureState.dy;
+  const sheetPanGesture = Gesture.Pan()
+    .activeOffsetY([5, 5])
+    .onStart(() => {
+      sheetOffset.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      const nextVal = sheetOffset.value + e.translationY;
+      if (nextVal < T_EXPANDED) {
+        const overflow = T_EXPANDED - nextVal;
+        sheetTranslateY.value = T_EXPANDED - (overflow * 0.35);
+      } else {
+        sheetTranslateY.value = nextVal;
+      }
+      
+      // Dynamic pinch-to-scale effect of top content
+      if (sheetTranslateY.value > T_COLLAPSED) {
+        const delta = Math.min(1.0, (sheetTranslateY.value - T_COLLAPSED) / (T_CLOSED - T_COLLAPSED));
+        scaleAnim.value = 1.0 - (delta * 0.1);
+      } else {
+        scaleAnim.value = 1.0;
+      }
+    })
+    .onEnd((e) => {
+      const currentTranslateY = sheetTranslateY.value;
+      const velocityY = e.velocityY;
+      const dy = e.translationY;
 
-        if (dy < -40 || (dy < 0 && velocityY < -0.3)) {
+      if (dy < -40 || (dy < 0 && velocityY < -300)) {
+        snapTo('expanded');
+      } else if (dy > 40 || (dy > 0 && velocityY > 300)) {
+        if (currentTranslateY > T_COLLAPSED + 60) {
+          runOnJS(handleClose)();
+        } else {
+          snapTo('collapsed');
+        }
+      } else {
+        if (currentTranslateY < T_COLLAPSED / 2) {
           snapTo('expanded');
-        } else if (dy > 40 || (dy > 0 && velocityY > 0.3)) {
-          if (currentTranslateY > T_COLLAPSED + 60) {
-            handleClose();
-          } else {
-            snapTo('collapsed');
-          }
+        } else if (currentTranslateY < (T_COLLAPSED + T_CLOSED) / 2) {
+          snapTo('collapsed');
         } else {
-          if (currentTranslateY < T_COLLAPSED / 2) {
-            snapTo('expanded');
-          } else if (currentTranslateY < (T_COLLAPSED + T_CLOSED) / 2) {
-            snapTo('collapsed');
-          } else {
-            handleClose();
-          }
+          runOnJS(handleClose)();
         }
-      },
+      }
     });
-  }
-  const panResponder = panResponderRef.current;
 
   const handleMusclePress = (muscle: string) => {
     setSelectedMuscle(muscle);
     setSheetState('collapsed');
     const zoom = ZOOM_OFFSETS[muscle] ?? { scale: 1.0, x: 0, y: 0 };
     
-    Animated.parallel([
-      springScale(scaleAnim, zoom.scale),
-      springScale(translateXAnim, zoom.x),
-      springScale(translateYAnim, zoom.y),
-      springScale(sheetTranslateY, T_COLLAPSED),
-    ]).start();
+    scaleAnim.value = withSpring(zoom.scale, getSpringConfig(globalAnimation.speed));
+    translateXAnim.value = withSpring(zoom.x, getSpringConfig(globalAnimation.speed));
+    translateYAnim.value = withSpring(zoom.y, getSpringConfig(globalAnimation.speed));
+    sheetTranslateY.value = withSpring(T_COLLAPSED, getSpringConfig(globalAnimation.speed));
 
-    // Smoothly scroll to the top to see the highlighted muscle and sheet
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  const handleClose = () => {
-    Animated.parallel([
-      springScale(scaleAnim, 1.0),
-      springScale(translateXAnim, 0),
-      springScale(translateYAnim, 0),
-      timingSheet(sheetTranslateY, T_CLOSED, 250),
-    ]).start(() => {
-      setSelectedMuscle(null);
-      setSheetState('closed');
+  const handleClose = useCallback(() => {
+    scaleAnim.value = withSpring(1.0, getSpringConfig(globalAnimation.speed));
+    translateXAnim.value = withSpring(0, getSpringConfig(globalAnimation.speed));
+    translateYAnim.value = withSpring(0, getSpringConfig(globalAnimation.speed));
+    sheetTranslateY.value = withTiming(T_CLOSED, { duration: getScaledDuration(250) }, () => {
+      runOnJS(setSelectedMuscle)(null);
+      runOnJS(setSheetState)('closed');
     });
-  };
+  }, [T_CLOSED]);
 
-  // Interpolations for transitioning top screen content
-  const topOpacity = sheetTranslateY.interpolate({
-    inputRange: [T_EXPANDED, T_COLLAPSED],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
+  // Animated styles for transitioning top screen content
+  const topAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sheetTranslateY.value, [T_EXPANDED, T_COLLAPSED], [0, 1], 'clamp'),
+    transform: [
+      { scale: interpolate(sheetTranslateY.value, [T_EXPANDED, T_COLLAPSED], [0.82, 1], 'clamp') },
+      { translateY: interpolate(sheetTranslateY.value, [T_EXPANDED, T_COLLAPSED], [-30, 0], 'clamp') },
+    ],
+  }));
 
-  const topScale = sheetTranslateY.interpolate({
-    inputRange: [T_EXPANDED, T_COLLAPSED],
-    outputRange: [0.82, 1],
-    extrapolate: 'clamp',
-  });
+  const mapAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scaleAnim.value },
+      { translateX: translateXAnim.value },
+      { translateY: translateYAnim.value },
+    ],
+  }));
 
-  const topTranslateY = sheetTranslateY.interpolate({
-    inputRange: [T_EXPANDED, T_COLLAPSED],
-    outputRange: [-80, 0],
-    extrapolate: 'clamp',
-  });
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    height: sheetHeight,
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
 
-  const detailsOpacity = sheetTranslateY.interpolate({
-    inputRange: [T_EXPANDED, T_EXPANDED + 80, T_COLLAPSED],
-    outputRange: [1, 0, 0],
-    extrapolate: 'clamp',
-  });
+  const detailsOpacityStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sheetTranslateY.value, [T_EXPANDED, T_EXPANDED + 80, T_COLLAPSED], [1, 0, 0], 'clamp'),
+  }));
 
   const weeklyExercisesForMuscle = useMemo(() => {
     if (!selectedMuscle) return [];
@@ -986,13 +959,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
       >
-        <Animated.View style={{
-          opacity: topOpacity,
-          transform: [
-            { scale: topScale },
-            { translateY: topTranslateY }
-          ]
-        }}>
+        <Animated.View style={topAnimatedStyle}>
         {/* ── Weekly Summary ── */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
@@ -1038,13 +1005,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         <View style={styles.bodyContainer}>
           <Animated.View 
             collapsable={false}
-            style={[styles.svgCard, { 
-            transform: [
-              { scale: scaleAnim },
-              { translateX: translateXAnim },
-              { translateY: translateYAnim }
-            ] 
-          }]}>
+            style={[styles.svgCard, mapAnimatedStyle]}>
             {view === 'front' ? (
               <FrontSvgMap 
                 muscleSets={weeklyMuscleSets} 
@@ -1120,9 +1081,10 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
 
       {/* ── Sliding Premium Bottom Panel ── */}
       {selectedMuscle !== null && (
-        <Animated.View style={[styles.bottomSheetContainer, { height: sheetHeight, transform: [{ translateY: sheetTranslateY }] }]}>
+        <Animated.View style={[styles.bottomSheetContainer, sheetAnimatedStyle]}>
           {/* Header area with drag handle */}
-          <View style={styles.bottomSheetHeader} {...panResponder.panHandlers}>
+          <GestureDetector gesture={sheetPanGesture}>
+            <View style={styles.bottomSheetHeader}>
             <View style={styles.dragHandle} />
             <View style={styles.bottomSheetHeaderContent}>
               <Text style={styles.bottomSheetTitle}>{getMuscleDisplayName(selectedMuscle, exerciseNameLanguage).toUpperCase()}</Text>
@@ -1133,7 +1095,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                 <Text style={styles.bottomSheetCloseText}>{i18n.t('extras.closeBtn')}</Text>
               </Pressable>
             </View>
-          </View>
+            </View>
+          </GestureDetector>
           
           <ScrollView 
             style={styles.bottomSheetScroll}
@@ -1178,7 +1141,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             </View>
 
             {/* Detailed Expanded Sections (fade in smoothly as the sheet expands) */}
-            <Animated.View style={{ opacity: detailsOpacity }} pointerEvents={sheetState === 'expanded' ? 'auto' : 'none'}>
+            <Animated.View style={detailsOpacityStyle} pointerEvents={sheetState === 'expanded' ? 'auto' : 'none'}>
               {/* Section 1: This Week's Workouts */}
               <Text style={[styles.sheetSectionTitle, { marginTop: spacing.md }]}>{i18n.t('extras.thisWeekWorkouts')}</Text>
               {weeklyWorkouts.length === 0 ? (

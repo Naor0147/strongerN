@@ -1,13 +1,12 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
-  PanResponder,
   StyleSheet,
   Vibration,
   Platform,
 } from 'react-native';
-import * as RN from 'react-native';
-const Animated = RN.Animated;
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 interface RenderItemWrapperProps<T> {
   renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
@@ -41,39 +40,28 @@ export function DraggableList<T>({
   keyExtractor,
 }: DraggableListProps<T>) {
   const [localData, setLocalData] = useState<T[]>(data);
-  const [prevData, setPrevData] = useState<T[]>(data);
+  const prevDataRef = useRef<T[]>(data);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Track Y position of each item by their key/ID
   const itemLayouts = useRef<{ [key: string]: { y: number; height: number } }>({});
-  
-  // Animated value for the translation of the dragged item
-  const dragYRef = useRef<RN.Animated.Value | null>(null);
-  if (dragYRef.current === null) dragYRef.current = new Animated.Value(0);
-  const dragY = dragYRef.current;
-  
-  // Keep track of the current index during dragging
+  const dragY = useSharedValue(0);
   const dragIdx = useRef<number>(-1);
   const hoverIdx = useRef<number>(-1);
 
-  if (data !== prevData) {
+  if (data !== prevDataRef.current) {
     if (!activeId) {
       setLocalData(data);
     }
-    setPrevData(data);
+    prevDataRef.current = data;
   }
 
-  // Handle reordering while dragging
-  const handleMove = (gestureStateY: number) => {
+  const handleMove = useCallback((gestureStateY: number) => {
     if (dragIdx.current === -1 || !activeId) return;
 
     const currentLayout = itemLayouts.current[activeId];
     if (!currentLayout) return;
 
-    // Estimate current Y center of the dragged item
     const currentCenterY = currentLayout.y + currentLayout.height / 2 + gestureStateY;
-
-    // Check which item we are hovering over based on center positions
     let targetIndex = dragIdx.current;
     
     for (let i = 0; i < localData.length; i++) {
@@ -93,7 +81,6 @@ export function DraggableList<T>({
 
     if (targetIndex !== hoverIdx.current) {
       hoverIdx.current = targetIndex;
-      // Reorder local state array visually
       const reordered = [...localData];
       const [movedItem] = reordered.splice(dragIdx.current, 1);
       reordered.splice(targetIndex, 0, movedItem);
@@ -105,82 +92,92 @@ export function DraggableList<T>({
         Vibration.vibrate(10);
       }
     }
-  };
+  }, [activeId, localData, keyExtractor]);
 
-  const getDragHandlers = (item: T, index: number) => {
+  const getDragHandlers = useCallback((item: T, index: number) => {
     const id = keyExtractor(item);
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
+    const panGesture = Gesture.Pan()
+      .onStart(() => {
         setActiveId(id);
         dragIdx.current = index;
         hoverIdx.current = index;
-        dragY.setValue(0);
+        dragY.value = 0;
         if (Platform.OS !== 'web') {
           Vibration.vibrate(20);
         }
-      },
-      onPanResponderMove: (e, gestureState) => {
-        dragY.setValue(gestureState.dy);
-        handleMove(gestureState.dy);
-      },
-      onPanResponderRelease: () => {
+      })
+      .onUpdate((e) => {
+        dragY.value = e.translationY;
+        handleMove(e.translationY);
+      })
+      .onEnd(() => {
         const finalData = [...localData];
         setActiveId(null);
         dragIdx.current = -1;
         hoverIdx.current = -1;
-        dragY.setValue(0);
+        dragY.value = 0;
         onDragEnd(finalData);
-      },
-      onPanResponderTerminate: () => {
+      })
+      .onFinalize(() => {
         setActiveId(null);
         dragIdx.current = -1;
         hoverIdx.current = -1;
-        dragY.setValue(0);
-      },
-    }).panHandlers;
-  };
+        dragY.value = 0;
+      });
+
+    return { panGesture };
+  }, [handleMove, localData, keyExtractor, onDragEnd]);
 
   return (
     <View style={styles.container}>
       {localData.map((item, index) => {
         const id = keyExtractor(item);
         const isActive = activeId === id;
-        const dragHandlers = getDragHandlers(item, index);
+        const { panGesture } = getDragHandlers(item, index);
 
-        return (
-          <Animated.View
-            key={id}
-            onLayout={(e) => {
-              if (!isActive) {
-                itemLayouts.current[id] = {
-                  y: e.nativeEvent.layout.y,
-                  height: e.nativeEvent.layout.height,
-                };
-              }
-            }}
-            style={isActive ? {
-                transform: [{ translateY: dragY }],
-                zIndex: 999,
-                opacity: 0.85,
-                backgroundColor: '#1E2633',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.45,
-                shadowRadius: 10,
-                elevation: 8,
-              } : undefined}
-          >
-            <RenderItemWrapper
-              renderItem={renderItem}
-              item={item}
-              index={index}
-              dragHandlers={dragHandlers}
-              isActive={isActive}
-            />
-          </Animated.View>
-        );
+        const DragItem = () => {
+          const animatedStyle = useAnimatedStyle(() => ({
+            transform: [{ translateY: dragY.value }],
+          }));
+
+          return (
+            <Animated.View
+              onLayout={(e) => {
+                if (!isActive) {
+                  itemLayouts.current[id] = {
+                    y: e.nativeEvent.layout.y,
+                    height: e.nativeEvent.layout.height,
+                  };
+                }
+              }}
+              style={isActive ? [
+                {
+                  zIndex: 999,
+                  opacity: 0.85,
+                  backgroundColor: '#1E2633',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.45,
+                  shadowRadius: 10,
+                  elevation: 8,
+                },
+                animatedStyle,
+              ] : undefined}
+            >
+              <View>
+                <RenderItemWrapper
+                  renderItem={renderItem}
+                  item={item}
+                  index={index}
+                  dragHandlers={{ panGesture }}
+                  isActive={isActive}
+                />
+              </View>
+            </Animated.View>
+          );
+        };
+
+        return <DragItem key={id} />;
       })}
     </View>
   );

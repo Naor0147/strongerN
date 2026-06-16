@@ -1,6 +1,6 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView } from 'react-native';
 import { NavigationContainer }      from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -16,6 +16,9 @@ import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
 import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
 import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
 import i18n from './utils/i18n';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
+import { generateWorkoutInsights } from './utils/insights';
 
 // Screens — Auth
 import LoginScreen from './screens/LoginScreen';
@@ -76,6 +79,41 @@ function formatMetricValue(val: number, label: string): string {
     return `${val.toLocaleString()} kcal`;
   }
   return `${val}${unit}`;
+}
+
+function mergeMetricsListFn(local: any[], remote: any[]) {
+  const merged = [...local];
+  remote.forEach((rm: any) => {
+    const localIdx = merged.findIndex(
+      lm => lm.id === rm.id || lm.label.toLowerCase().trim() === rm.label.toLowerCase().trim()
+    );
+    if (localIdx > -1) {
+      const localHistory = merged[localIdx].history || [];
+      const remoteHistory = rm.history || [];
+      const mergedHistory = [...localHistory];
+      remoteHistory.forEach((rh: any) => {
+        if (!mergedHistory.some(lh => lh.date === rh.date)) {
+          mergedHistory.push(rh);
+        }
+      });
+      mergedHistory.sort((a: any, b: any) => a.date.localeCompare(b.date));
+      
+      let lastVal = merged[localIdx].lastValue;
+      if (mergedHistory.length > 0) {
+        const latest = mergedHistory[mergedHistory.length - 1];
+        lastVal = formatMetricValue(latest.value, merged[localIdx].label);
+      }
+      
+      merged[localIdx] = {
+        ...merged[localIdx],
+        history: mergedHistory,
+        lastValue: lastVal,
+      };
+    } else {
+      merged.push(rm);
+    }
+  });
+  return merged;
 }
 
 export default function App() {
@@ -200,6 +238,8 @@ export default function App() {
   const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(false);
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(false);
   const [isSocialShareVisible, setIsSocialShareVisible] = React.useState(false);
+  const [isInsightsVisible, setIsInsightsVisible] = React.useState(false);
+  const [insightsData, setInsightsData] = React.useState<any[]>([]);
 
   // Custom Alert Modal State
   const [activeAlert, setActiveAlert] = React.useState<CustomAlertConfig | null>(null);
@@ -1160,40 +1200,7 @@ export default function App() {
 
 
 
-  const mergeMetricsList = (local: any[], remote: any[]) => {
-    const merged = [...local];
-    remote.forEach((rm: any) => {
-      const localIdx = merged.findIndex(
-        lm => lm.id === rm.id || lm.label.toLowerCase().trim() === rm.label.toLowerCase().trim()
-      );
-      if (localIdx > -1) {
-        const localHistory = merged[localIdx].history || [];
-        const remoteHistory = rm.history || [];
-        const mergedHistory = [...localHistory];
-        remoteHistory.forEach((rh: any) => {
-          if (!mergedHistory.some(lh => lh.date === rh.date)) {
-            mergedHistory.push(rh);
-          }
-        });
-        mergedHistory.sort((a: any, b: any) => a.date.localeCompare(b.date));
-        
-        let lastVal = merged[localIdx].lastValue;
-        if (mergedHistory.length > 0) {
-          const latest = mergedHistory[mergedHistory.length - 1];
-          lastVal = formatMetricValue(latest.value, merged[localIdx].label);
-        }
-        
-        merged[localIdx] = {
-          ...merged[localIdx],
-          history: mergedHistory,
-          lastValue: lastVal,
-        };
-      } else {
-        merged.push(rm);
-      }
-    });
-    return merged;
-  };
+  const mergeMetricsList = mergeMetricsListFn;
 
   const handleRecordMetric = (id: string, newValue: string) => {
     const numericVal = parseMetricValue(newValue);
@@ -1581,6 +1588,16 @@ export default function App() {
     setSessionsList(updatedSessions);
     setUser(nextUser);
     
+    // Calculate workout insights
+    try {
+      const activeLocale = (i18n.locale === 'he' || i18n.locale.startsWith('he')) ? 'he' : 'en';
+      const insights = generateWorkoutInsights(completedExercises, sessionsList, activeLocale);
+      setInsightsData(insights);
+    } catch (err) {
+      console.warn('Error generating workout insights:', err);
+      setInsightsData([]);
+    }
+    
     // Show celebratory screen
     setCompletionData({
       totalVolume: summary.totalVolume,
@@ -1623,6 +1640,9 @@ export default function App() {
   // Save workout state when app goes to background (native)
   React.useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        Notifications.dismissAllNotificationsAsync().catch(() => {});
+      }
       if (state === 'background' || state === 'inactive') {
         if (isWorkoutActive) {
           const activeState = {
@@ -1708,8 +1728,9 @@ export default function App() {
 
   // Show login/onboarding if not yet completed
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <StatusBar style="light" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <StatusBar style="light" />
       {authState === null || !isDataLoaded || !isWorkoutRestored ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
@@ -2019,12 +2040,113 @@ export default function App() {
                     <Text style={[styles.doneBtnText, { color: colors.accent }]}>{i18n.t('completion.shareCard')}</Text>
                   </Pressable>
 
+                  {insightsData && insightsData.length > 0 && (
+                    <Pressable
+                      style={[styles.doneBtn, { backgroundColor: colors.surface2, borderColor: colors.violet, borderWidth: 1, marginBottom: spacing.sm }]}
+                      onPress={() => setIsInsightsVisible(true)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={[styles.doneBtnText, { color: colors.violet }]}>{i18n.t('completion.viewInsights')}</Text>
+                    </Pressable>
+                  )}
+
                   <Pressable
                     style={styles.doneBtn}
-                    onPress={() => setCompletionData(null)}
+                    onPress={() => {
+                      setCompletionData(null);
+                      setInsightsData([]);
+                      setIsInsightsVisible(false);
+                    }}
                     android_ripple={rippleTokens.accent}
                   >
                     <Text style={styles.doneBtnText}>{i18n.t('completion.awesome')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Modal>
+          )}
+
+          {/* Workout Insights Modal Overlay */}
+          {isInsightsVisible && (
+            <Modal
+              transparent
+              visible={isInsightsVisible}
+              animationType="slide"
+              onRequestClose={() => setIsInsightsVisible(false)}
+            >
+              <View style={styles.insightsBackdrop}>
+                <View style={styles.insightsCard}>
+                  <View style={styles.insightsHeader}>
+                    <Ionicons name="sparkles" size={24} color={colors.violet} style={{ marginRight: spacing.xs }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.insightsTitleText}>{i18n.t('completion.insightsTitle')}</Text>
+                      <Text style={styles.insightsSubtitleText}>{i18n.t('completion.insightsSubtitle')}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => setIsInsightsVisible(false)}
+                      style={styles.insightsCloseBtn}
+                      android_ripple={rippleTokens.borderless}
+                    >
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+
+                  <ScrollView
+                    style={styles.insightsScroll}
+                    contentContainerStyle={styles.insightsScrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {insightsData.map((insight, idx) => {
+                      const statusColor =
+                        insight.status === 'progress'
+                          ? colors.success
+                          : insight.status === 'regression'
+                          ? colors.error
+                          : insight.status === 'first'
+                          ? colors.highlight
+                          : colors.textSecondary;
+
+                      const statusLabel =
+                        insight.status === 'progress'
+                          ? i18n.t('completion.insightBadgeProgress')
+                          : insight.status === 'regression'
+                          ? i18n.t('completion.insightBadgeRegression')
+                          : insight.status === 'first'
+                          ? i18n.t('completion.insightBadgeFirst')
+                          : i18n.t('completion.insightBadgeNeutral');
+
+                      return (
+                        <View key={idx} style={styles.insightItemCard}>
+                          <View style={styles.insightItemHeader}>
+                            <Text style={styles.insightItemName} numberOfLines={1}>
+                              {insight.exerciseName}
+                            </Text>
+                            <View style={[styles.insightBadge, { backgroundColor: statusColor + '15', borderColor: statusColor, borderWidth: 1 }]}>
+                              <Text style={[styles.insightBadgeText, { color: statusColor }]}>
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.insightItemDetails}>
+                            {insight.details.map((detail: string, dIdx: number) => (
+                              <View key={dIdx} style={styles.insightDetailRow}>
+                                <Ionicons name="chevron-forward" size={14} color={statusColor} style={{ marginTop: 2, marginRight: spacing.xs }} />
+                                <Text style={styles.insightDetailText}>{detail}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Pressable
+                    style={[styles.doneBtn, { backgroundColor: colors.violet }]}
+                    onPress={() => setIsInsightsVisible(false)}
+                    android_ripple={rippleTokens.accent}
+                  >
+                    <Text style={styles.doneBtnText}>{i18n.t('common.ok')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -2121,7 +2243,8 @@ export default function App() {
         </View>
         </NavigationContainer>
       )}
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -2312,5 +2435,95 @@ const styles = StyleSheet.create({
   },
   alertBtnTextCancel: {
     color: colors.textPrimary,
+  },
+  insightsBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 7, 10, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  insightsCard: {
+    width: '100%',
+    maxHeight: '80%',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...(shadow.lg as object),
+  },
+  insightsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  insightsTitleText: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.lg,
+    fontFamily: font.bold,
+  },
+  insightsSubtitleText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    marginTop: 2,
+  },
+  insightsCloseBtn: {
+    padding: spacing.xs,
+  },
+  insightsScroll: {
+    flex: 1,
+    marginBottom: spacing.md,
+  },
+  insightsScrollContent: {
+    paddingVertical: spacing.xs,
+  },
+  insightItemCard: {
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  insightItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  insightItemName: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.semibold,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  insightBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+  },
+  insightBadgeText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+  },
+  insightItemDetails: {
+    gap: spacing.xs,
+  },
+  insightDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  insightDetailText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.regular,
+    flex: 1,
+    lineHeight: 18,
   },
 });

@@ -1,5 +1,5 @@
 // screens/ExercisesScreen.tsx
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,8 @@ import {
   ScrollView,
   Pressable,
   Alert,
-  Animated,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -241,32 +241,24 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     [selectedExercise]
   );
 
-  const fadeAnimRef = React.useRef<Animated.Value | null>(null);
-  if (fadeAnimRef.current === null) fadeAnimRef.current = new Animated.Value(0);
-  const fadeAnim = fadeAnimRef.current;
-  const slideAnimRef = React.useRef<Animated.Value | null>(null);
-  if (slideAnimRef.current === null) slideAnimRef.current = new Animated.Value(20);
-  const slideAnim = slideAnimRef.current;
-  const animatedContainerStyle = useMemo(() => ({ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }), [fadeAnim, slideAnim]);
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(20);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+    flex: 1,
+  }));
 
   React.useEffect(() => {
     if (globalAnimation.speed === 0) {
-      fadeAnim.setValue(1);
-      slideAnim.setValue(0);
+      fadeAnim.value = 1;
+      slideAnim.value = 0;
       return;
     }
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: getScaledDuration(350),
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: getScaledDuration(350),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    const dur = getScaledDuration(350);
+    fadeAnim.value = withTiming(1, { duration: dur });
+    slideAnim.value = withTiming(0, { duration: dur });
   }, []);
 
   // Context Menu and Notes states
@@ -285,7 +277,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   // Edit Exercise Form States
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-  const [editExId, setEditExId] = useState('');
+  const editExIdRef = useRef('');
   const [editExName, setEditExName] = useState('');
   const [editExMuscle, setEditExMuscle] = useState('Chest');
   const [editExEquipment, setEditExEquipment] = useState('Barbell');
@@ -511,11 +503,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       return;
     }
     if (onUpdateExercise) {
-      onUpdateExercise(editExId, editExName.trim(), editExMuscle, editExEquipment, editExUnilateral);
-      setIsEditModalVisible(false);
-      Alert.alert(i18n.t('common.success'), i18n.t('exercises.exerciseUpdated', { name: editExName.trim() }));
+      onUpdateExercise(editExIdRef.current, editExName.trim(), editExMuscle, editExEquipment, editExUnilateral);
     }
-  }, [editExId, editExName, editExMuscle, editExEquipment, editExUnilateral, onUpdateExercise]);
+  }, [editExName, editExMuscle, editExEquipment, editExUnilateral, onUpdateExercise]);
 
   const handleDeletePress = useCallback((ex: Exercise) => {
     Alert.alert(
@@ -1181,7 +1171,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       {/* Modal: Exercise Row 3-Dot Options */}
       {contextMenuExercise && (
         <Modal
-          visible={isContextMenuVisible}
+          visible={isContextMenuVisible && contextMenuExercise !== null}
           animationType="fade"
           transparent
           onRequestClose={() => setIsContextMenuVisible(false)}
@@ -1191,6 +1181,8 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
             onPress={() => setIsContextMenuVisible(false)}
           >
             <Pressable style={[styles.modalCard, { paddingVertical: spacing.md }]} onPress={(e) => e.stopPropagation()}>
+              {contextMenuExercise && (
+              <View>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle} numberOfLines={1}>{contextMenuExercise.name.toUpperCase()}</Text>
                 <IconButton
@@ -1250,7 +1242,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     <Pressable
                       style={styles.menuItem}
                       onPress={() => {
-                        setEditExId(contextMenuExercise.id);
+                        editExIdRef.current = contextMenuExercise.id;
                         setEditExName(contextMenuExercise.name);
                         setEditExMuscle(contextMenuExercise.muscleGroup);
                         setEditExEquipment(contextMenuExercise.equipment || 'Other');
@@ -1276,7 +1268,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     </Pressable>
                   </>
                 ) : null}
+               </View>
               </View>
+              )}
             </Pressable>
           </Pressable>
         </Modal>

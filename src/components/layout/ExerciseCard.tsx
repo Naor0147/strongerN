@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, ripple as rippleTokens } from '../../theme';
 import { SetRow, SetRowInputField } from './SetRow';
@@ -71,11 +72,6 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
       <View style={s.exerciseHeader}>
         <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
           <Text style={s.exerciseName} numberOfLines={1}>{exercise.name}</Text>
-          {isSuperSet && superSetColor && (
-            <View style={[s.superSetBadge, { borderColor: superSetColor, backgroundColor: superSetColor + '20' }]}>
-              <Text style={[s.superSetBadgeText, { color: superSetColor }]}>{i18n.t('activeWorkout.superSet')}</Text>
-            </View>
-          )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
           <Pressable
@@ -85,13 +81,23 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
           </Pressable>
-          <View
-            {...(dragHandlers || {})}
-            style={s.dragHandle}
-            accessibilityLabel="Drag to reorder exercise"
-          >
-            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-          </View>
+          {dragHandlers ? (
+            <GestureDetector gesture={dragHandlers}>
+              <View
+                style={s.dragHandle}
+                accessibilityLabel="Drag to reorder exercise"
+              >
+                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+              </View>
+            </GestureDetector>
+          ) : (
+            <View
+              style={s.dragHandle}
+              accessibilityLabel="Drag to reorder exercise"
+            >
+              <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+            </View>
+          )}
         </View>
       </View>
 

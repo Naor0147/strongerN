@@ -16,13 +16,12 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Easing,
   Platform,
   Linking,
-  PanResponder,
 } from 'react-native';
+import Animated, { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-const Animated = RN.Animated;
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -241,36 +240,31 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
   const sliderWidthRef = useRef(sliderWidth);
   sliderWidthRef.current = sliderWidth;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
-        const initialTouchX = evt.nativeEvent.locationX;
-        const width = sliderWidthRef.current || 200;
-        let newVolume = Math.max(0, Math.min(1, initialTouchX / width));
-        newVolume = Math.round(newVolume * 20) / 20;
-        setLocalVolume(newVolume);
-        startVolumeRef.current = newVolume;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const width = sliderWidthRef.current || 200;
-        const deltaVol = gestureState.dx / width;
-        let newVolume = Math.max(0, Math.min(1, startVolumeRef.current + deltaVol));
-        newVolume = Math.round(newVolume * 20) / 20;
-        setLocalVolume(newVolume);
-      },
-      onPanResponderRelease: () => {
-        const finalVol = localVolumeRef.current;
-        if (setSoundVolumeRef.current) {
-          setSoundVolumeRef.current(finalVol);
-        }
-        import('../utils/soundPlayer').then((m) =>
-          m.playSoundByKey(soundSetCompletedRef.current)
-        );
-      },
+  const panGesture = Gesture.Pan()
+    .onStart((e) => {
+      const initialTouchX = e.x;
+      const width = sliderWidthRef.current || 200;
+      let newVolume = Math.max(0, Math.min(1, initialTouchX / width));
+      newVolume = Math.round(newVolume * 20) / 20;
+      setLocalVolume(newVolume);
+      startVolumeRef.current = newVolume;
     })
-  ).current;
+    .onUpdate((e) => {
+      const width = sliderWidthRef.current || 200;
+      const deltaVol = e.translationX / width;
+      let newVolume = Math.max(0, Math.min(1, startVolumeRef.current + deltaVol));
+      newVolume = Math.round(newVolume * 20) / 20;
+      setLocalVolume(newVolume);
+    })
+    .onEnd(() => {
+      const finalVol = localVolumeRef.current;
+      if (setSoundVolumeRef.current) {
+        setSoundVolumeRef.current(finalVol);
+      }
+      import('../utils/soundPlayer').then((m) =>
+        m.playSoundByKey(soundSetCompletedRef.current)
+      );
+    });
 
   return (
     <View style={styles.volumeSliderContainer}>
@@ -279,14 +273,15 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
         <Text style={styles.settingTitle}>{i18n.t('profile.soundVolume')}</Text>
         <Text style={styles.volumePercentage}>{Math.round(localVolume * 100)}%</Text>
       </View>
-      <View
-        style={styles.volSliderTrack}
-        onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-        {...panResponder.panHandlers}
-      >
+      <GestureDetector gesture={panGesture}>
+        <View
+          style={styles.volSliderTrack}
+          onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+        >
         <View pointerEvents="none" style={[styles.volSliderFill, { width: `${localVolume * 100}%` }]} />
         <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${localVolume * 100}%` }]} />
-      </View>
+        </View>
+      </GestureDetector>
     </View>
   );
 };
@@ -319,33 +314,28 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
   const sliderWidthRef = useRef(sliderWidth);
   sliderWidthRef.current = sliderWidth;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
-        const initialTouchX = evt.nativeEvent.locationX;
-        const width = sliderWidthRef.current || 200;
-        let newSpeed = Math.max(0, Math.min(2, (initialTouchX / width) * 2));
-        newSpeed = Math.round(newSpeed * 20) / 20; // steps of 0.05
-        setLocalSpeed(newSpeed);
-        startSpeedRef.current = newSpeed;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const width = sliderWidthRef.current || 200;
-        const deltaSpeed = (gestureState.dx / width) * 2;
-        let newSpeed = Math.max(0, Math.min(2, startSpeedRef.current + deltaSpeed));
-        newSpeed = Math.round(newSpeed * 20) / 20;
-        setLocalSpeed(newSpeed);
-      },
-      onPanResponderRelease: () => {
-        const finalSpeed = localSpeedRef.current;
-        if (setAnimationSpeedRef.current) {
-          setAnimationSpeedRef.current(finalSpeed);
-        }
-      },
+  const animPanGesture = Gesture.Pan()
+    .onStart((e) => {
+      const initialTouchX = e.x;
+      const width = sliderWidthRef.current || 200;
+      let newSpeed = Math.max(0, Math.min(2, (initialTouchX / width) * 2));
+      newSpeed = Math.round(newSpeed * 20) / 20;
+      setLocalSpeed(newSpeed);
+      startSpeedRef.current = newSpeed;
     })
-  ).current;
+    .onUpdate((e) => {
+      const width = sliderWidthRef.current || 200;
+      const deltaSpeed = (e.translationX / width) * 2;
+      let newSpeed = Math.max(0, Math.min(2, startSpeedRef.current + deltaSpeed));
+      newSpeed = Math.round(newSpeed * 20) / 20;
+      setLocalSpeed(newSpeed);
+    })
+    .onEnd(() => {
+      const finalSpeed = localSpeedRef.current;
+      if (setAnimationSpeedRef.current) {
+        setAnimationSpeedRef.current(finalSpeed);
+      }
+    });
 
   return (
     <View style={styles.volumeSliderContainer}>
@@ -356,14 +346,15 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
           {localSpeed === 0 ? i18n.t('profile.instantAnim') : `${localSpeed}x`}
         </Text>
       </View>
-      <View
-        style={styles.volSliderTrack}
-        onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-        {...panResponder.panHandlers}
-      >
-        <View pointerEvents="none" style={[styles.volSliderFill, { width: `${(localSpeed / 2) * 100}%` }]} />
-        <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${(localSpeed / 2) * 100}%` }]} />
-      </View>
+      <GestureDetector gesture={animPanGesture}>
+        <View
+          style={styles.volSliderTrack}
+          onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+        >
+          <View pointerEvents="none" style={[styles.volSliderFill, { width: `${(localSpeed / 2) * 100}%` }]} />
+          <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${(localSpeed / 2) * 100}%` }]} />
+        </View>
+      </GestureDetector>
     </View>
   );
 };
@@ -456,12 +447,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const insets = useSafeAreaInsets();
   // Modals state
   const [isRenameVisible, setIsRenameVisible] = useState(false);
-  const [developerToolsUnlocked, setDeveloperToolsUnlocked] = useState(isDeveloperModeEnabled);
-  React.useEffect(() => {
-    if (isDeveloperModeEnabled) {
-      setDeveloperToolsUnlocked(true);
-    }
-  }, [isDeveloperModeEnabled]);
+  const [devToolsTapUnlocked, setDevToolsTapUnlocked] = useState(false);
+  const developerToolsUnlocked = isDeveloperModeEnabled || devToolsTapUnlocked;
 
   const versionTapCount = useRef(0);
   const lastVersionTapTime = useRef(0);
@@ -476,7 +463,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     lastVersionTapTime.current = now;
 
     if (versionTapCount.current >= 3) {
-      setDeveloperToolsUnlocked(true);
+      setDevToolsTapUnlocked(true);
       Alert.alert(
         i18n.t('extras.devToolsUnlocked'),
         i18n.t('extras.devToolsUnlockedMsg')
@@ -646,8 +633,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, [response]);
 
   // Load animations
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(0)).current;
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(0);
 
   React.useEffect(() => {
     const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
@@ -655,15 +642,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       : 1;
 
     if (speed === 0) {
-      fadeAnim.setValue(1);
+      fadeAnim.value = 1;
       return;
     }
-    Animated.timing(fadeAnim, {
-      toValue: 1,
+    fadeAnim.value = withTiming(1, {
       duration: 450 * speed,
-      useNativeDriver: true,
       easing: Easing.out(Easing.cubic),
-    }).start();
+    });
   }, []);
 
   const handleLoadDemoData = () => {
@@ -1237,9 +1222,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Card 
-            padding={spacing.lg} 
-            style={{ backgroundColor: 'transparent', borderWidth: 0, marginBottom: 0 }}
+          <View 
+            style={{ padding: spacing.lg, backgroundColor: 'transparent' }}
           >
             <View style={styles.quickStartHeader}>
               <View style={styles.quickStartTitleContainer}>
@@ -1265,14 +1249,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <Ionicons name="play" size={16} color="#0D0F14" style={{ marginRight: spacing.xs }} />
               <Text style={styles.quickStartBtnText}>{i18n.t('profile.startWorkout')}</Text>
             </View>
-          </Card>
+          </View>
         </Pressable>
 
         {/* ── Dashboard ────────────────────────────────────────── */}
 
         {/* ── Chart Card ───────────────────────────────────────── */}
         {showWorkoutsChart && (
-          <Card padding={spacing.lg} style={{ backgroundColor: 'transparent' }} testID="profile.chart-card">
+          <Card padding={spacing.lg} testID="profile.chart-card">
             <View style={styles.chartHeader}>
               <View>
                 <Text style={styles.chartTitle}>{i18n.t('profile.workoutsPerWeek')}</Text>
@@ -2779,25 +2763,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                 ].map((preset) => (
                                   <Pressable
                                     key={preset.value}
-                                    style={{
-                                      flexDirection: 'row',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      backgroundColor: colors.surface2,
-                                      paddingVertical: 6,
-                                      paddingHorizontal: 12,
-                                      borderRadius: radius.full,
-                                      borderWidth: 1,
-                                      borderColor: customAccentColor === preset.value ? preset.value : 'transparent',
-                                    }}
+                                    style={[styles.colorPresetItem, { borderColor: customAccentColor === preset.value ? preset.value : 'transparent' }]}
                                     onPress={() => {
                                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                       if (setCustomAccentColor) setCustomAccentColor(preset.value);
                                     }}
                                     android_ripple={rippleTokens.surface}
                                   >
-                                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: preset.value }} />
-                                    <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.medium }}>
+                                    <View style={[styles.colorPresetDot, { backgroundColor: preset.value }]} />
+                                    <Text style={styles.colorPresetLabel}>
                                       {preset.label}
                                     </Text>
                                   </Pressable>
@@ -2842,18 +2816,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                               {/* Hex Input (collapsible) */}
                               <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
                                 <TextInput
-                                  style={{
-                                    flex: 1,
-                                    backgroundColor: colors.surface2,
-                                    borderColor: colors.border,
-                                    borderWidth: 1,
-                                    borderRadius: radius.sm,
-                                    paddingVertical: spacing.sm,
-                                    paddingHorizontal: spacing.md,
-                                    color: colors.textPrimary,
-                                    fontFamily: font.medium,
-                                    fontSize: font.sizes.sm,
-                                  }}
+                                  style={styles.hexInput}
                                   placeholder={i18n.t('profile.hexPlaceholder')}
                                   placeholderTextColor={colors.textMuted}
                                   value={customAccentColor}
@@ -2920,18 +2883,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                   {/* Manual Input */}
                                   <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
                                     <TextInput
-                                      style={{
-                                        flex: 1,
-                                        backgroundColor: colors.surface2,
-                                        borderColor: colors.border,
-                                        borderWidth: 1,
-                                        borderRadius: radius.sm,
-                                        paddingVertical: 4,
-                                        paddingHorizontal: spacing.sm,
-                                        color: colors.textPrimary,
-                                        fontFamily: font.medium,
-                                        fontSize: font.sizes.xs,
-                                      }}
+                                      style={styles.hexInputSmall}
                                       placeholder={i18n.t('profile.hexCodePlaceholder', { code: overrideItem.defaultVal })}
                                       placeholderTextColor={colors.textMuted}
                                       value={themeOverrides && themeOverrides[overrideItem.key] ? themeOverrides[overrideItem.key] : ''}
@@ -4527,6 +4479,51 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.xs - 1,
     fontFamily: font.bold,
     letterSpacing: 0.5,
+  },
+  colorPresetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surface2,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  colorPresetDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  colorPresetLabel: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+  },
+  hexInput: {
+    flex: 1,
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    color: colors.textPrimary,
+    fontFamily: font.medium,
+    fontSize: font.sizes.sm,
+  },
+  hexInputSmall: {
+    flex: 1,
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    color: colors.textPrimary,
+    fontFamily: font.medium,
+    fontSize: font.sizes.xs,
   },
 });
 
