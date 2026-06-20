@@ -199,3 +199,64 @@ export function playSoundByKey(soundKey: string) {
     playNativeSound(soundKey);
   }
 }
+
+/**
+ * Plays satisfying click sound when finishing a set.
+ */
+export async function playSatisfyingClickFinishSet() {
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+    });
+    const player = createAudioPlayer(require('../../sound/00_satisfying_click_v3.wav'));
+    player.volume = soundConfig.volume ?? 1.0;
+    player.play();
+    const timeoutId = setTimeout(() => {
+      try {
+        player.pause();
+        player.seekTo(0);
+        player.release();
+      } catch (e) {}
+    }, 3000);
+    const listener = player.addListener('playbackStatusUpdate', (status) => {
+      if (status.playbackState === 'ended') {
+        clearTimeout(timeoutId);
+        player.release();
+        listener.remove();
+      }
+    });
+  } catch (err) {
+    console.log('[Native Sound Error] Play satisfying click finish set:', err);
+  }
+}
+
+/**
+ * Plays satisfying click sound when stopping the timer.
+ */
+export async function playSatisfyingClickStopTimer() {
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+    });
+    const player = createAudioPlayer(require('../../sound/satisfyingClick.wav'));
+    player.volume = soundConfig.volume ?? 1.0;
+    player.play();
+    const timeoutId = setTimeout(() => {
+      try {
+        player.pause();
+        player.seekTo(0);
+        player.release();
+      } catch (e) {}
+    }, 3000);
+    const listener = player.addListener('playbackStatusUpdate', (status) => {
+      if (status.playbackState === 'ended') {
+        clearTimeout(timeoutId);
+        player.release();
+        listener.remove();
+      }
+    });
+  } catch (err) {
+    console.log('[Native Sound Error] Play satisfying click stop timer:', err);
+  }
+}
+

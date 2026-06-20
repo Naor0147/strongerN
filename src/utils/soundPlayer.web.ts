@@ -148,3 +148,32 @@ export function playSoundByKey(soundKey: string) {
   if (soundKey === 'mute') return;
   playWebSound(soundKey);
 }
+
+/**
+ * Plays satisfying click sound when finishing a set.
+ */
+export function playSatisfyingClickFinishSet() {
+  try {
+    const audio = new Audio(require('../../sound/00_satisfying_click_v3.wav'));
+    audio.volume = soundConfig.volume ?? 1.0;
+    audio.play().catch(err => console.warn('[Web Audio Play Error] playSatisfyingClickFinishSet:', err));
+    setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
+  } catch (err) {
+    console.warn('[Web Audio Init Error] playSatisfyingClickFinishSet:', err);
+  }
+}
+
+/**
+ * Plays satisfying click sound when stopping the timer.
+ */
+export function playSatisfyingClickStopTimer() {
+  try {
+    const audio = new Audio(require('../../sound/satisfyingClick.wav'));
+    audio.volume = soundConfig.volume ?? 1.0;
+    audio.play().catch(err => console.warn('[Web Audio Play Error] playSatisfyingClickStopTimer:', err));
+    setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
+  } catch (err) {
+    console.warn('[Web Audio Init Error] playSatisfyingClickStopTimer:', err);
+  }
+}
+

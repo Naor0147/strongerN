@@ -4,7 +4,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, run
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { colors, spacing, radius, globalAnimation, getScaledDuration } from '../../theme';
+import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
 
 export const SwipeableRow: React.FC<{
   children: React.ReactNode;
@@ -33,7 +33,7 @@ export const SwipeableRow: React.FC<{
   const handleDeletePress = useCallback(() => {
     triggerDeleteHaptic();
     const toVal = width ? -(width + 50) : -500;
-    translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+    translateX.value = withTiming(toVal, { duration: getScaledDuration(150) }, () => {
       runOnJS(onDelete)();
       translateX.value = 0;
       isOpen.value = false;
@@ -50,11 +50,7 @@ export const SwipeableRow: React.FC<{
     } else {
       translateX.value = withSpring(
         toVal,
-        {
-          stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
-          damping: 16 / globalAnimation.speed,
-          mass: 0.9,
-        },
+        getSpringConfig(140, 16),
         () => {
           if (callback) runOnJS(callback)();
         }
@@ -145,7 +141,7 @@ export const SwipeableRow: React.FC<{
           <View style={[
             swipeStyles.deleteAction, 
             { borderRadius },
-            isPastThreshold && { backgroundColor: '#FF3B30' }
+            isPastThreshold && { backgroundColor: colors.error }
           ]}>
             <Animated.View style={animatedTrashStyle}>
               <Ionicons 

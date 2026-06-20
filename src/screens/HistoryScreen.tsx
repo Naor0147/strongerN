@@ -1,5 +1,5 @@
 // screens/HistoryScreen.tsx
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  InteractionManager,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import * as RN from 'react-native';
@@ -23,10 +24,12 @@ import ScreenHeader from '../components/layout/ScreenHeader';
 import Card         from '../components/ui/Card';
 import IconButton   from '../components/ui/IconButton';
 import { sectionListGetItemLayout } from '../utils/listLayout';
+import { SwipeableRow } from '../components/layout/SwipeableRow';
 
 interface HistoryScreenProps {
   sessions: WorkoutSession[];
   onResumeWorkout?: (session: WorkoutSession) => void;
+  onDeleteSession: (sessionId: string) => void;
 }
 
 interface SectionData {
@@ -52,6 +55,109 @@ function formatMonthKey(date: Date): string {
 function formatVolume(kg: number): string {
   return kg >= 1000 ? `${(kg / 1000).toFixed(1)}t` : `${kg}kg`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure function — extracted at module scope so it is never re-created.
+// Runs only via InteractionManager (after the navigation transition ends).
+// ─────────────────────────────────────────────────────────────────────────────
+function computeSections(
+  sessions: WorkoutSession[],
+  searchQuery: string,
+  rangeStart: number | null,
+  rangeEnd: number | null,
+  calendarMonth: number,
+  calendarYear: number,
+): SectionData[] {
+  let result = sessions;
+
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase().trim();
+    result = result.filter(
+      s =>
+        s.title.toLowerCase().includes(q) ||
+        (s.comment && s.comment.toLowerCase().includes(q)) ||
+        s.exercises.some(ex => ex.name.toLowerCase().includes(q))
+    );
+  }
+
+  if (rangeStart !== null) {
+    const endDay = rangeEnd !== null ? rangeEnd : rangeStart;
+    result = result.filter(s => {
+      const d = new Date(s.datetime);
+      const day = d.getDate();
+      return (
+        day >= rangeStart &&
+        day <= endDay &&
+        d.getMonth() === calendarMonth &&
+        d.getFullYear() === calendarYear
+      );
+    });
+  }
+
+  const map = new Map<string, WorkoutSession[]>();
+  const sorted = [...result].sort((a, b) => b.datetime.getTime() - a.datetime.getTime());
+  for (const s of sorted) {
+    const key = formatMonthKey(s.datetime);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(s);
+  }
+  return Array.from(map.entries()).map(([title, data]) => ({
+    title,
+    count: data.length,
+    data,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// History skeleton shimmer — AMOLED card-shaped, 3 height variants.
+// Zero layout-computation cost; shimmer runs on the UI thread.
+// ─────────────────────────────────────────────────────────────────────────────
+const SKELETON_CARD_HEIGHTS = [148, 200, 174, 226, 148] as const;
+
+const HistorySkeletonList: React.FC = React.memo(() => {
+  const opacity = useSharedValue(0.35);
+
+  React.useEffect(() => {
+    const start = () => {
+      opacity.value = withTiming(0.75, { duration: 650 }, (finished) => {
+        if (finished)
+          opacity.value = withTiming(0.35, { duration: 650 }, (f2) => {
+            if (f2) start();
+          });
+      });
+    };
+    start();
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View style={[histSkeletonStyles.container, animStyle]}>
+      {/* Month header placeholder */}
+      <View style={histSkeletonStyles.monthHeader}>
+        <View style={histSkeletonStyles.monthDot} />
+        <View style={histSkeletonStyles.monthLine} />
+      </View>
+
+      {SKELETON_CARD_HEIGHTS.map((height, i) => (
+        <View key={i} style={[histSkeletonStyles.card, { height }]}>
+          <View style={histSkeletonStyles.cardHeaderRow}>
+            <View style={histSkeletonStyles.cardTitleLine} />
+            <View style={histSkeletonStyles.cardBadge} />
+          </View>
+          <View style={histSkeletonStyles.cardDateLine} />
+          <View style={histSkeletonStyles.divider} />
+          <View style={histSkeletonStyles.cardExLine} />
+          <View style={histSkeletonStyles.cardExLineShort} />
+          <View style={histSkeletonStyles.chipRow}>
+            <View style={histSkeletonStyles.chip} />
+            <View style={histSkeletonStyles.chip} />
+          </View>
+        </View>
+      ))}
+    </Animated.View>
+  );
+});
 
 // ─── Stat Chip ────────────────────────────────────────────────────
 interface ChipProps {
@@ -88,9 +194,21 @@ const SessionCard: React.FC<{
   onResumeWorkout?: (session: WorkoutSession) => void;
 }> = React.memo(({ session, onResumeWorkout }) => {
   const hasPR   = session.prs > 0;
-  const variant = hasPR ? 'highlight' : 'default';
+  const variant: 'default' | 'highlight' = 'default';
+  // Memoize the locale date format — toLocaleDateString is expensive
+  const formattedDate = useMemo(
+    () => formatDate(session.datetime),
+    // session.id is stable; only recompute if the session itself changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session.id]
+  );
 
   return (
+    <Pressable
+      onPress={() => onResumeWorkout && onResumeWorkout(session)}
+      android_ripple={rippleTokens.surface}
+      accessibilityLabel={`Edit or resume ${session.title} workout`}
+    >
     <Card
       style={styles.sessionCard}
       padding={spacing.lg}
@@ -101,31 +219,16 @@ const SessionCard: React.FC<{
       <View style={styles.sessionHeader}>
         <View style={styles.sessionTitleBlock}>
           <Text style={styles.sessionTitle}>{session.title}</Text>
-          <Text style={styles.sessionDate}>{formatDate(session.datetime)}</Text>
+          <Text style={styles.sessionDate}>{formattedDate}</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
-          {hasPR && (
-            <View style={styles.prBadge}>
-              <Ionicons name="trophy" size={12} color={colors.gold} />
-              <Text style={styles.prText}>{i18n.t('extras.prBadge', { count: session.prs })}</Text>
-            </View>
-          )}
-          {onResumeWorkout && (
-            <Pressable
-              style={styles.resumeBtn}
-              onPress={() => onResumeWorkout(session)}
-              android_ripple={rippleTokens.accent}
-              accessibilityLabel={`Resume or edit ${session.title} workout`}
-            >
-              <Ionicons name="play" size={10} color={colors.accent} style={{ marginRight: 2 }} />
-              <Text style={styles.resumeBtnText}>{i18n.t('extras.editResume')}</Text>
-            </Pressable>
-          )}
-        </View>
+
       </View>
 
-      {session.comment ? (
-        <Text style={styles.commentText}>{session.comment}</Text>
+      {session.comment && session.comment !== 'Logged via live active tracker!' ? (
+        <View style={styles.notesContainer}>
+          <Ionicons name="document-text-outline" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={styles.notesText}>{session.comment}</Text>
+        </View>
       ) : null}
 
       {/* Exercise table header */}
@@ -150,16 +253,23 @@ const SessionCard: React.FC<{
         )}
       </View>
     </Card>
+    </Pressable>
   );
-});
+}, (prev, next) =>
+  // Short-circuit re-render when session identity and PR count are unchanged
+  prev.session.id === next.session.id &&
+  prev.session.prs === next.session.prs &&
+  prev.onResumeWorkout === next.onResumeWorkout
+);
 
 // ─── Screen ────────────────────────────────────────────────────────
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout, onDeleteSession }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<number | null>(null);
+  const [rangeStart, setRangeStart] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
   // Calendar month/year navigation
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth());
@@ -183,53 +293,37 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
     transform: [{ translateY: slideAnim.value }],
   }));
 
-  // 1. Search filter
-  const filteredSessions = useMemo(() => {
-    let result = sessions;
+  // ── Deferred sections computation ──────────────────────────────────────────────────
+  // We intentionally do NOT compute sections synchronously on mount.
+  // InteractionManager schedules the sort+group work only after all active
+  // interactions (the 350 ms navigation transition) are idle, keeping the
+  // JS thread free during the entry animation.
+  const [isDataReady, setIsDataReady] = useState(false);
+  const [sections, setSections] = useState<SectionData[]>([]);
 
-    // Search query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        s =>
-          s.title.toLowerCase().includes(q) ||
-          (s.comment && s.comment.toLowerCase().includes(q)) ||
-          s.exercises.some(ex => ex.name.toLowerCase().includes(q))
+  useEffect(() => {
+    setIsDataReady(false);
+    const task = InteractionManager.runAfterInteractions(() => {
+      setSections(
+        computeSections(sessions, searchQuery, rangeStart, rangeEnd, calendarMonth, calendarYear)
       );
-    }
-
-    // Calendar day filter (uses navigated calendarMonth/calendarYear)
-    if (selectedCalendarDate !== null) {
-      result = result.filter(s => {
-        const d = new Date(s.datetime);
-        return d.getDate() === selectedCalendarDate && d.getMonth() === calendarMonth && d.getFullYear() === calendarYear;
-      });
-    }
-
-    return result;
-  }, [sessions, searchQuery, selectedCalendarDate, calendarMonth, calendarYear]);
-
-  // 2. Sections grouping
-  const sections: SectionData[] = useMemo(() => {
-    const map    = new Map<string, WorkoutSession[]>();
-    const sorted = [...filteredSessions].sort((a, b) => b.datetime.getTime() - a.datetime.getTime());
-    for (const s of sorted) {
-      const key = formatMonthKey(s.datetime);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(s);
-    }
-    return Array.from(map.entries()).map(([title, data]) => ({
-      title,
-      count: data.length,
-      data,
-    }));
-  }, [filteredSessions]);
+      setIsDataReady(true);
+    });
+    return () => task.cancel();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, searchQuery, rangeStart, rangeEnd, calendarMonth, calendarYear]);
 
   const renderItem = useCallback(
     ({ item }: { item: WorkoutSession }) => (
-      <SessionCard session={item} onResumeWorkout={onResumeWorkout} />
+      <SwipeableRow
+        borderRadius={radius.md}
+        style={{ marginBottom: spacing.md }}
+        onDelete={() => onDeleteSession(item.id)}
+      >
+        <SessionCard session={item} onResumeWorkout={onResumeWorkout} />
+      </SwipeableRow>
     ),
-    [onResumeWorkout]
+    [onResumeWorkout, onDeleteSession]
   );
 
   const renderSectionHeader = useCallback(
@@ -247,10 +341,17 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
 
   const keyExtractor = useCallback((item: WorkoutSession) => item.id, []);
 
-  const getItemLayout = useMemo(() =>
+  // ── Stable getItemLayout ────────────────────────────────────────────────────
+  // The original `useMemo([sections])` caused a fresh layout-calculator
+  // allocation on every filter/calendar change. A sectionsRef lets the
+  // closure always read the latest sections while the callback stays stable.
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+
+  const getItemLayout = useCallback(
     sectionListGetItemLayout({
-      getItemHeight: (sectionIndex, itemIndex) => {
-        const item = sections[sectionIndex]?.data[itemIndex];
+      getItemHeight: (sectionIndex: number, itemIndex: number) => {
+        const item = sectionsRef.current[sectionIndex]?.data[itemIndex];
         if (!item) return 150;
         const baseHeight = 149;
         const commentHeight = item.comment ? 26 : 0;
@@ -259,7 +360,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
       },
       getSectionHeaderHeight: () => 48,
     }),
-    [sections]
+    [] // stable — never recreated
   );
 
   const handleToggleSearch = () => {
@@ -271,7 +372,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
 
   const handleToggleCalendar = () => {
     setIsCalendarVisible(!isCalendarVisible);
-    setSelectedCalendarDate(null);
     // Reset to current month when opening calendar
     if (!isCalendarVisible) {
       setCalendarYear(new Date().getFullYear());
@@ -280,7 +380,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   };
 
   const handlePrevMonth = () => {
-    setSelectedCalendarDate(null);
+    setRangeStart(null); setRangeEnd(null);
     if (calendarMonth === 0) {
       setCalendarMonth(11);
       setCalendarYear(prev => prev - 1);
@@ -290,7 +390,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   };
 
   const handleNextMonth = () => {
-    setSelectedCalendarDate(null);
+    setRangeStart(null); setRangeEnd(null);
     const now = new Date();
     // Don't navigate past current month
     if (calendarYear === now.getFullYear() && calendarMonth === now.getMonth()) return;
@@ -358,12 +458,18 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
     },
   ], [isSearching, isCalendarVisible]);
 
+  // Cheap count derived from already-computed sections (no re-scan of sessions)
+  const filteredCount = useMemo(
+    () => sections.reduce((acc, s) => acc + s.data.length, 0),
+    [sections]
+  );
+
   const subtitle = useMemo(() => {
-    const isFiltered = searchQuery.trim() || selectedCalendarDate !== null;
+    const isFiltered = searchQuery.trim() || rangeStart !== null;
     return isFiltered
-      ? i18n.t('history.foundResults', { count: filteredSessions.length })
+      ? i18n.t('history.foundResults', { count: filteredCount })
       : i18n.t('history.totalSessions', { count: sessions.length });
-  }, [sessions.length, filteredSessions.length, searchQuery, selectedCalendarDate]);
+  }, [sessions.length, filteredCount, searchQuery, rangeStart]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -410,9 +516,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
                 <Ionicons name="chevron-forward" size={18} color={isCurrentMonth ? colors.textMuted : colors.textPrimary} />
               </Pressable>
             </View>
-            {selectedCalendarDate !== null && (
+            {rangeStart !== null && (
               <Pressable
-                onPress={() => setSelectedCalendarDate(null)}
+                onPress={() => { setRangeStart(null); setRangeEnd(null); }}
                 style={styles.calResetBtn}
               >
                 <Text style={styles.calResetBtnText}>{i18n.t('history.showAll')}</Text>
@@ -430,12 +536,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
           {/* Calendar Grid */}
           <View style={styles.daysGrid}>
             {calendarDays.map((item, idx) => {
-              const isSelected = selectedCalendarDate === item.day;
+              const isRangeStart = rangeStart === item.day;
+              const isRangeEnd = rangeEnd === item.day;
+              const isInRange = rangeStart !== null && item.day !== null &&
+                (rangeEnd !== null
+                  ? item.day >= rangeStart && item.day <= rangeEnd
+                  : item.day === rangeStart);
+              const isSelected = isInRange;
               return (
                 <Pressable
                   key={item.day !== null ? `day-${item.day}` : `empty-${idx}`}
                   disabled={item.day === null}
-                  onPress={() => setSelectedCalendarDate(item.day)}
+                  onPress={() => {
+                    if (rangeStart === null || rangeEnd !== null) {
+                      // Start new range
+                      setRangeStart(item.day);
+                      setRangeEnd(null);
+                    } else {
+                      // Set end of range (ensure start <= end)
+                      if (item.day! >= rangeStart) {
+                        setRangeEnd(item.day);
+                      } else {
+                        setRangeEnd(rangeStart);
+                        setRangeStart(item.day);
+                      }
+                    }
+                  }}
                   style={styles.dayCell}
                 >
                   {item.day !== null && (
@@ -452,9 +578,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
                       ]}>
                         {item.day}
                       </Text>
-                      {item.hasWorkout && !isSelected && (
-                        <View style={styles.calDotGlow} />
-                      )}
+
                     </View>
                   )}
                 </Pressable>
@@ -464,21 +588,29 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
         </View>
       )}
 
+      {/* SectionList is guarded by isDataReady so it never mounts during the
+          350 ms navigation animation. The skeleton fills the gap with zero
+          JS computation. SwipeableRow gesture registrations also defer. */}
       <Animated.View style={[{ flex: 1 }, animatedStyle]}>
-        <SectionList
-          sections={sections}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
-          getItemLayout={getItemLayout}
-          contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
-          showsVerticalScrollIndicator={false}
-          overScrollMode="never"
-          removeClippedSubviews
-          maxToRenderPerBatch={6}
-          windowSize={10}
-        />
+        {!isDataReady ? (
+          <HistorySkeletonList />
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            getItemLayout={getItemLayout}
+            contentContainerStyle={styles.list}
+            stickySectionHeadersEnabled={false}
+            showsVerticalScrollIndicator={false}
+            overScrollMode="never"
+            removeClippedSubviews
+            initialNumToRender={5}
+            maxToRenderPerBatch={4}
+            windowSize={7}
+          />
+        )}
       </Animated.View>
     </View>
   );
@@ -554,7 +686,7 @@ const styles = StyleSheet.create({
 
   // Session card
   sessionCard: {
-    marginBottom: spacing.md,
+    marginBottom: 0,
   },
   sessionHeader: {
     flexDirection:  'row',
@@ -594,12 +726,23 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.xs,
     fontFamily: font.semibold,
   },
-  commentText: {
-    color:        colors.textSecondary,
-    fontSize:     font.sizes.sm,
-    fontFamily:   font.medium,
-    marginTop:    spacing.xs,
-    marginBottom: spacing.sm,
+  notesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  notesText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    flex: 1,
   },
 
   // Table
@@ -758,8 +901,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   dayInnerWorkout: {
-    backgroundColor: colors.successGlow + '20',
-    borderColor: colors.success,
+    backgroundColor: colors.accentGlow,
+    borderColor: colors.accent,
     borderWidth: 1,
   },
   dayText: {
@@ -772,17 +915,10 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
   },
   dayTextWorkout: {
-    color: colors.success,
+    color: colors.accent,
     fontFamily: font.bold,
   },
-  calDotGlow: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.success,
-    position: 'absolute',
-    bottom: 2,
-  },
+
   resumeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -798,6 +934,98 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.xs - 2,
     fontFamily: font.bold,
     letterSpacing: 0.5,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton Styles — AMOLED-safe, card-shaped, zero-allocation
+// ─────────────────────────────────────────────────────────────────────────────
+const histSkeletonStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  monthHeader: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.sm,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  monthDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.surface2,
+  },
+  monthLine: {
+    width: 80,
+    height: 12,
+    borderRadius: 4,
+    backgroundColor: colors.surface2,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    rowGap: spacing.sm,
+    overflow: 'hidden',
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardTitleLine: {
+    width: '55%',
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: colors.surface2,
+  },
+  cardBadge: {
+    width: 60,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface2,
+  },
+  cardDateLine: {
+    width: '40%',
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: colors.surface,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 2,
+  },
+  cardExLine: {
+    width: '80%',
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: colors.surface2,
+  },
+  cardExLineShort: {
+    width: '60%',
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: colors.surface,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    columnGap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  chip: {
+    width: 60,
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface2,
   },
 });
 

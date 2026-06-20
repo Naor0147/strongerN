@@ -1,5 +1,6 @@
 // screens/ExercisesScreen.tsx
-import React, { useMemo, useCallback, useState, useRef } from 'react';
+import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
+import { InteractionManager } from 'react-native';
 import {
   View,
   Text,
@@ -92,6 +93,125 @@ const getSecondaryMuscles = (primary: string): string => {
   return 'Core';
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure function — extracted at module scope so it is never re-created and
+// can be called from both InteractionManager callbacks and unit tests.
+// ─────────────────────────────────────────────────────────────────────────────
+function computeEnrichedExercises(exercises: Exercise[], sessions: any[]): Exercise[] {
+  const weeklyCounts: Record<string, number> = {};
+  const allTimeCounts: Record<string, number> = {};
+  const now = Date.now();
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  const normalizedExKeys = new Map<string, string>();
+  const getNormalizedKey = (name: string) => {
+    let key = normalizedExKeys.get(name);
+    if (!key) {
+      key = name.toLowerCase().trim();
+      normalizedExKeys.set(name, key);
+    }
+    return key;
+  };
+
+  sessions.forEach((session: any) => {
+    const sessDate = new Date(session.datetime).getTime();
+    const isLast7Days = sessDate >= sevenDaysAgo;
+
+    if (session.exercises) {
+      session.exercises.forEach((ex: any) => {
+        if (ex.name) {
+          const exKey = getNormalizedKey(ex.name);
+          const setsCount = typeof ex.sets === 'number' ? ex.sets : (ex.setsDetails?.length || 0);
+
+          allTimeCounts[exKey] = (allTimeCounts[exKey] || 0) + setsCount;
+          if (isLast7Days) {
+            weeklyCounts[exKey] = (weeklyCounts[exKey] || 0) + setsCount;
+          }
+        }
+      });
+    }
+  });
+
+  return exercises.map(ex => {
+    const exKey = getNormalizedKey(ex.name);
+    return {
+      ...ex,
+      weeklySets: weeklyCounts[exKey] || 0,
+      allTimeSets: (allTimeCounts[exKey] || 0) || (ex.allTimeSets || 0),
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton shimmer — renders while data is being enriched post-transition.
+// Zero layout computation cost, AMOLED-safe colours.
+// ─────────────────────────────────────────────────────────────────────────────
+const SkeletonRow: React.FC = React.memo(() => {
+  const opacity = useSharedValue(0.35);
+
+  React.useEffect(() => {
+    opacity.value = withTiming(0.7, { duration: 700 }, () => {
+      opacity.value = withTiming(0.35, { duration: 700 });
+    });
+    // Infinite ping-pong handled externally per list — see SkeletonList
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View style={[skeletonStyles.row, animStyle]}>
+      <View style={skeletonStyles.thumb} />
+      <View style={skeletonStyles.center}>
+        <View style={skeletonStyles.lineLong} />
+        <View style={skeletonStyles.lineShort} />
+      </View>
+      <View style={skeletonStyles.right}>
+        <View style={skeletonStyles.pill} />
+      </View>
+    </Animated.View>
+  );
+});
+
+const SKELETON_ROW_COUNT = 9;
+
+const SkeletonList: React.FC = React.memo(() => {
+  const opacity = useSharedValue(0.35);
+
+  React.useEffect(() => {
+    // Infinite smooth ping-pong shimmer on the animation thread
+    const start = () => {
+      opacity.value = withTiming(0.75, { duration: 650 }, (finished) => {
+        if (finished) opacity.value = withTiming(0.35, { duration: 650 }, (f2) => { if (f2) start(); });
+      });
+    };
+    start();
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View style={[skeletonStyles.container, animStyle]}>
+      {/* Section header placeholder */}
+      <View style={skeletonStyles.sectionHeader}>
+        <View style={skeletonStyles.sectionLetter} />
+        <View style={skeletonStyles.sectionLine} />
+      </View>
+      {Array.from({ length: SKELETON_ROW_COUNT }).map((_, i) => (
+        <View key={i} style={skeletonStyles.row}>
+          <View style={skeletonStyles.thumb} />
+          <View style={skeletonStyles.center}>
+            <View style={[skeletonStyles.lineLong, i % 3 === 0 && { width: '55%' }]} />
+            <View style={skeletonStyles.lineShort} />
+          </View>
+          <View style={skeletonStyles.right}>
+            <View style={skeletonStyles.pill} />
+          </View>
+        </View>
+      ))}
+    </Animated.View>
+  );
+});
+
 const ExerciseRow: React.FC<{
   exercise: Exercise;
   onPress: (ex: Exercise) => void;
@@ -109,59 +229,63 @@ const ExerciseRow: React.FC<{
   const thumbStyle = useMemo(() => [styles.thumb, { backgroundColor: muscleColor + '12', borderColor: muscleColor + '40' }], [muscleColor]);
 
   return (
-    <PressableRow
-      onPress={handlePress}
-      style={styles.rowContainer}
-      padding={{ vertical: spacing.md, horizontal: spacing.lg }}
-      testID={`exercises.exercise.${exercise.id}`}
-      accessibilityLabel={`${displayName}, ${exercise.muscleGroup}, ${(exercise as any).allTimeSets || 0} total sets`}
-    >
-      <View style={styles.rowContent}>
-        {/* Dynamic color-coded muscle group indicator */}
-        <View style={thumbStyle}>
-          <Text style={[styles.thumbText, { color: muscleColor }]}>
-            {exercise.muscleGroup[0].toUpperCase()}
-          </Text>
-        </View>
-
-        <View style={styles.rowCenter}>
-          <Text style={styles.exerciseName} numberOfLines={1}>{displayName}</Text>
-          <View style={styles.badgeContainer}>
-            <Text style={[styles.muscleGroup, { color: muscleColor }]}>
-              {exercise.muscleGroup.toUpperCase()}
-            </Text>
-            <Text style={styles.badgeDot}>•</Text>
-            <Text style={[styles.equipmentBadge, { color: colors.highlight }]}>
-              {(exercise.equipment || 'Other').toUpperCase()}
+    <View style={styles.rowOuter}>
+      <PressableRow
+        onPress={handlePress}
+        style={styles.rowContainer}
+        padding={{ vertical: spacing.md, horizontal: spacing.lg }}
+        testID={`exercises.exercise.${exercise.id}`}
+        accessibilityLabel={`${displayName}, ${exercise.muscleGroup}, ${(exercise as any).allTimeSets || 0} total sets`}
+        actionSlot={
+          <IconButton
+            name="ellipsis-horizontal"
+            size={18}
+            color={colors.textSecondary}
+            onPress={handleMenuPress}
+            accessibilityLabel="Exercise options"
+            style={styles.menuBtn}
+          />
+        }
+      >
+        <View style={styles.rowContent}>
+          {/* Dynamic color-coded muscle group indicator */}
+          <View style={thumbStyle}>
+            <Text style={[styles.thumbText, { color: muscleColor }]}>
+              {exercise.muscleGroup[0].toUpperCase()}
             </Text>
           </View>
-          {exercise.notes ? (
-            <Pressable onPress={handleToggleExpand} style={styles.notesToggle}>
-              <Text style={styles.noteSubtitle} numberOfLines={expanded ? undefined : 2}>
-                {exercise.notes}
+
+          <View style={styles.rowCenter}>
+            <Text style={styles.exerciseName} numberOfLines={1}>{displayName}</Text>
+            <View style={styles.badgeContainer}>
+              <Text style={[styles.muscleGroup, { color: muscleColor }]}>
+                {exercise.muscleGroup.toUpperCase()}
               </Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View style={styles.rowRight}>
-          <View style={styles.rowRightInner}>
-            <View style={styles.setsInfo}>
-              <Text style={styles.weeklySets}>{(exercise as any).allTimeSets || 0}</Text>
-              <Text style={styles.setsLabel}>{i18n.t('extras.allTimeSets')}</Text>
+              <Text style={styles.badgeDot}>•</Text>
+              <Text style={[styles.equipmentBadge, { color: colors.highlight }]}>
+                {(exercise.equipment || 'Other').toUpperCase()}
+              </Text>
             </View>
-            <IconButton
-              name="ellipsis-horizontal"
-              size={18}
-              color={colors.textSecondary}
-              onPress={handleMenuPress}
-              accessibilityLabel="Exercise options"
-              style={styles.menuBtn}
-            />
+          </View>
+
+          <View style={styles.rowRight}>
+            <Text style={styles.weeklySets}>{(exercise as any).allTimeSets || 0}</Text>
+            <Text style={styles.setsLabel}>{i18n.t('extras.allTimeSets')}</Text>
           </View>
         </View>
-      </View>
-    </PressableRow>
+      </PressableRow>
+
+      {exercise.notes ? (
+        <Pressable
+          onPress={handleToggleExpand}
+          style={styles.notesContainer}
+        >
+          <Text style={styles.noteSubtitle} numberOfLines={expanded ? undefined : 2}>
+            {exercise.notes}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 });
 
@@ -186,49 +310,22 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
   const [selectedExerciseState, setSelectedExercise] = useState<Exercise | null>(null);
 
-  const enrichedExercises = useMemo(() => {
-    const weeklyCounts: Record<string, number> = {};
-    const allTimeCounts: Record<string, number> = {};
-    const now = Date.now();
-    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  // ── Deferred data enrichment ────────────────────────────────────────────────
+  // We intentionally do NOT compute enrichedExercises synchronously on mount.
+  // Instead we register an InteractionManager task that runs only after all
+  // active interactions (including the 350 ms navigation transition) are idle.
+  // This keeps the JS thread free during the entry animation.
+  const [isDataReady, setIsDataReady] = useState(false);
+  const [enrichedExercises, setEnrichedExercises] = useState<Exercise[]>([]);
 
-    const normalizedExKeys = new Map<string, string>();
-    const getNormalizedKey = (name: string) => {
-      let key = normalizedExKeys.get(name);
-      if (!key) {
-        key = name.toLowerCase().trim();
-        normalizedExKeys.set(name, key);
-      }
-      return key;
-    };
-
-    sessions.forEach((session: any) => {
-      const sessDate = new Date(session.datetime).getTime();
-      const isLast7Days = sessDate >= sevenDaysAgo;
-
-      if (session.exercises) {
-        session.exercises.forEach((ex: any) => {
-          if (ex.name) {
-            const exKey = getNormalizedKey(ex.name);
-            const setsCount = typeof ex.sets === 'number' ? ex.sets : (ex.setsDetails?.length || 0);
-
-            allTimeCounts[exKey] = (allTimeCounts[exKey] || 0) + setsCount;
-            if (isLast7Days) {
-              weeklyCounts[exKey] = (weeklyCounts[exKey] || 0) + setsCount;
-            }
-          }
-        });
-      }
+  useEffect(() => {
+    setIsDataReady(false);
+    const task = InteractionManager.runAfterInteractions(() => {
+      setEnrichedExercises(computeEnrichedExercises(exercises, sessions));
+      setIsDataReady(true);
     });
-
-    return exercises.map(ex => {
-      const exKey = getNormalizedKey(ex.name);
-      return {
-        ...ex,
-        weeklySets: weeklyCounts[exKey] || 0,
-        allTimeSets: (allTimeCounts[exKey] || 0) || (ex.allTimeSets || 0),
-      };
-    });
+    return () => task.cancel();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, sessions]);
 
   const selectedExercise = useMemo(() => {
@@ -285,8 +382,11 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [editExShowAdvanced, setEditExShowAdvanced] = useState(false);
 
   // Exercise history and PRs memos
+  // ── Gated behind isDetailsModalVisible ──────────────────────────────────────
+  // These three memos only matter when the Details modal is open. By gating
+  // them we avoid iterating sessions on every keystroke / filter change.
   const exerciseHistory = useMemo(() => {
-    if (!selectedExercise) return [];
+    if (!isDetailsModalVisible || !selectedExercise) return [];
     const history: { weight: number; reps: number; date: string; volume: number; estimated1RM: number }[] = [];
     (sessions || []).forEach(session => {
       const performed = (session.exercises || []).find(
@@ -313,7 +413,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       }
     });
     return history.reverse(); // Chronological order
-  }, [selectedExercise, sessions]);
+  }, [isDetailsModalVisible, selectedExercise, sessions]);
 
   const exercisePRs = useMemo(() => {
     if (exerciseHistory.length === 0) return [];
@@ -469,15 +569,22 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   const keyExtractor = useCallback((item: Exercise) => item.id, []);
 
-  const getItemLayout = useMemo(() =>
+  // ── Stable getItemLayout ─────────────────────────────────────────────────────
+  // The original implementation captured `sections` in a useMemo dep, causing
+  // the layout calculator to be recreated on every filter/sort change — an
+  // O(n) allocation during interactive scrolling. Instead, we keep a ref that
+  // always points to the latest sections and produce a stable callback that is
+  // created exactly once.
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+
+  const getItemLayout = useCallback(
     sectionListGetItemLayout({
-      getItemHeight: (sectionIndex, itemIndex) => {
-        const item = sections[sectionIndex]?.data[itemIndex];
-        return item?.notes ? 72 + 32 : 72;
-      },
+      getItemHeight: (sectionIndex: number, itemIndex: number) =>
+        sectionsRef.current[sectionIndex]?.data[itemIndex]?.notes ? 104 : 72,
       getSectionHeaderHeight: () => 48,
     }),
-    [sections]
+    [] // stable — never recreated
   );
 
   const handleAddSubmit = useCallback(() => {
@@ -684,24 +791,30 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
         </View>
       )}
 
-      {/* Exercises Section List */}
+      {/* Exercises Section List — guarded by isDataReady to avoid painting
+          the list during the navigation transition. The skeleton fills the gap
+          with zero JS computation. */}
       <Animated.View style={animatedContainerStyle}>
-        <SectionList
-          sections={sections}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
-          getItemLayout={getItemLayout}
-          stickySectionHeadersEnabled
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.list}
-          overScrollMode="never"
-          removeClippedSubviews
-          maxToRenderPerBatch={12}
-          windowSize={15}
-          initialNumToRender={14}
-          testID="exercises.list"
-        />
+        {!isDataReady ? (
+          <SkeletonList />
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            getItemLayout={getItemLayout}
+            stickySectionHeadersEnabled
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.list}
+            overScrollMode="never"
+            removeClippedSubviews
+            maxToRenderPerBatch={8}
+            windowSize={9}
+            initialNumToRender={6}
+            testID="exercises.list"
+          />
+        )}
       </Animated.View>
 
       {/* Modal 1: Add Custom Exercise */}
@@ -1398,12 +1511,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginTop:       2,
   },
-  rowContainer: {
+  rowOuter: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor:   colors.bg,
+  },
+  rowContainer: {
     minHeight:         ITEM_HEIGHT,
     justifyContent:    'center',
+  },
+  notesContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   rowContent: {
     flexDirection: 'row',
@@ -2003,6 +2122,77 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 2,
     fontFamily: font.regular,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton Styles — AMOLED-safe, zero-allocation
+// ─────────────────────────────────────────────────────────────────────────────
+const skeletonStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: spacing.xs,
+  },
+  sectionHeader: {
+    height: HEADER_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    columnGap: spacing.md,
+    backgroundColor: colors.bg,
+  },
+  sectionLetter: {
+    width: 18,
+    height: 18,
+    borderRadius: radius.xs ?? 3,
+    backgroundColor: colors.surface2,
+  },
+  sectionLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.surface2,
+  },
+  row: {
+    height: ITEM_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    columnGap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  thumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface2,
+  },
+  center: {
+    flex: 1,
+    rowGap: 8,
+  },
+  lineLong: {
+    height: 12,
+    width: '72%',
+    borderRadius: radius.xs ?? 3,
+    backgroundColor: colors.surface2,
+  },
+  lineShort: {
+    height: 10,
+    width: '45%',
+    borderRadius: radius.xs ?? 3,
+    backgroundColor: colors.surface,
+  },
+  right: {
+    alignItems: 'flex-end',
+    rowGap: 4,
+  },
+  pill: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.xs ?? 3,
+    backgroundColor: colors.surface2,
   },
 });
 

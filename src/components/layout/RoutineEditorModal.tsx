@@ -58,10 +58,11 @@ interface RoutineEditorModalProps {
   initialExercises?:     string[];
   initialExercisesDetails?: any[];
   initialFolder?:        string;
+  initialNotes?:         string;
   editingId?:            string | null;
   exercises:             Exercise[];
   folders:               string[];
-  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => void;
+  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
   onClose:               () => void;
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string) => any;
   sessions?:             any[];
@@ -118,6 +119,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   initialExercises = EMPTY_STRING_ARRAY,
   initialExercisesDetails = EMPTY_ANY_ARRAY,
   initialFolder = '',
+  initialNotes = '',
   editingId = null,
   exercises,
   folders,
@@ -130,7 +132,12 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const insets = useSafeAreaInsets();
   const [routineName,  setRoutineName]  = useState(initialName);
   const [routineFolder, setRoutineFolder] = useState(initialFolder);
+  const [routineNotes, setRoutineNotes] = useState(initialNotes);
   const [editorExercises, setEditorExercises] = useState<RoutineExercise[]>([]);
+  const editorExercisesRef = useRef<RoutineExercise[]>([]);
+  useEffect(() => {
+    editorExercisesRef.current = editorExercises;
+  }, [editorExercises]);
   const [isAddExerciseVisible, setIsAddExerciseVisible] = useState(false);
   const [isFolderPickerVisible, setIsFolderPickerVisible] = useState(false);
   const [isDiscardConfirmVisible, setIsDiscardConfirmVisible] = useState(false);
@@ -165,6 +172,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     if (visible) {
       setRoutineName(initialName || '');
       setRoutineFolder(initialFolder || '');
+      setRoutineNotes(initialNotes || '');
       setIsDiscardConfirmVisible(false);
 
       // Compute initial exercises inline (derived entirely from props)
@@ -456,8 +464,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         .runOnJS(true)
         .onStart(() => {
           setActiveId(itemKey);
-          dragIdx.current   = index;
-          hoverIdx.current  = index;
+          const currentIdx = editorExercisesRef.current.findIndex(e => e.id === itemKey);
+          dragIdx.current   = currentIdx !== -1 ? currentIdx : index;
+          hoverIdx.current  = dragIdx.current;
           dragY.value = 0;
           if (Platform.OS !== 'web') Vibration.vibrate(20);
         })
@@ -536,7 +545,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       })),
     }));
 
-    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails);
+    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails, routineNotes.trim() || undefined);
     onClose();
   };
 
@@ -642,6 +651,40 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   </View>
                 )}
 
+                {/* Routine Notes Input */}
+                <View style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
+                  <Text style={{
+                    color: colors.textSecondary,
+                    fontSize: font.sizes.xs,
+                    fontFamily: font.bold,
+                    marginBottom: 6,
+                    letterSpacing: 0.5,
+                  }}>
+                    ROUTINE NOTE
+                  </Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: colors.surface2,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      borderRadius: radius.xs,
+                      color: colors.textPrimary,
+                      padding: spacing.md,
+                      fontSize: font.sizes.sm,
+                      fontFamily: font.medium,
+                      minHeight: 60,
+                      textAlignVertical: 'top',
+                    }}
+                    placeholder="Enter routine note, seat height settings, or targets..."
+                    placeholderTextColor={colors.textMuted}
+                    value={routineNotes}
+                    onChangeText={setRoutineNotes}
+                    multiline
+                    keyboardAppearance="dark"
+                    maxLength={150}
+                  />
+                </View>
+
                 {/* Empty State */}
                 {editorExercises.length === 0 && (
                   <View style={edStyles.emptyContainer}>
@@ -688,7 +731,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                             transform:       [{ translateY: dragY }],
                             zIndex:          999,
                             opacity:         0.85,
-                            backgroundColor: '#1E2633',
+                            backgroundColor: colors.surface2,
                             shadowColor:     '#000',
                             shadowOffset:    { width: 0, height: 4 },
                             shadowOpacity:   0.45,

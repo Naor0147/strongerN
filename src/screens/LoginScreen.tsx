@@ -406,10 +406,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       {/* Background gradient top glow */}
       <LinearGradient
         colors={[colors.accent + '28', 'transparent']}
-        style={[styles.topGradient, { height: layoutHeight * 0.45 }]}
+        style={[styles.topGradient, { height: layoutHeight * 0.45, pointerEvents: 'none' }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
-        pointerEvents="none"
       />
 
       <View style={{ flex: 1, paddingTop: insets.top }}>

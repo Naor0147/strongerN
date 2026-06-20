@@ -1518,7 +1518,11 @@ export default function App() {
     setIsWorkoutModalVisible(true);
   };
 
-  const handleFinishWorkout = React.useCallback((summary: { totalVolume: number; totalSets: number; durationMin: number }) => {
+  const handleFinishWorkout = React.useCallback((summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => {
+    if (summary.totalSets === 0) {
+      handleDiscardWorkout();
+      return;
+    }
     const completedExercises = workoutExercises.reduce<any[]>((acc, ex) => {
       const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
       if (count > 0) {
@@ -1565,6 +1569,7 @@ export default function App() {
             durationMinutes: summary.durationMin,
             totalVolumeKg: summary.totalVolume,
             prs: summary.totalVolume > 0 ? 1 : 0,
+            comment: summary.comment !== undefined ? summary.comment : s.comment,
           };
         }
         return s;
@@ -1574,8 +1579,8 @@ export default function App() {
       const newSession = {
         id: `session-new-${Date.now()}`,
         title: workoutName,
-        datetime: new Date(),
-        comment: 'Logged via live active tracker!',
+        datetime: new Date(startTime),
+        comment: summary.comment || 'Logged via live active tracker!',
         exercises: completedExercises.length > 0 ? completedExercises : [],
         durationMinutes: summary.durationMin,
         totalVolumeKg: summary.totalVolume,
@@ -1617,6 +1622,17 @@ export default function App() {
     setWorkoutName('Active Workout');
     setEditingSessionId(null);
   };
+
+  const handleDeleteSession = React.useCallback((sessionId: string) => {
+    setSessionsList(prev => {
+      const filtered = prev.filter(s => s.id !== sessionId);
+      setUser(prevUser => ({
+        ...prevUser,
+        totalWorkouts: filtered.length,
+      }));
+      return filtered;
+    });
+  }, []);
 
   // Persist active workout state on changes (cross-platform via db.ts)
   React.useEffect(() => {
@@ -1878,7 +1894,7 @@ export default function App() {
 
             {isHistoryEnabled && (
               <Tab.Screen name="History">
-                {() => <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} />}
+                {() => <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />}
               </Tab.Screen>
             )}
 
@@ -1971,6 +1987,15 @@ export default function App() {
             isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
             isRpeMode={isRpeMode}
             exerciseNameLanguage={exerciseNameLanguage}
+            previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
+            editingComment={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.comment : undefined}
+            onUpdateComment={(newComment) => {
+              if (editingSessionId) {
+                setSessionsList(prev => prev.map(s => s.id === editingSessionId ? { ...s, comment: newComment } : s));
+              }
+            }}
+            onUpdateStartTime={setStartTime}
+            onUpdateDefaultRestDuration={setDefaultRestDuration}
           />
 
           {/* Measure Modal Sheet (accessible from Profile) */}

@@ -36,8 +36,10 @@ export const exerciseBlockStyles = StyleSheet.create({
     fontFamily: font.bold,
   },
   exEllipsis: {
-    padding: spacing.xs,
-    marginRight: -4,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dragHandle: {
     width: 44,

@@ -404,7 +404,11 @@ const updateRegisteredStyles = () => {
         if (tokenPath) {
           const newValue = getNestedValue(colors, tokenPath);
           if (newValue) {
-            resultObj[key] = newValue;
+            try {
+              resultObj[key] = newValue;
+            } catch (err) {
+              // Ignore read-only assignment errors on Web or frozen stylesheets
+            }
           }
         }
       }

@@ -10,6 +10,7 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,9 +34,9 @@ interface WorkoutScreenProps {
   templates:         Template[];
   exercises:         Exercise[];
   onStartWorkout?:   (name: string, exercises: string[], exercisesDetails?: any[]) => void;
-  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[]) => void;
+  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
   onDeleteTemplate?: (id: string) => void;
-  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[]) => void;
+  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
   onReorderTemplates?: (newTemplates: Template[]) => void;
   folders?:          string[];
   onAddFolder?:      (name: string) => void;
@@ -77,37 +78,17 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
       ripple={rippleTokens.surface}
       accessibilityLabel={`Start ${template.name}`}
     >
-      <View style={styles.tplAccentBar} />
+
 
       <View style={styles.tplInner}>
         <View style={styles.tplHeader}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs, paddingRight: 60 }}>
             <Text style={styles.tplName} numberOfLines={1}>{template.name}</Text>
             {template.folder && (
               <View style={styles.folderBadge}>
                 <Text style={styles.folderBadgeText}>{template.folder.toUpperCase()}</Text>
               </View>
             )}
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
-            <Pressable
-              onPress={() => onMenuPress(template)}
-              style={styles.tplMenuIcon}
-              android_ripple={rippleTokens.borderless}
-            >
-              <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
-            </Pressable>
-            {dragHandlers && dragHandlers.panGesture ? (
-              <GestureDetector gesture={dragHandlers.panGesture}>
-                <View style={styles.tplDragHandle} accessibilityLabel="Drag to reorder template">
-                  <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                </View>
-              </GestureDetector>
-            ) : dragHandlers ? (
-              <View {...dragHandlers} style={styles.tplDragHandle}>
-                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -118,12 +99,42 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
           {template.exercises.join(' · ')}
         </Text>
 
+        {template.notes ? (
+          <View style={styles.notesContainer}>
+            <Ionicons name="document-text-outline" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={styles.notesText} numberOfLines={2}>
+              {template.notes}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.tplFooter}>
           <Ionicons name="time-outline" size={11} color={colors.textMuted} />
           <Text style={styles.tplLastUsed}>{timeAgo(template.lastUsed)}</Text>
         </View>
       </View>
     </PressableRow>
+
+    <View style={styles.tplAbsoluteActions}>
+      <Pressable
+        onPress={() => onMenuPress(template)}
+        style={styles.tplMenuIcon}
+        android_ripple={rippleTokens.borderless}
+      >
+        <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+      </Pressable>
+      {dragHandlers && dragHandlers.panGesture ? (
+        <GestureDetector gesture={dragHandlers.panGesture}>
+          <View style={styles.tplDragHandle} accessibilityLabel="Drag to reorder template">
+            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+          </View>
+        </GestureDetector>
+      ) : dragHandlers ? (
+        <View {...dragHandlers} style={styles.tplDragHandle}>
+          <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+        </View>
+      ) : null}
+    </View>
   </Card>
 ));
 
@@ -216,7 +227,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     exercisesDetails?: any[];
     folder: string;
     editingId: string | null;
-  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null });
+    notes?: string;
+  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '' });
 
   // Filter templates list by folder and search
   const filteredTemplates = useMemo(() => {
@@ -295,19 +307,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, []);
 
   const handleOpenCreator = () => {
-    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null });
+    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '' });
     setIsRoutineEditorVisible(true);
   };
 
-  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
+  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
     const folderVal = folder || undefined;
     if (routineEditorInitial.editingId) {
       if (onUpdateTemplate) {
-        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails);
+        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes);
       }
     } else {
       if (onAddTemplate) {
-        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails);
+        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails, notes);
       }
     }
   };
@@ -345,6 +357,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       exercisesDetails: tpl.exercisesDetails || [],
       folder: tpl.folder || '',
       editingId: tpl.id,
+      notes: tpl.notes || '',
     });
     setIsActionSheetVisible(false);
     setIsRoutineEditorVisible(true);
@@ -387,6 +400,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         }
       ]
     );
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await Clipboard.getString();
+      if (text) {
+        setImportPayloadText(text);
+      } else {
+        Alert.alert(i18n.t('common.info', 'Info'), i18n.t('extras.clipboardEmpty', 'Clipboard is empty'));
+      }
+    } catch (err) {
+      Alert.alert(i18n.t('common.error', 'Error'), 'Failed to read from clipboard');
+    }
   };
 
   const handleImportRoutine = () => {
@@ -967,6 +993,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         initialExercises={routineEditorInitial.exercises}
         initialExercisesDetails={routineEditorInitial.exercisesDetails}
         initialFolder={routineEditorInitial.folder}
+        initialNotes={routineEditorInitial.notes}
         editingId={routineEditorInitial.editingId}
         exercises={exercises}
         folders={folders}
@@ -1115,10 +1142,39 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             </View>
 
             <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>{i18n.t('workout.pasteSharePayload')}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+                <Text style={[styles.inputLabel, { marginTop: 0, flex: 1 }]}>
+                  {i18n.t('workout.pasteSharePayload', 'Paste sharing link or JSON routine payload')}
+                </Text>
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: colors.surface2,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.xs,
+                    paddingVertical: 5,
+                    paddingHorizontal: 8,
+                    columnGap: 4,
+                  }}
+                  onPress={handlePasteFromClipboard}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Ionicons name="clipboard-outline" size={12} color={colors.accent} />
+                  <Text style={{
+                    color: colors.accent,
+                    fontSize: font.sizes.xs,
+                    fontFamily: font.bold,
+                  }}>
+                    Paste
+                  </Text>
+                </Pressable>
+              </View>
+
               <TextInput
                 style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
-                placeholder={i18n.t('workout.pasteSharePlaceholder')}
+                placeholder={i18n.t('workout.pasteSharePlaceholder', 'Paste deep link or routine JSON here...')}
                 placeholderTextColor={colors.textMuted}
                 value={importPayloadText}
                 onChangeText={setImportPayloadText}
@@ -1364,6 +1420,15 @@ const styles = StyleSheet.create({
   tplCard: {
     flex:     1,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  tplAbsoluteActions: {
+    position: 'absolute',
+    top: spacing.md - 4,
+    right: spacing.md - 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.xs,
   },
   tplAccentBar: {
     position:        'absolute',
@@ -1374,7 +1439,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.highlight,
   },
   tplInner: {
-    paddingLeft: spacing.xs + 2,
+    paddingLeft: 0,
   },
   tplHeader: {
     flexDirection:  'row',
@@ -1416,6 +1481,23 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.sm,
     fontFamily: font.regular,
     lineHeight: 19,
+  },
+  notesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: spacing.sm,
+  },
+  notesText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    flex: 1,
   },
   tplFooter: {
     flexDirection: 'row',

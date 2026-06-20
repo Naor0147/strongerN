@@ -88,4 +88,36 @@ try {
   };
 } catch (e) {}
 
+// Mock react-native-reanimated
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const mockReanimated = {
+    View: ({ children, style, ...props }) => React.createElement('View', { style, ...props }, children),
+    Text: ({ children, style, ...props }) => React.createElement('Text', { style, ...props }, children),
+    ScrollView: ({ children, style, ...props }) => React.createElement('ScrollView', { style, ...props }, children),
+    Image: ({ children, style, ...props }) => React.createElement('Image', { style, ...props }, children),
+    createAnimatedComponent: (component) => component,
+  };
+  return {
+    __esModule: true,
+    default: mockReanimated,
+    ...mockReanimated,
+    useSharedValue: (val) => ({ value: val }),
+    useAnimatedStyle: (fn) => fn(),
+    withSpring: (toValue) => toValue,
+    withTiming: (toValue) => toValue,
+    interpolate: (val, input, output) => {
+      // Return a mocked interpolated value
+      return output[0];
+    },
+    runOnJS: (fn) => fn,
+    useEvent: (fn) => fn,
+  };
+});
+
+// Setup react-native-gesture-handler mock
+require('react-native-gesture-handler/jestSetup');
+
+
+
 

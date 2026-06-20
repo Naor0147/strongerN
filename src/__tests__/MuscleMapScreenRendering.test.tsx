@@ -8,6 +8,7 @@ jest.mock('react-native', () => {
     View: ({ children, style, ...props }: any) => React.createElement('View', { style, ...props }, children),
     Text: ({ children, style, ...props }: any) => React.createElement('Text', { style, ...props }, children),
     ScrollView: ({ children, style, ...props }: any) => React.createElement('ScrollView', { style, ...props }, children),
+    FlatList: ({ children, style, ...props }: any) => React.createElement('FlatList', { style, ...props }, children),
     Pressable: ({ children, style, onPress, ...props }: any) => {
       return React.createElement('Pressable', { style, onPress, ...props }, children);
     },
@@ -28,6 +29,7 @@ jest.mock('react-native', () => {
       sequence: () => ({ start: (cb: any) => cb && cb(), stop: () => {} }),
       loop: () => ({ start: (cb: any) => cb && cb(), stop: () => {} }),
       View: ({ children, style, ...props }: any) => React.createElement('View', { style, ...props }, children),
+      createAnimatedComponent: (component: any) => component,
       parallel: (anims: any[]) => ({
         start: (cb: any) => {
           cb && cb();
@@ -53,6 +55,20 @@ jest.mock('react-native', () => {
     Alert: {
       alert: jest.fn(),
     },
+    NativeModules: {},
+    TurboModuleRegistry: {
+      get: jest.fn(),
+      getEnforcing: jest.fn(),
+    },
+    UIManager: {
+      getViewManagerConfig: jest.fn(),
+      genericDirectEventTypes: {},
+    },
+    DeviceEventEmitter: {
+      addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+      emit: jest.fn(),
+    },
+    findNodeHandle: jest.fn().mockReturnValue(1),
   };
 });
 

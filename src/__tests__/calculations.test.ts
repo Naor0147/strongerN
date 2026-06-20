@@ -281,6 +281,24 @@ describe('strongerN Calculation Utilities', () => {
         require('../../assets/sounds/workout_completed.wav')
       );
     });
+
+    test('Plays satisfying click when finishing a set', async () => {
+      const { playSatisfyingClickFinishSet } = require('../utils/soundPlayer');
+      playSatisfyingClickFinishSet();
+      await new Promise(resolve => setTimeout(resolve, 5));
+      expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(
+        require('../../sound/00_satisfying_click_v3.wav')
+      );
+    });
+
+    test('Plays satisfying click when stopping the timer', async () => {
+      const { playSatisfyingClickStopTimer } = require('../utils/soundPlayer');
+      playSatisfyingClickStopTimer();
+      await new Promise(resolve => setTimeout(resolve, 5));
+      expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(
+        require('../../sound/satisfyingClick.wav')
+      );
+    });
   });
 
   describe('Modular Layout Declutter & Timer Preferences', () => {

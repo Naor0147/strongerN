@@ -1,5 +1,5 @@
 // components/ui/RoutineSharingModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   Pressable,
   TextInput,
   Alert,
+  Clipboard,
+  ToastAndroid,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Rect, Path } from 'react-native-svg';
+import QRCode from 'react-native-qrcode-svg';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
 import { Template } from '../../data/mockData';
 import i18n from '../../utils/i18n';
@@ -21,16 +24,28 @@ interface RoutineSharingModalProps {
   onClose: () => void;
 }
 
-function handleCopy(text: string, type: string) {
-  Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type }));
-}
-
 export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
   visible,
   template,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'link' | 'qr' | 'json'>('link');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback((text: string) => {
+    try {
+      Clipboard.setString(text);
+      setCopied(true);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Copied to clipboard!', ToastAndroid.SHORT);
+      } else {
+        Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type: activeTab === 'link' ? 'Deep Link' : 'JSON Data' }));
+      }
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to copy to clipboard');
+    }
+  }, [activeTab]);
 
   if (!template) return null;
 
@@ -39,9 +54,17 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
     name: template.name,
     exercises: template.exercises,
     folder: template.folder,
+    ...(template.exercisesDetails ? { exercisesDetails: template.exercisesDetails } : {}),
   };
   const serialized = JSON.stringify(sharePayload);
   const deepLink = `strongern://share?routine=${encodeURIComponent(serialized)}`;
+
+  // For QR, use a compact version to stay within QR size limits
+  const qrPayload = JSON.stringify({
+    n: template.name,
+    e: template.exercises,
+    ...(template.folder ? { f: template.folder } : {}),
+  });
 
   return (
     <Modal
@@ -65,19 +88,19 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
           <View style={styles.tabs}>
             <Pressable
               style={[styles.tab, activeTab === 'link' && styles.tabActive]}
-              onPress={() => setActiveTab('link')}
+              onPress={() => { setActiveTab('link'); setCopied(false); }}
             >
               <Text style={[styles.tabText, activeTab === 'link' && styles.tabTextActive]}>{i18n.t('routineSharing.deepLink')}</Text>
             </Pressable>
             <Pressable
               style={[styles.tab, activeTab === 'qr' && styles.tabActive]}
-              onPress={() => setActiveTab('qr')}
+              onPress={() => { setActiveTab('qr'); setCopied(false); }}
             >
               <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>{i18n.t('routineSharing.qrCode')}</Text>
             </Pressable>
             <Pressable
               style={[styles.tab, activeTab === 'json' && styles.tabActive]}
-              onPress={() => setActiveTab('json')}
+              onPress={() => { setActiveTab('json'); setCopied(false); }}
             >
               <Text style={[styles.tabText, activeTab === 'json' && styles.tabTextActive]}>{i18n.t('routineSharing.jsonPayload')}</Text>
             </Pressable>
@@ -96,11 +119,14 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                   selectTextOnFocus
                 />
                 <Pressable
-                  style={styles.actionBtn}
-                  onPress={() => handleCopy(deepLink, 'Deep Link')}
+                  style={[styles.actionBtn, copied && styles.actionBtnCopied]}
+                  onPress={() => handleCopy(deepLink)}
+                  android_ripple={rippleTokens.accent}
                 >
-                  <Ionicons name="copy-outline" size={16} color="#0D0F14" />
-                  <Text style={styles.actionBtnText}>{i18n.t('routineSharing.copyDeepLink')}</Text>
+                  <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color="#0D0F14" />
+                  <Text style={styles.actionBtnText}>
+                    {copied ? 'Copied!' : i18n.t('routineSharing.copyDeepLink')}
+                  </Text>
                 </Pressable>
               </View>
             )}
@@ -111,41 +137,26 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                   {i18n.t('routineSharing.qrCodeDesc')}
                 </Text>
                 
-                {/* Simulated QR Code using React Native SVG */}
+                {/* Real QR Code generated from routine data */}
                 <View style={styles.qrContainer}>
-                  <Svg width={140} height={140} viewBox="0 0 100 100">
-                    <Rect width={100} height={100} fill="#0D0F14" />
-                    {/* Corners finders */}
-                    <Rect x={4} y={4} width={24} height={24} fill={colors.accent} rx={3} />
-                    <Rect x={7} y={7} width={18} height={18} fill="#0D0F14" rx={2} />
-                    <Rect x={10} y={10} width={12} height={12} fill={colors.accent} rx={1} />
-
-                    <Rect x={72} y={4} width={24} height={24} fill={colors.accent} rx={3} />
-                    <Rect x={75} y={7} width={18} height={18} fill="#0D0F14" rx={2} />
-                    <Rect x={78} y={10} width={12} height={12} fill={colors.accent} rx={1} />
-
-                    <Rect x={4} y={72} width={24} height={24} fill={colors.accent} rx={3} />
-                    <Rect x={7} y={75} width={18} height={18} fill="#0D0F14" rx={2} />
-                    <Rect x={10} y={78} width={12} height={12} fill={colors.accent} rx={1} />
-
-                    {/* Randomized digital matrix pattern blocks */}
-                    <Path
-                      d="M36,12 H48 V16 H36 Z M56,8 H64 V12 H56 Z M36,24 H40 V36 H36 Z M48,28 H56 V32 H48 Z M40,44 H48 V48 H40 Z M64,36 H76 V40 H64 Z M52,52 H64 V56 H52 Z M24,52 H32 V60 H24 Z M12,48 H16 V60 H12 Z M60,68 H72 V76 H60 Z M76,56 H84 V68 H76 Z M88,76 H96 V84 H88 Z M76,80 H80 V92 H76 Z M36,80 H44 V88 H36 Z M48,76 H52 V84 H48 Z"
-                      fill={colors.accent}
-                    />
-                    <Path
-                      d="M20,38 H28 V42 H20 Z M44,64 H52 V68 H44 Z M68,84 H72 V92 H68 Z M84,36 H92 V44 H84 Z M8,64 H12 V68 H8 Z"
-                      fill={colors.highlight}
-                    />
-                  </Svg>
+                  <QRCode
+                    value={qrPayload}
+                    size={160}
+                    color={colors.accent}
+                    backgroundColor="#0D0F14"
+                    ecl="L"
+                  />
                 </View>
 
                 <Pressable
-                  style={[styles.actionBtn, { backgroundColor: colors.highlight }]}
-                  onPress={() => Alert.alert(i18n.t('routineSharing.qrCode'), i18n.t('routineSharing.qrCodeGenerated'))}
+                  style={[styles.actionBtn, copied && styles.actionBtnCopied]}
+                  onPress={() => handleCopy(qrPayload)}
+                  android_ripple={rippleTokens.accent}
                 >
-                  <Ionicons name="camera-outline" size={16} color="#0D0F14" />
-                  <Text style={[styles.actionBtnText, { color: '#0D0F14' }]}>{i18n.t('routineSharing.showScanner')}</Text>
+                  <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color="#0D0F14" />
+                  <Text style={styles.actionBtnText}>
+                    {copied ? 'Copied!' : 'Copy QR Data'}
+                  </Text>
                 </Pressable>
               </View>
             )}
@@ -163,11 +174,14 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                   selectTextOnFocus
                 />
                 <Pressable
-                  style={styles.actionBtn}
-                  onPress={() => handleCopy(serialized, 'JSON Data')}
+                  style={[styles.actionBtn, copied && styles.actionBtnCopied]}
+                  onPress={() => handleCopy(serialized)}
+                  android_ripple={rippleTokens.accent}
                 >
-                  <Ionicons name="copy-outline" size={16} color="#0D0F14" />
-                  <Text style={styles.actionBtnText}>{i18n.t('routineSharing.copyJsonString')}</Text>
+                  <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color="#0D0F14" />
+                  <Text style={styles.actionBtnText}>
+                    {copied ? 'Copied!' : i18n.t('routineSharing.copyJsonString')}
+                  </Text>
                 </Pressable>
               </View>
             )}
@@ -283,17 +297,22 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
+  actionBtnCopied: {
+    backgroundColor: colors.success,
+  },
   actionBtnText: {
     color: '#0D0F14',
     fontSize: font.sizes.xs,
     fontFamily: font.bold,
   },
   qrContainer: {
-    padding: spacing.md,
+    padding: spacing.lg,
     backgroundColor: '#0D0F14',
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.sm,
-    marginVertical: spacing.xs,
+    marginVertical: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -24,6 +24,8 @@ interface PressableRowProps {
   accessibilityLabel?: string;
   accessibilityRole?:  'button' | 'link' | 'menuitem' | 'none';
   disabled?:   boolean;
+  /** Action slot that renders alongside the main pressable area, completely non-nested */
+  actionSlot?: React.ReactNode;
 }
 
 const PressableRow: React.FC<PressableRowProps> = ({
@@ -36,6 +38,7 @@ const PressableRow: React.FC<PressableRowProps> = ({
   accessibilityLabel,
   accessibilityRole = 'button',
   disabled,
+  actionSlot,
 }) => {
   const paddingStyle: ViewStyle = React.useMemo(() => {
     if (padding === undefined) return {};
@@ -47,6 +50,52 @@ const PressableRow: React.FC<PressableRowProps> = ({
       paddingHorizontal: padding.horizontal ?? spacing.lg,
     };
   }, [padding]);
+
+  const { pressablePadding, actionPadding } = React.useMemo(() => {
+    if (!actionSlot) {
+      return { pressablePadding: paddingStyle, actionPadding: {} };
+    }
+    const vPadding = paddingStyle.paddingVertical ?? 0;
+    const hPadding = paddingStyle.paddingHorizontal ?? 0;
+    return {
+      pressablePadding: {
+        paddingVertical: vPadding,
+        paddingLeft: hPadding,
+        paddingRight: 0,
+      },
+      actionPadding: {
+        paddingVertical: vPadding,
+        paddingRight: hPadding,
+        paddingLeft: spacing.xs,
+      }
+    };
+  }, [actionSlot, paddingStyle]);
+
+  if (actionSlot) {
+    return (
+      <View style={[styles.container, style]}>
+        <Pressable
+          onPress={onPress}
+          android_ripple={rippleOverride ?? rippleTokens.surface}
+          style={({ pressed }) => [
+            styles.base,
+            styles.pressableArea,
+            pressablePadding,
+            pressed && styles.pressed,
+          ]}
+          testID={testID}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityRole={accessibilityRole}
+          disabled={disabled}
+        >
+          {children}
+        </Pressable>
+        <View style={[styles.actionArea, actionPadding]}>
+          {actionSlot}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Pressable
@@ -69,8 +118,19 @@ const PressableRow: React.FC<PressableRowProps> = ({
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   base: {
     overflow: 'hidden', // required for ripple clipping
+  },
+  pressableArea: {
+    flex: 1,
+  },
+  actionArea: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pressed: {
     opacity: 0.88,

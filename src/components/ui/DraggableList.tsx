@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { colors } from '../../theme';
 
 interface RenderItemWrapperProps<T> {
   renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
@@ -26,6 +27,68 @@ function RenderItemWrapper<T>({
   return renderItem({ item, index, dragHandlers, isActive });
 }
 
+interface DragItemProps<T> {
+  item: T;
+  index: number;
+  id: string;
+  isActive: boolean;
+  panGesture: any;
+  dragY: Animated.SharedValue<number>;
+  itemLayouts: React.MutableRefObject<{ [key: string]: { y: number; height: number } }>;
+  renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
+}
+
+function DragItem<T>({
+  item,
+  index,
+  id,
+  isActive,
+  panGesture,
+  dragY,
+  itemLayouts,
+  renderItem,
+}: DragItemProps<T>) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: isActive ? dragY.value : 0 }],
+  }));
+
+  return (
+    <Animated.View
+      onLayout={(e) => {
+        if (!isActive) {
+          itemLayouts.current[id] = {
+            y: e.nativeEvent.layout.y,
+            height: e.nativeEvent.layout.height,
+          };
+        }
+      }}
+      style={isActive ? [
+        {
+          zIndex: 999,
+          opacity: 0.85,
+          backgroundColor: colors.surface2,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.45,
+          shadowRadius: 10,
+          elevation: 8,
+        },
+        animatedStyle,
+      ] : undefined}
+    >
+      <View>
+        <RenderItemWrapper
+          renderItem={renderItem}
+          item={item}
+          index={index}
+          dragHandlers={{ panGesture }}
+          isActive={isActive}
+        />
+      </View>
+    </Animated.View>
+  );
+}
+
 interface DraggableListProps<T> {
   data: T[];
   renderItem: (info: { item: T; index: number; dragHandlers: any; isActive: boolean }) => React.ReactElement;
@@ -41,12 +104,17 @@ export function DraggableList<T>({
 }: DraggableListProps<T>) {
   const [localData, setLocalData] = useState<T[]>(data);
   const prevDataRef = useRef<T[]>(data);
+  const localDataRef = useRef<T[]>(data);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const itemLayouts = useRef<{ [key: string]: { y: number; height: number } }>({});
   const dragY = useSharedValue(0);
   const dragIdx = useRef<number>(-1);
   const hoverIdx = useRef<number>(-1);
+
+  useEffect(() => {
+    localDataRef.current = localData;
+  }, [localData]);
 
   if (data !== prevDataRef.current) {
     if (!activeId) {
@@ -94,91 +162,65 @@ export function DraggableList<T>({
     }
   }, [activeId, localData, keyExtractor]);
 
+  const gestureMap = useRef<{ [key: string]: any }>({});
   const getDragHandlers = useCallback((item: T, index: number) => {
     const id = keyExtractor(item);
-    const panGesture = Gesture.Pan()
-      .runOnJS(true)
-      .onStart(() => {
-        setActiveId(id);
-        dragIdx.current = index;
-        hoverIdx.current = index;
-        dragY.value = 0;
-        if (Platform.OS !== 'web') {
-          Vibration.vibrate(20);
-        }
-      })
-      .onUpdate((e) => {
-        dragY.value = e.translationY;
-        handleMove(e.translationY);
-      })
-      .onEnd(() => {
-        const finalData = [...localData];
-        setActiveId(null);
-        dragIdx.current = -1;
-        hoverIdx.current = -1;
-        dragY.value = 0;
-        onDragEnd(finalData);
-      })
-      .onFinalize(() => {
-        setActiveId(null);
-        dragIdx.current = -1;
-        hoverIdx.current = -1;
-        dragY.value = 0;
-      });
-
-    return { panGesture };
-  }, [handleMove, localData, keyExtractor, onDragEnd]);
+    if (!gestureMap.current[id]) {
+      const panGesture = Gesture.Pan()
+        .runOnJS(true)
+        .onStart(() => {
+          setActiveId(id);
+          const currentIdx = localDataRef.current.findIndex(x => keyExtractor(x) === id);
+          dragIdx.current = currentIdx !== -1 ? currentIdx : index;
+          hoverIdx.current = dragIdx.current;
+          dragY.value = 0;
+          if (Platform.OS !== 'web') {
+            Vibration.vibrate(20);
+          }
+        })
+        .onUpdate((e) => {
+          dragY.value = e.translationY;
+          handleMove(e.translationY);
+        })
+        .onEnd(() => {
+          const finalData = [...localDataRef.current];
+          setActiveId(null);
+          dragIdx.current = -1;
+          hoverIdx.current = -1;
+          dragY.value = 0;
+          onDragEnd(finalData);
+        })
+        .onFinalize(() => {
+          setActiveId(null);
+          dragIdx.current = -1;
+          hoverIdx.current = -1;
+          dragY.value = 0;
+        });
+      gestureMap.current[id] = panGesture;
+    }
+    return gestureMap.current[id];
+  }, [handleMove, keyExtractor, onDragEnd]);
 
   return (
     <View style={styles.container}>
       {localData.map((item, index) => {
         const id = keyExtractor(item);
         const isActive = activeId === id;
-        const { panGesture } = getDragHandlers(item, index);
+        const panGesture = getDragHandlers(item, index);
 
-        const DragItem = () => {
-          const animatedStyle = useAnimatedStyle(() => ({
-            transform: [{ translateY: dragY.value }],
-          }));
-
-          return (
-            <Animated.View
-              onLayout={(e) => {
-                if (!isActive) {
-                  itemLayouts.current[id] = {
-                    y: e.nativeEvent.layout.y,
-                    height: e.nativeEvent.layout.height,
-                  };
-                }
-              }}
-              style={isActive ? [
-                {
-                  zIndex: 999,
-                  opacity: 0.85,
-                  backgroundColor: '#1E2633',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.45,
-                  shadowRadius: 10,
-                  elevation: 8,
-                },
-                animatedStyle,
-              ] : undefined}
-            >
-              <View>
-                <RenderItemWrapper
-                  renderItem={renderItem}
-                  item={item}
-                  index={index}
-                  dragHandlers={{ panGesture }}
-                  isActive={isActive}
-                />
-              </View>
-            </Animated.View>
-          );
-        };
-
-        return <DragItem key={id} />;
+        return (
+          <DragItem
+            key={id}
+            item={item}
+            index={index}
+            id={id}
+            isActive={isActive}
+            panGesture={panGesture}
+            dragY={dragY}
+            itemLayouts={itemLayouts}
+            renderItem={renderItem}
+          />
+        );
       })}
     </View>
   );

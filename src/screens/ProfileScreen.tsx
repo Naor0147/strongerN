@@ -287,8 +287,8 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
           style={styles.volSliderTrack}
           onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
         >
-        <View pointerEvents="none" style={[styles.volSliderFill, { width: `${localVolume * 100}%` }]} />
-        <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${localVolume * 100}%` }]} />
+        <View style={[styles.volSliderFill, { width: `${localVolume * 100}%`, pointerEvents: 'none' }]} />
+        <View style={[styles.volSliderThumb, { left: `${localVolume * 100}%`, pointerEvents: 'none' }]} />
         </View>
       </GestureDetector>
     </View>
@@ -361,8 +361,8 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
           style={styles.volSliderTrack}
           onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
         >
-          <View pointerEvents="none" style={[styles.volSliderFill, { width: `${(localSpeed / 2) * 100}%` }]} />
-          <View pointerEvents="none" style={[styles.volSliderThumb, { left: `${(localSpeed / 2) * 100}%` }]} />
+          <View style={[styles.volSliderFill, { width: `${(localSpeed / 2) * 100}%`, pointerEvents: 'none' }]} />
+          <View style={[styles.volSliderThumb, { left: `${(localSpeed / 2) * 100}%`, pointerEvents: 'none' }]} />
         </View>
       </GestureDetector>
     </View>
@@ -1461,11 +1461,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Ionicons name="flash" size={16} color={nextWorkout.badgeColor} style={{ marginRight: spacing.xs }} />
                 <Text style={styles.quickStartLabel}>{i18n.t('profile.upNext')}</Text>
               </View>
-              <Badge 
-                label={nextWorkout.type.toUpperCase()} 
-                color={nextWorkout.badgeColor} 
-                textColor={nextWorkout.badgeColor}
-              />
+
             </View>
             
             <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
@@ -1493,9 +1489,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Text style={styles.chartTitle}>{i18n.t('profile.workoutsPerWeek')}</Text>
                 <Text style={styles.chartSubtitle}>{i18n.t('profile.last8Weeks')}</Text>
               </View>
-              <View style={styles.chartBadge}>
-                <Text style={styles.chartBadgeText}>{i18n.t('profile.active')}</Text>
-              </View>
+
             </View>
             <BarChart data={chartData} chartHeight={200} />
           </Card>
@@ -2402,35 +2396,29 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       </View>
                     </View>
                     <Pressable
-                      style={[
-                        styles.togglePill,
-                        styles.togglePillSegmented,
-                      ]}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: colors.surface2,
+                        borderRadius: radius.xs,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        paddingVertical: spacing.xs + 2,
+                        paddingHorizontal: spacing.md,
+                        columnGap: spacing.xs,
+                      }}
                       onPress={() => setExerciseNameLanguage && setExerciseNameLanguage(exerciseNameLanguage === 'en' ? 'he' : 'en')}
                       android_ripple={rippleTokens.surface}
                     >
-                      <View style={[
-                        styles.togglePillSegment,
-                        exerciseNameLanguage === 'en' && styles.togglePillSegmentActive,
-                      ]}>
-                        <Text style={[
-                          styles.togglePillText,
-                          exerciseNameLanguage === 'en' && styles.togglePillTextActive,
-                        ]}>
-                          {i18n.t('extras.englishNames')}
-                        </Text>
-                      </View>
-                      <View style={[
-                        styles.togglePillSegment,
-                        exerciseNameLanguage === 'he' && styles.togglePillSegmentActive,
-                      ]}>
-                        <Text style={[
-                          styles.togglePillText,
-                          exerciseNameLanguage === 'he' && styles.togglePillTextActive,
-                        ]}>
-                          {i18n.t('extras.hebrewNames')}
-                        </Text>
-                      </View>
+                      <Text style={{
+                        color: colors.accent,
+                        fontSize: font.sizes.sm,
+                        fontFamily: font.bold,
+                        letterSpacing: 0.5,
+                      }}>
+                        {exerciseNameLanguage === 'en' ? 'ENG' : 'HEB'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
                     </Pressable>
                   </View>
 
@@ -3723,6 +3711,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: spacing.md,
   },
   settingTitle: {
     color: colors.textPrimary,
