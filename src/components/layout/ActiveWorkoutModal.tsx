@@ -578,6 +578,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const resumeStartTime = useRef(new Date());
   // Offset in seconds from previous session duration (for edit/resume)
   const accumulatedOffsetSeconds = useRef(previousDurationMin * 60);
+  const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
   const [elapsed, setElapsed] = useState(() => formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
   // Workout menu state
   const [isWorkoutMenuVisible, setIsWorkoutMenuVisible] = useState(false);
