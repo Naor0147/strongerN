@@ -180,51 +180,50 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
 
   // triggerDeleteFlow reads onDeleteRef.current — no dependency on onDelete prop.
   // This makes it stable, which in turn makes panGesture stable.
-  const triggerDeleteFlow = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-
+  const handlePostDeleteAnimation = useCallback(() => {
     const currentOnDelete = onDeleteRef.current;
 
-    const performDeleteAnimation = (onCompleted: () => void) => {
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      }
-      const toVal = width.value ? -(width.value + 50) : -500;
-
-      const safeCleanup = () => {
+    if (currentOnDelete.length === 2) {
+      const confirm = (onConfirmedStateUpdate: () => void) => {
         cancelAnimation(translateX);
         translateX.value = 0;
         isOpen.value = false;
         hasTriggeredHaptic.value = false;
-
         setTimeout(() => {
-          onCompleted();
+          onConfirmedStateUpdate();
         }, 0);
-      };
-
-      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
-        runOnJS(safeCleanup)();
-      });
-    };
-
-    if (currentOnDelete.length === 2) {
-      const confirm = (onConfirmedStateUpdate: () => void) => {
-        performDeleteAnimation(onConfirmedStateUpdate);
       };
       const cancel = () => {
         isOpen.value = false;
         hasTriggeredHaptic.value = false;
         animateTranslation(0);
       };
-      (currentOnDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
+      (currentOnDelete as any)(confirm, cancel);
     } else {
-      performDeleteAnimation(() => {
+      cancelAnimation(translateX);
+      translateX.value = 0;
+      isOpen.value = false;
+      hasTriggeredHaptic.value = false;
+      setTimeout(() => {
         (currentOnDelete as () => void)();
-      });
+      }, 0);
     }
   }, [animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const triggerDeleteFlow = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    const w = width.value;
+    const toVal = w ? -(w + 50) : -500;
+
+    translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+      runOnJS(handlePostDeleteAnimation)();
+    });
+  }, [handlePostDeleteAnimation]);
 
   // ─── panGesture is memoized — created ONCE. All shared values are read
   // via .value on the UI thread. All JS callbacks are stable useCallbacks.
