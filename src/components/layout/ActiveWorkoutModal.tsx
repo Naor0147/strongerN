@@ -18,10 +18,9 @@ import {
   UIManager,
   AppState,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing, cancelAnimation, withDelay } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
-
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -76,7 +75,7 @@ interface ActiveWorkoutModalProps {
   exercises:          ExerciseSet[];
   isAutoTimerEnabled: boolean;
   onClose:            () => void;
-  onFinish:           (summary: { totalVolume: number; totalSets: number; durationMin: number }) => void;
+  onFinish:           (summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => void;
   onDiscard:          () => void;
   exerciseLibrary?:   any[];
   onUpdateActiveExercises?: (exercises: any[]) => void;
@@ -111,6 +110,27 @@ function formatElapsed(startTime: Date, offsetSeconds: number = 0): string {
   return h > 0 ? `${h}:${min}:${sec}` : `${min}:${sec}`;
 }
 
+const AnimatedCheckmark: React.FC<{ completed: boolean }> = ({ completed }) => {
+  const scale = useSharedValue(completed ? 1 : 0);
+  const opacity = useSharedValue(completed ? 1 : 0);
+
+  useEffect(() => {
+    scale.value = withSpring(completed ? 1 : 0, { damping: 15, stiffness: 180 });
+    opacity.value = withTiming(completed ? 1 : 0, { duration: 120 });
+  }, [completed]);
+
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={checkStyle}>
+      <Ionicons name="checkmark" size={14} color="#0D0F14" />
+    </Animated.View>
+  );
+};
+
 interface SwipeableRowProps {
   children: React.ReactNode;
   onDelete: ((confirm: (stateUpdateCb: () => void) => void, cancel: () => void) => void) | (() => void);
@@ -121,17 +141,31 @@ interface SwipeableRowProps {
 const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
-  const [width, setWidth] = useState(0);
-  const [isPastThreshold, setIsPastThreshold] = useState(false);
+  const width = useSharedValue(0);
   const hasTriggeredHaptic = useSharedValue(false);
 
-  const currentThreshold = width ? -width * 0.45 : -150;
+  // ─── Ref pattern: keep onDelete always current without breaking stability
+  // of useCallback/useMemo that depend on it. This stops panGesture from
+  // being recreated every time the parent renders a new inline arrow function.
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
 
-  const animateTranslation = useCallback((toVal: number, callback?: () => void) => {
+  useEffect(() => {
+    return () => {
+      cancelAnimation(translateX);
+    };
+  }, []);
+
+  const triggerHaptic = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+  }, []);
+
+  const animateTranslation = useCallback((toVal: number) => {
     'worklet';
     if (globalAnimation.speed === 0) {
       translateX.value = toVal;
-      if (callback) runOnJS(callback)();
     } else {
       translateX.value = withSpring(
         toVal,
@@ -139,56 +173,66 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
           stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
           damping: 16 / globalAnimation.speed,
           mass: 0.9,
-        },
-        () => {
-          if (callback) runOnJS(callback)();
         }
       );
     }
   }, []);
 
+  // triggerDeleteFlow reads onDeleteRef.current — no dependency on onDelete prop.
+  // This makes it stable, which in turn makes panGesture stable.
   const triggerDeleteFlow = useCallback(() => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
 
+    const currentOnDelete = onDeleteRef.current;
+
     const performDeleteAnimation = (onCompleted: () => void) => {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
-      const toVal = width ? -(width + 50) : -500;
-      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+      const toVal = width.value ? -(width.value + 50) : -500;
+
+      const safeCleanup = () => {
+        cancelAnimation(translateX);
         translateX.value = 0;
         isOpen.value = false;
-        runOnJS(setIsPastThreshold)(false);
         hasTriggeredHaptic.value = false;
-        runOnJS(onCompleted)();
+
+        setTimeout(() => {
+          onCompleted();
+        }, 0);
+      };
+
+      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+        runOnJS(safeCleanup)();
       });
     };
 
-    if (onDelete.length === 2) {
+    if (currentOnDelete.length === 2) {
       const confirm = (onConfirmedStateUpdate: () => void) => {
         performDeleteAnimation(onConfirmedStateUpdate);
       };
       const cancel = () => {
-        animateTranslation(0, () => {
-          isOpen.value = false;
-          setIsPastThreshold(false);
-          hasTriggeredHaptic.value = false;
-        });
+        isOpen.value = false;
+        hasTriggeredHaptic.value = false;
+        animateTranslation(0);
       };
-      (onDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
+      (currentOnDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
     } else {
       performDeleteAnimation(() => {
-        (onDelete as () => void)();
+        (currentOnDelete as () => void)();
       });
     }
-  }, [width, onDelete, animateTranslation]);
+  }, [animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const panGesture = Gesture.Pan()
+  // ─── panGesture is memoized — created ONCE. All shared values are read
+  // via .value on the UI thread. All JS callbacks are stable useCallbacks.
+  const panGesture = useMemo(() => Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-8, 8])
     .onUpdate((e) => {
+      'worklet';
       let newX = e.translationX;
       if (isOpen.value) {
         newX = -70 + e.translationX;
@@ -196,12 +240,11 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
       if (newX > 0) newX = 0;
       translateX.value = newX;
 
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const past = newX < currentThreshold;
       if (past) {
         if (!hasTriggeredHaptic.value) {
-          if (Platform.OS !== 'web') {
-            runOnJS(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}))();
-          }
+          runOnJS(triggerHaptic)();
           hasTriggeredHaptic.value = true;
         }
       } else {
@@ -209,9 +252,10 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
           hasTriggeredHaptic.value = false;
         }
       }
-      runOnJS(setIsPastThreshold)(past);
     })
     .onEnd((e) => {
+      'worklet';
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
 
       if (currentX < currentThreshold || e.velocityX < -500) {
@@ -219,32 +263,53 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
       } else {
         const threshold = isOpen.value ? -30 : -45;
         if (e.translationX < threshold) {
-          animateTranslation(-70, () => { isOpen.value = true; });
+          isOpen.value = true;
+          animateTranslation(-70);
         } else {
-          animateTranslation(0, () => { isOpen.value = false; });
+          isOpen.value = false;
+          animateTranslation(0);
         }
         hasTriggeredHaptic.value = false;
-        runOnJS(setIsPastThreshold)(false);
       }
-    });
-
-  const handleOverlayPress = useCallback(() => {
-    if (isOpen.value) {
-      animateTranslation(0, () => { isOpen.value = false; });
-    }
-  }, []);
+    }),
+  [triggerDeleteFlow, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,
   }));
 
   const animatedTrashStyle = useAnimatedStyle(() => {
-    const scale = translateX.value < currentThreshold
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const scale = translateX.value < thresh
       ? 1.3
       : translateX.value < -70
         ? 1.0
         : 0.8;
-    return { transform: [{ scale }] };
+    return { 
+      transform: [{ scale }],
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 24,
+      height: 24,
+    };
+  });
+
+  const animatedTrashOutlineStyle = useAnimatedStyle(() => {
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const isPast = translateX.value < thresh;
+    return {
+      opacity: isPast ? 0 : 1,
+      position: 'absolute',
+    };
+  });
+
+  const animatedTrashFilledStyle = useAnimatedStyle(() => {
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const isPast = translateX.value < thresh;
+    return {
+      opacity: isPast ? 1 : 0,
+      position: 'absolute',
+    };
   });
 
   const animatedContentStyle = useAnimatedStyle(() => ({
@@ -254,7 +319,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
   return (
     <View 
       style={[styles.swipeContainer, { borderRadius }, style]}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      onLayout={(e) => { width.value = e.nativeEvent.layout.width; }}
     >
       <Animated.View
         style={[StyleSheet.absoluteFill, animatedUnderlayStyle]}
@@ -266,14 +331,14 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
           <View style={[
             styles.swipeDeleteAction, 
             { borderRadius },
-            isPastThreshold && { backgroundColor: '#FF3B30' }
           ]}>
             <Animated.View style={animatedTrashStyle}>
-              <Ionicons 
-                name={isPastThreshold ? "trash" : "trash-outline"} 
-                size={20} 
-                color="#FFF" 
-              />
+              <Animated.View style={animatedTrashOutlineStyle}>
+                <Ionicons name="trash-outline" size={20} color="#FFF" />
+              </Animated.View>
+              <Animated.View style={animatedTrashFilledStyle}>
+                <Ionicons name="trash" size={20} color="#FFF" />
+              </Animated.View>
             </Animated.View>
           </View>
         </Pressable>
@@ -281,7 +346,6 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderR
       <GestureDetector gesture={panGesture}>
         <Animated.View
           style={animatedContentStyle}
-          onTouchStart={handleOverlayPress}
         >
           {children}
         </Animated.View>
@@ -544,6 +608,29 @@ const cancelAndScheduleRestNotification = async (duration: number) => {
   }
 };
 
+const serializeState = (exercises: any[], note: string): string => {
+  try {
+    const serializedExs = exercises.map(ex => ({
+      name: ex.name,
+      sets: (ex.sets || []).map((s: any) => ({
+        weight: s.weight?.toString() || '',
+        reps: s.reps?.toString() || '',
+        completed: !!s.completed,
+        rpe: s.rpe?.toString() || '',
+        category: s.category || 'S',
+        isUnilateral: !!s.isUnilateral,
+        leftWeight: s.leftWeight?.toString() || '',
+        leftReps: s.leftReps?.toString() || '',
+        rightWeight: s.rightWeight?.toString() || '',
+        rightReps: s.rightReps?.toString() || '',
+      }))
+    }));
+    return JSON.stringify({ note, exercises: serializedExs });
+  } catch (e) {
+    return '';
+  }
+};
+
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
   workoutName,
@@ -579,6 +666,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Offset in seconds from previous session duration (for edit/resume)
   const accumulatedOffsetSeconds = useRef(previousDurationMin * 60);
   const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
+  const wasInitializedRef = useRef(false);
   const [elapsed, setElapsed] = useState(() => formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
   // Workout menu state
   const [isWorkoutMenuVisible, setIsWorkoutMenuVisible] = useState(false);
@@ -863,14 +951,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     prevStartKeyForResetRef.current = currentStartKey;
   }
 
-  // Sync props to state when modal becomes visible or when a new workout session actually starts
+  // Sync props to state when modal becomes visible
   useEffect(() => {
-    if (visible && exercises.length > 0) {
+    if (visible) {
       const startKey = startTime.toISOString();
       const isNewWorkout = lastStartTimeRef.current !== startKey;
 
-      if (isNewWorkout || activeExercises.length === 0) {
+      if (!wasInitializedRef.current || isNewWorkout || activeExercises.length === 0) {
         lastStartTimeRef.current = startKey;
+        wasInitializedRef.current = true;
+
+        // Reset timer refs and note state on a fresh track/edit session start
+        resumeStartTime.current = new Date();
+        accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
+        setElapsed(formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
+        setWorkoutNote(editingComment || '');
+
         const initial = exercises.map((ex: any, exIdx) => {
           const setsCount = typeof ex.sets === 'number' ? ex.sets : (Array.isArray(ex.sets) ? ex.sets.length : 3);
           
@@ -993,10 +1089,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           };
         });
         setActiveExercises(initial);
+
+        // Capture initial state for change detection (to check if user made changes)
+        initialStateRef.current = {
+          exercises: serializeState(initial, editingComment || ''),
+          note: editingComment || ''
+        };
+
         hasSyncedPropsRef.current = true;
       }
     }
-  }, [visible, startTime]);
+  }, [visible, startTime, exercises, previousDurationMin, editingComment]);
 
   // Sync active exercises back to parent App state so they are stored
   useEffect(() => {
@@ -1343,6 +1446,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         };
       });
     });
+    // Shift or clear active input if it matches the deleted set/exercise
+    setActiveInput(prev => {
+      if (prev && prev.exIdx === exIdx) {
+        if (prev.setIdx === setIdx) {
+          return null; // Focused set was deleted
+        } else if (prev.setIdx > setIdx) {
+          return { ...prev, setIdx: prev.setIdx - 1 }; // Shift index down
+        }
+      }
+      return prev;
+    });
   }, []);
 
   // Handle custom keyboard "Next" button click
@@ -1478,21 +1592,37 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     if (totalSets === 0) {
       setActiveExercises([]);
+      wasInitializedRef.current = false;
       onDiscard();
       return;
     }
 
-    const sessionSec = Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000);
-    const totalDurationSec = accumulatedOffsetSeconds.current + sessionSec;
+    const sessionSec = Math.max(0, Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000));
+    
+    // Check if user made any actual changes to the workout
+    const currentSerialized = serializeState(activeExercises, workoutNote);
+    const hasChanges = currentSerialized !== initialStateRef.current.exercises;
+    
+    let durationMin = 0;
+    if (previousDurationMin > 0 && !hasChanges) {
+      durationMin = previousDurationMin;
+    } else {
+      const totalDurationSec = accumulatedOffsetSeconds.current + sessionSec;
+      durationMin = Math.max(1, Math.round(totalDurationSec / 60));
+    }
+
     playWorkoutCompletedSound();
     // Store the workout note in comment if provided
-    if (onUpdateComment && workoutNote.trim()) {
+    if (onUpdateComment) {
       onUpdateComment(workoutNote.trim());
     }
+    
+    wasInitializedRef.current = false;
     onFinish({
       totalVolume,
       totalSets,
-      durationMin: Math.max(1, Math.round(totalDurationSec / 60)),
+      durationMin,
+      comment: workoutNote.trim(),
     });
   };
 
@@ -1506,6 +1636,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     if (completedSetsCount === 0) {
       setActiveExercises([]);
+      wasInitializedRef.current = false;
       onDiscard();
     } else {
       Alert.alert(
@@ -1518,6 +1649,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             style: 'destructive',
             onPress: () => {
               setActiveExercises([]);
+              wasInitializedRef.current = false;
               onDiscard();
             },
           },
@@ -1544,8 +1676,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             style: 'destructive',
             onPress: () => {
               LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setActiveExercises(prev => prev.filter((_, idx) => idx !== activeExerciseMenuIndex));
+              const targetIdx = activeExerciseMenuIndex;
+              setActiveExercises(prev => prev.filter((_, idx) => idx !== targetIdx));
               setIsExMenuVisible(false);
+              // Shift or clear active input if it matches the deleted exercise
+              setActiveInput(prev => {
+                if (prev) {
+                  if (prev.exIdx === targetIdx) {
+                    return null; // Focused exercise was deleted
+                  } else if (prev.exIdx > targetIdx) {
+                    return { ...prev, exIdx: prev.exIdx - 1 }; // Shift index down
+                  }
+                }
+                return prev;
+              });
               setActiveExerciseMenuIndex(null);
             }
           }
@@ -1845,7 +1989,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               <View style={styles.headerLeft}>
                 <Pressable
                   onPress={onClose}
-                  style={styles.minimizeBtn}
+                  style={({ pressed }) => [
+                    styles.minimizeBtn,
+                    pressed && { transform: [{ scale: 0.96 }] }
+                  ]}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   android_ripple={rippleTokens.borderless}
                   accessibilityLabel="Minimize workout screen"
                 >
@@ -1863,7 +2011,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       cancelAndScheduleRestNotification(defaultRestDuration);
                     }
                   }}
-                  style={[styles.headerStopwatchBtn, isTimerActive && styles.headerTimerBtnActive]}
+                  style={({ pressed }) => [
+                    styles.headerStopwatchBtn,
+                    isTimerActive && styles.headerTimerBtnActive,
+                    pressed && { transform: [{ scale: 0.96 }] }
+                  ]}
                   android_ripple={rippleTokens.surface}
                   accessibilityLabel="Toggle rest timer"
                 >
@@ -1876,11 +2028,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     <Text style={styles.headerRestTimerText}>{restTimeRemaining}s</Text>
                   )}
                 </Pressable>
-
+ 
                 {isPlateCalculatorEnabled && (
                   <Pressable
                     onPress={() => setIsPlateCalcVisible(true)}
-                    style={styles.headerStopwatchBtn}
+                    style={({ pressed }) => [
+                      styles.headerStopwatchBtn,
+                      pressed && { transform: [{ scale: 0.96 }] }
+                    ]}
                     android_ripple={rippleTokens.surface}
                     accessibilityLabel="Open plate calculator"
                   >
@@ -1888,7 +2043,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   </Pressable>
                 )}
               </View>
-
+ 
               {(() => {
                 const sessionSec = Math.max(0, Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000));
                 const totalSeconds = sessionSec + accumulatedOffsetSeconds.current;
@@ -1903,7 +2058,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           paddingHorizontal: spacing.md,
                           paddingVertical: spacing.sm,
                           opacity: pressed ? 0.75 : 1.0,
-                        }
+                        },
+                        pressed && { transform: [{ scale: 0.96 }] }
                       ]}
                       hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
                       accessibilityLabel="Toggle elapsed timer format"
@@ -1933,11 +2089,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   </View>
                 );
               })()}
-
+ 
               <View style={styles.headerRight}>
                 <Pressable
                   onPress={handleOpenAddExercise}
-                  style={[styles.headerStopwatchBtn, { marginRight: spacing.sm }]}
+                  style={({ pressed }) => [
+                    styles.headerStopwatchBtn,
+                    { marginRight: spacing.sm },
+                    pressed && { transform: [{ scale: 0.96 }] }
+                  ]}
                   android_ripple={rippleTokens.surface}
                   accessibilityLabel="Add Exercise"
                 >
@@ -1945,7 +2105,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
                 <Pressable
                   onPress={handleFinishPress}
-                  style={styles.headerFinishBtn}
+                  style={({ pressed }) => [
+                    styles.headerFinishBtn,
+                    pressed && { transform: [{ scale: 0.96 }] }
+                  ]}
                   android_ripple={rippleTokens.accent}
                   accessibilityLabel="Finish workout"
                 >
@@ -1988,13 +2151,41 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 />
                 <Pressable
                   onPress={() => setIsWorkoutMenuVisible(true)}
-                  style={styles.workoutTitleOptionsBtn}
+                  style={({ pressed }) => [
+                    styles.workoutTitleOptionsBtn,
+                    pressed && { transform: [{ scale: 0.96 }] }
+                  ]}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   android_ripple={rippleTokens.borderless}
                   accessibilityLabel="Workout options"
                 >
                   <Ionicons name="ellipsis-horizontal" size={22} color={colors.accent} />
                 </Pressable>
               </View>
+
+              {/* Workout Note Display */}
+              {workoutNote ? (
+                <Pressable
+                  onPress={() => setIsWorkoutNoteModalVisible(true)}
+                  style={[
+                    styles.notesContainer,
+                    {
+                      marginTop: 0,
+                      marginBottom: spacing.lg,
+                      paddingVertical: spacing.sm,
+                      paddingHorizontal: spacing.md,
+                      backgroundColor: colors.surface2,
+                    }
+                  ]}
+                  android_ripple={rippleTokens.surface}
+                  accessibilityLabel="Edit workout note"
+                >
+                  <Ionicons name="document-text-outline" size={16} color={colors.accent} />
+                  <Text style={[styles.notesText, { color: colors.textPrimary, fontSize: font.sizes.sm }]} numberOfLines={3}>
+                    {workoutNote}
+                  </Text>
+                </Pressable>
+              ) : null}
 
               {activeExercises.length === 0 ? (
                 <View style={styles.emptyContainer}>
@@ -2043,7 +2234,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
               {/* Discard Workout button */}
               <Pressable
-                style={styles.scrollDiscardBtn}
+                style={({ pressed }) => [
+                  styles.scrollDiscardBtn,
+                  pressed && { transform: [{ scale: 0.96 }] }
+                ]}
                 onPress={handleDiscardPress}
                 android_ripple={rippleTokens.surface}
               >
@@ -3217,7 +3411,11 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
           {/* Done Button */}
           <Pressable
-            style={[styles.colCheck, styles.checkButton]}
+            style={({ pressed }) => [
+              styles.colCheck,
+              styles.checkButton,
+              pressed && { transform: [{ scale: 0.96 }] }
+            ]}
             onPress={() => toggleSetComplete(exIdx, setIdx)}
           >
             <View
@@ -3226,9 +3424,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 set.completed && styles.checkCircleCompleted,
               ]}
             >
-              {set.completed && (
-                <Ionicons name="checkmark" size={14} color="#0D0F14" />
-              )}
+              <AnimatedCheckmark completed={set.completed} />
             </View>
           </Pressable>
         </View>
@@ -3358,7 +3554,11 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
         {/* Done Button */}
         <Pressable
-          style={[styles.colCheck, styles.checkButton]}
+          style={({ pressed }) => [
+            styles.colCheck,
+            styles.checkButton,
+            pressed && { transform: [{ scale: 0.96 }] }
+          ]}
           onPress={() => toggleSetComplete(exIdx, setIdx)}
         >
           <View
@@ -3367,9 +3567,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               set.completed && styles.checkCircleCompleted,
             ]}
           >
-            {set.completed && (
-              <Ionicons name="checkmark" size={14} color="#0D0F14" />
-            )}
+            <AnimatedCheckmark completed={set.completed} />
           </View>
         </Pressable>
       </View>
@@ -3427,11 +3625,34 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   addSet,
   setActiveExercises,
 }) => {
+  const enterScale = useSharedValue(0.95);
+  const enterOpacity = useSharedValue(0);
+  const enterTranslateY = useSharedValue(20);
+
+  useEffect(() => {
+    enterScale.value = withDelay(
+      exIdx * 75,
+      withTiming(1, { duration: 350, easing: Easing.out(Easing.quad) })
+    );
+    enterOpacity.value = withDelay(
+      exIdx * 75,
+      withTiming(1, { duration: 300 })
+    );
+    enterTranslateY.value = withDelay(
+      exIdx * 75,
+      withTiming(0, { duration: 350, easing: Easing.out(Easing.quad) })
+    );
+  }, [exIdx]);
+
   const animatedStyle = useAnimatedStyle(() => {
+    const dragY = isExActive ? exDragY.value : 0;
     return {
-      transform: [{ translateY: isExActive ? exDragY.value : 0 }],
+      transform: [
+        { translateY: dragY + enterTranslateY.value },
+        { scale: isExActive ? 1.02 : enterScale.value }
+      ],
       zIndex: isExActive ? 999 : 1,
-      opacity: isExActive ? 0.88 : 1,
+      opacity: isExActive ? 0.88 : enterOpacity.value,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: isExActive ? 8 : 0 },
       shadowOpacity: isExActive ? 0.55 : 0,
@@ -3564,7 +3785,10 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
 
           {/* Add Set Button */}
           <Pressable
-            style={styles.addSetRow}
+            style={({ pressed }) => [
+              styles.addSetRow,
+              pressed && { transform: [{ scale: 0.96 }] }
+            ]}
             onPress={() => addSet(exIdx)}
             onLongPress={() => addSet(exIdx, true)}
             android_ripple={rippleTokens.surface}
@@ -3631,6 +3855,7 @@ const styles = StyleSheet.create({
     color:           colors.accent,
     fontSize:        font.sizes.xs,
     fontFamily:      font.bold,
+    fontVariant:     ['tabular-nums'],
   },
   timerSubMenu: {
     position:        'absolute',
@@ -3638,6 +3863,8 @@ const styles = StyleSheet.create({
     left:            12,
     right:           12,
     zIndex:          1000,
+    borderRadius:    26,
+    backgroundColor: colors.surface,
     ...(shadow.card as object),
   },
 
@@ -3658,6 +3885,7 @@ const styles = StyleSheet.create({
     color:      colors.textPrimary,
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
+    fontVariant: ['tabular-nums'],
   },
   headerRight: {
     flexDirection: 'row',
@@ -3886,7 +4114,7 @@ const styles = StyleSheet.create({
 
   // Check Button
   checkButton: {
-    height:         32,
+    height:         40,
     justifyContent: 'center',
   },
   checkCircle: {

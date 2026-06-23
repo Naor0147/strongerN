@@ -249,6 +249,8 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
   sliderWidthRef.current = sliderWidth;
 
   const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-8, 8])
     .runOnJS(true)
     .onStart((e) => {
       const initialTouchX = e.x;
@@ -324,6 +326,8 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
   sliderWidthRef.current = sliderWidth;
 
   const animPanGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-8, 8])
     .runOnJS(true)
     .onStart((e) => {
       const initialTouchX = e.x;
@@ -369,7 +373,76 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
   );
 };
 
+interface ThemeOverrideInputProps {
+  overrideKey: string;
+  defaultVal: string;
+  themeOverrides: any;
+  onUpdateThemeOverrides?: (overrides: any) => void;
+}
 
+const ThemeOverrideInput: React.FC<ThemeOverrideInputProps> = ({
+  overrideKey,
+  defaultVal,
+  themeOverrides,
+  onUpdateThemeOverrides,
+}) => {
+  const currentVal = (themeOverrides && themeOverrides[overrideKey]) || '';
+  const [text, setText] = useState(currentVal);
+
+  useEffect(() => {
+    setText(currentVal);
+  }, [currentVal]);
+
+  const handleChangeText = (val: string) => {
+    let cleanHex = val.replace(/[^#0-9A-Fa-f]/g, '');
+    if (cleanHex.length > 0 && !cleanHex.startsWith('#')) {
+      cleanHex = '#' + cleanHex;
+    }
+    setText(cleanHex);
+
+    if (cleanHex === '') {
+      if (onUpdateThemeOverrides) {
+        onUpdateThemeOverrides({ [overrideKey]: undefined });
+      }
+    } else if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(cleanHex)) {
+      if (onUpdateThemeOverrides) {
+        onUpdateThemeOverrides({ [overrideKey]: cleanHex });
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (text !== '' && !/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(text)) {
+      setText(currentVal);
+    }
+  };
+
+  return (
+    <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+      <TextInput
+        style={styles.hexInputSmall}
+        placeholder={i18n.t('profile.hexCodePlaceholder', { code: defaultVal })}
+        placeholderTextColor={colors.textMuted}
+        value={text}
+        onChangeText={handleChangeText}
+        onBlur={handleBlur}
+        maxLength={7}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          backgroundColor: /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(text) ? text : defaultVal,
+          borderColor: colors.border,
+          borderWidth: 1,
+        }}
+      />
+    </View>
+  );
+};
 
 interface DeveloperCrashLogsViewProps {
   onBack: () => void;
@@ -2406,6 +2479,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         paddingVertical: spacing.xs + 2,
                         paddingHorizontal: spacing.md,
                         columnGap: spacing.xs,
+                        marginLeft: spacing.md,
                       }}
                       onPress={() => setExerciseNameLanguage && setExerciseNameLanguage(exerciseNameLanguage === 'en' ? 'he' : 'en')}
                       android_ripple={rippleTokens.surface}
@@ -2937,11 +3011,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             {i18n.t('profile.changeThemeColor')}
                           </Text>
 
-                          <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+                          <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md, flexWrap: 'wrap' }}>
                             {[
                               { id: 'default', label: i18n.t('profile.defaultColor'), accent: '#4F8EF7', preview: ['#4F8EF7', '#38BDF8', '#161B24'] },
-                              { id: 'purple', label: i18n.t('profile.purpleColor'), accent: '#7C5CFC', preview: ['#7C5CFC', '#A855F7', '#161B24'] },
-                              { id: 'black-white', label: i18n.t('profile.monoColor'), accent: '#FFFFFF', preview: ['#FFFFFF', '#E2E8F0', '#161B24'] },
+                              { id: 'purple', label: i18n.t('profile.purpleColor'), accent: '#7C5CFC', preview: ['#7C5CFC', '#A855F7', '#120E1A'] },
+                              { id: 'black-white', label: i18n.t('profile.monoColor'), accent: '#FFFFFF', preview: ['#FFFFFF', '#E2E8F0', '#0D0D0D'] },
+                              { id: 'emerald', label: i18n.t('profile.emeraldColor'), accent: '#22D97A', preview: ['#22D97A', '#34D399', '#0C120E'] },
+                              { id: 'crimson', label: i18n.t('profile.crimsonColor'), accent: '#EF4444', preview: ['#EF4444', '#F87171', '#140A0C'] },
                               { id: 'custom', label: i18n.t('profile.customColor'), accent: customAccentColor, preview: [customAccentColor, customAccentColor, '#161B24'] },
                             ].map((t) => {
                               const isSelected = appTheme === t.id;
@@ -2950,6 +3026,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                   key={t.id}
                                   style={[
                                     styles.themeCard,
+                                    { minWidth: '29%', flex: 1 },
                                     isSelected && { borderColor: t.accent, borderWidth: 2 }
                                   ]}
                                   onPress={() => {
@@ -3110,7 +3187,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                   </View>
 
                                   {/* Manual Input */}
-                                  <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                                  <ThemeOverrideInput overrideKey={overrideItem.key} defaultVal={overrideItem.defaultVal} themeOverrides={themeOverrides} onUpdateThemeOverrides={onUpdateThemeOverrides} />
+                                  <View style={{ display: 'none' }}>
                                     <TextInput
                                       style={styles.hexInputSmall}
                                       placeholder={i18n.t('profile.hexCodePlaceholder', { code: overrideItem.defaultVal })}
@@ -3733,6 +3811,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: spacing.md,
   },
   togglePillActive: {
     backgroundColor: colors.accent,
@@ -4733,6 +4812,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: spacing.md,
   },
   inlineLoginBtnText: {
     color: '#0D0F14',
@@ -4747,6 +4827,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     alignSelf: 'center',
+    marginLeft: spacing.md,
   },
   connectedBadgeText: {
     color: colors.success,

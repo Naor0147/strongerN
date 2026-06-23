@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, cancelAnimation } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -14,9 +14,21 @@ export const SwipeableRow: React.FC<{
 }> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
-  const [width, setWidth] = useState(0);
-  const [isPastThreshold, setIsPastThreshold] = useState(false);
+  const width = useSharedValue(0);
   const hasTriggeredHaptic = useSharedValue(false);
+
+  // ─── Ref pattern: always hold the latest onDelete without changing
+  // any useCallback/useMemo dependencies. This is what keeps panGesture
+  // from being recreated every time the parent re-renders with a new
+  // inline arrow function.
+  const onDeleteRef = React.useRef(onDelete);
+  onDeleteRef.current = onDelete;
+
+  React.useEffect(() => {
+    return () => {
+      cancelAnimation(translateX);
+    };
+  }, []);
 
   const triggerHaptic = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -30,38 +42,45 @@ export const SwipeableRow: React.FC<{
     }
   }, []);
 
+  // safeOnDelete has NO dependency on onDelete — it reads the ref.
+  // This makes it stable forever, which in turn makes handleDeletePress
+  // and panGesture stable forever.
+  const safeOnDelete = useCallback(() => {
+    cancelAnimation(translateX);
+    translateX.value = 0;
+    isOpen.value = false;
+    hasTriggeredHaptic.value = false;
+    setTimeout(() => {
+      onDeleteRef.current();
+    }, 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleDeletePress = useCallback(() => {
     triggerDeleteHaptic();
-    const toVal = width ? -(width + 50) : -500;
+    const w = width.value;
+    const toVal = w ? -(w + 50) : -500;
     translateX.value = withTiming(toVal, { duration: getScaledDuration(150) }, () => {
-      runOnJS(onDelete)();
-      translateX.value = 0;
-      isOpen.value = false;
-      runOnJS(setIsPastThreshold)(false);
-      hasTriggeredHaptic.value = false;
+      runOnJS(safeOnDelete)();
     });
-  }, [width, onDelete, triggerDeleteHaptic]);
+  }, [safeOnDelete, triggerDeleteHaptic]);
 
-  const animateTranslation = useCallback((toVal: number, callback?: () => void) => {
+  const animateTranslation = useCallback((toVal: number) => {
     'worklet';
     if (globalAnimation.speed === 0) {
       translateX.value = toVal;
-      if (callback) runOnJS(callback)();
     } else {
-      translateX.value = withSpring(
-        toVal,
-        getSpringConfig(140, 16),
-        () => {
-          if (callback) runOnJS(callback)();
-        }
-      );
+      translateX.value = withSpring(toVal, getSpringConfig(140, 16));
     }
   }, []);
 
-  const panGesture = Gesture.Pan()
+  // ─── panGesture is memoized with [] deps — it is created ONCE and never
+  // replaced while a gesture is active. All referenced functions are stable
+  // (useCallback with [] or stable deps). All state is via shared values.
+  const panGesture = useMemo(() => Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-8, 8])
     .onUpdate((e) => {
+      'worklet';
       let newX = e.translationX;
       if (isOpen.value) {
         newX = -70 + e.translationX;
@@ -69,7 +88,7 @@ export const SwipeableRow: React.FC<{
       if (newX > 0) newX = 0;
       translateX.value = newX;
 
-      const currentThreshold = width ? -width * 0.45 : -150;
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const past = newX < currentThreshold;
       if (past) {
         if (!hasTriggeredHaptic.value) {
@@ -81,10 +100,10 @@ export const SwipeableRow: React.FC<{
           hasTriggeredHaptic.value = false;
         }
       }
-      runOnJS(setIsPastThreshold)(past);
     })
     .onEnd((e) => {
-      const currentThreshold = width ? -width * 0.45 : -150;
+      'worklet';
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
 
       if (currentX < currentThreshold || e.velocityX < -500) {
@@ -92,34 +111,54 @@ export const SwipeableRow: React.FC<{
       } else {
         const threshold = isOpen.value ? -30 : -45;
         if (e.translationX < threshold) {
-          animateTranslation(-70, () => { isOpen.value = true; });
+          isOpen.value = true;
+          animateTranslation(-70);
         } else {
-          animateTranslation(0, () => { isOpen.value = false; });
+          isOpen.value = false;
+          animateTranslation(0);
         }
         hasTriggeredHaptic.value = false;
-        runOnJS(setIsPastThreshold)(false);
       }
-    });
-
-  const handleOverlayPress = useCallback(() => {
-    if (isOpen.value) {
-      animateTranslation(0, () => { isOpen.value = false; });
-    }
-  }, []);
-
-  const currentThreshold = width ? -width * 0.45 : -150;
+    }),
+  // All of these are stable (created once), so panGesture is created once.
+  [handleDeletePress, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,
   }));
 
   const animatedTrashStyle = useAnimatedStyle(() => {
-    const scale = translateX.value < currentThreshold
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const scale = translateX.value < thresh
       ? 1.3
       : translateX.value < -70
         ? 1.0
         : 0.8;
-    return { transform: [{ scale }] };
+    return { 
+      transform: [{ scale }],
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 24,
+      height: 24,
+    };
+  });
+
+  const animatedTrashOutlineStyle = useAnimatedStyle(() => {
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const isPast = translateX.value < thresh;
+    return {
+      opacity: isPast ? 0 : 1,
+      position: 'absolute',
+    };
+  });
+
+  const animatedTrashFilledStyle = useAnimatedStyle(() => {
+    const thresh = width.value ? -width.value * 0.45 : -150;
+    const isPast = translateX.value < thresh;
+    return {
+      opacity: isPast ? 1 : 0,
+      position: 'absolute',
+    };
   });
 
   const animatedContentStyle = useAnimatedStyle(() => ({
@@ -129,7 +168,7 @@ export const SwipeableRow: React.FC<{
   return (
     <View 
       style={[swipeStyles.container, { borderRadius }, style]}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      onLayout={(e) => { width.value = e.nativeEvent.layout.width; }}
     >
       <Animated.View
         style={[StyleSheet.absoluteFill, animatedUnderlayStyle]}
@@ -141,14 +180,14 @@ export const SwipeableRow: React.FC<{
           <View style={[
             swipeStyles.deleteAction, 
             { borderRadius },
-            isPastThreshold && { backgroundColor: colors.error }
           ]}>
             <Animated.View style={animatedTrashStyle}>
-              <Ionicons 
-                name={isPastThreshold ? "trash" : "trash-outline"} 
-                size={20} 
-                color="#FFF" 
-              />
+              <Animated.View style={animatedTrashOutlineStyle}>
+                <Ionicons name="trash-outline" size={20} color="#FFF" />
+              </Animated.View>
+              <Animated.View style={animatedTrashFilledStyle}>
+                <Ionicons name="trash" size={20} color="#FFF" />
+              </Animated.View>
             </Animated.View>
           </View>
         </Pressable>
@@ -156,7 +195,6 @@ export const SwipeableRow: React.FC<{
       <GestureDetector gesture={panGesture}>
         <Animated.View
           style={animatedContentStyle}
-          onTouchStart={handleOverlayPress}
         >
           {children}
         </Animated.View>

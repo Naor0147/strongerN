@@ -705,18 +705,18 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       const dy = e.translationY;
 
       if (dy < -40 || (dy < 0 && velocityY < -300)) {
-        snapTo('expanded');
+        runOnJS(snapTo)('expanded');
       } else if (dy > 40 || (dy > 0 && velocityY > 300)) {
         if (currentTranslateY > T_COLLAPSED + 60) {
           runOnJS(handleClose)();
         } else {
-          snapTo('collapsed');
+          runOnJS(snapTo)('collapsed');
         }
       } else {
         if (currentTranslateY < T_COLLAPSED / 2) {
-          snapTo('expanded');
+          runOnJS(snapTo)('expanded');
         } else if (currentTranslateY < (T_COLLAPSED + T_CLOSED) / 2) {
-          snapTo('collapsed');
+          runOnJS(snapTo)('collapsed');
         } else {
           runOnJS(handleClose)();
         }

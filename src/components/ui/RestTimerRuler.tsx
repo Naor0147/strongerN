@@ -665,7 +665,11 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = ({
       {/* ── Bottom row ── */}
       <View style={styles.bottomRow}>
         <Pressable
-          style={[styles.actionBtn, { backgroundColor: btnBg, opacity: isDisabled ? 0.5 : 1 }]}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            { backgroundColor: btnBg, opacity: isDisabled ? 0.5 : (pressed ? 0.85 : 1) },
+            pressed && !isDisabled && { transform: [{ scale: 0.96 }] }
+          ]}
           onPress={handleActionBtn}
           disabled={isDisabled}
           android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
@@ -720,6 +724,7 @@ const styles = StyleSheet.create({
     letterSpacing: -2,
     lineHeight: 54,
     fontFamily: font.regular,
+    fontVariant: ['tabular-nums'],
   },
 });
 

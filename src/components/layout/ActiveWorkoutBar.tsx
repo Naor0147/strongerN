@@ -79,7 +79,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       <View style={styles.glowBar} />
 
       <Pressable
-        style={styles.inner}
+        style={({ pressed }) => [styles.inner, pressed && { transform: [{ scale: 0.98 }] }]}
         onPress={onPress}
         android_ripple={rippleTokens.surface}
         accessibilityLabel={label}
@@ -97,7 +97,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
         {/* Right: up chevron + finish */}
         <View style={styles.right}>
           <Pressable
-            style={styles.finishBtn}
+            style={({ pressed }) => [styles.finishBtn, pressed && { transform: [{ scale: 0.96 }] }]}
             onPress={onFinish}
             android_ripple={rippleTokens.accent}
             accessibilityLabel={i18n.t('extras.finishWorkoutBarA11y')}
@@ -157,6 +157,7 @@ const styles = StyleSheet.create({
     color:        colors.accent,
     fontSize:     font.sizes.xs,
     fontFamily:   'monospace',
+    fontVariant:  ['tabular-nums'],
     marginTop:    2,
     letterSpacing: 1.2,
   },

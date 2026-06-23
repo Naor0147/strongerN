@@ -408,10 +408,10 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       if (text) {
         setImportPayloadText(text);
       } else {
-        Alert.alert(i18n.t('common.info', 'Info'), i18n.t('extras.clipboardEmpty', 'Clipboard is empty'));
+        Alert.alert(i18n.t('common.info'), i18n.t('extras.clipboardEmpty', { defaultValue: 'Clipboard is empty' }));
       }
     } catch (err) {
-      Alert.alert(i18n.t('common.error', 'Error'), 'Failed to read from clipboard');
+      Alert.alert(i18n.t('common.error'), 'Failed to read from clipboard');
     }
   };
 
@@ -1144,7 +1144,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             <View style={styles.modalForm}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
                 <Text style={[styles.inputLabel, { marginTop: 0, flex: 1 }]}>
-                  {i18n.t('workout.pasteSharePayload', 'Paste sharing link or JSON routine payload')}
+                  {i18n.t('workout.pasteSharePayload', { defaultValue: 'Paste sharing link or JSON routine payload' })}
                 </Text>
                 <Pressable
                   style={{
@@ -1174,7 +1174,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
               <TextInput
                 style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
-                placeholder={i18n.t('workout.pasteSharePlaceholder', 'Paste deep link or routine JSON here...')}
+                placeholder={i18n.t('workout.pasteSharePlaceholder', { defaultValue: 'Paste deep link or routine JSON here...' })}
                 placeholderTextColor={colors.textMuted}
                 value={importPayloadText}
                 onChangeText={setImportPayloadText}

@@ -24,4 +24,6 @@ This compiles the release app and exits cleanly. If a USB device is connected, i
 
 Every time you make any change or complete a task, increment the app version in `app.json` and in the translation keys `profile.version` in `src/utils/i18n.ts` (both English and Hebrew), and report the new version at the end of the task.
 
+# Git Auto-Commit & Push
 
+After making any changes or completing a task, stage, commit, and push the changes to the Git repository (e.g., using `git add .`, `git commit -m "<message>"`, and `git push`). This ensures each task or feature has its own clean, separated commit and push history.

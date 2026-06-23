@@ -18,6 +18,7 @@ import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupM
 import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { generateWorkoutInsights } from './utils/insights';
 
 // Screens — Auth
@@ -116,7 +117,7 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
   return merged;
 }
 
-export default function App() {
+function App() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -449,6 +450,7 @@ export default function App() {
               if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
               setWorkoutExercises(savedWorkout.workoutExercises);
               if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
+              if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
             } else {
               console.log('[RESTORE] No workout exercises found in saved state');
             }
@@ -1394,6 +1396,17 @@ export default function App() {
     } catch {}
     return false;
   });
+  const [activeWorkoutComment, setActiveWorkoutComment] = React.useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem('strongern_active_workout_state');
+        if (saved) {
+          return JSON.parse(saved).comment || '';
+        }
+      }
+    } catch {}
+    return '';
+  });
   const [completionData, setCompletionData] = React.useState<{
     totalVolume: number;
     totalSets: number;
@@ -1404,6 +1417,7 @@ export default function App() {
   const handleStartWorkout = (name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
+    setActiveWorkoutComment('');
     
     // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
     let resolvedDetails = exercisesDetails;
@@ -1501,6 +1515,7 @@ export default function App() {
     setEditingSessionId(session.id);
     setWorkoutName(session.title);
     setStartTime(new Date(session.datetime));
+    setActiveWorkoutComment(session.comment || '');
 
     // Map session exercises back to active workout exercises structure
     const mapped = session.exercises.map((ex: any) => {
@@ -1580,7 +1595,7 @@ export default function App() {
         id: `session-new-${Date.now()}`,
         title: workoutName,
         datetime: new Date(startTime),
-        comment: summary.comment || 'Logged via live active tracker!',
+        comment: summary.comment || '',
         exercises: completedExercises.length > 0 ? completedExercises : [],
         durationMinutes: summary.durationMin,
         totalVolumeKg: summary.totalVolume,
@@ -1613,6 +1628,7 @@ export default function App() {
 
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
+    setActiveWorkoutComment('');
   }, [workoutExercises, sessionsList, user, editingSessionId, workoutName]);
 
   const handleDiscardWorkout = () => {
@@ -1621,6 +1637,7 @@ export default function App() {
     setWorkoutExercises([]);
     setWorkoutName('Active Workout');
     setEditingSessionId(null);
+    setActiveWorkoutComment('');
   };
 
   const handleDeleteSession = React.useCallback((sessionId: string) => {
@@ -1644,6 +1661,7 @@ export default function App() {
         startTime: startTime.toISOString(),
         workoutExercises,
         isWorkoutModalVisible,
+        comment: activeWorkoutComment,
       };
       console.log('[SAVE] Saving workout state, exercises count:', workoutExercises.length);
       saveToDb('strongern_active_workout_state', activeState);
@@ -1651,7 +1669,7 @@ export default function App() {
       console.log('[SAVE] Deleting workout state (not active)');
       deleteFromDb('strongern_active_workout_state');
     }
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, isDataLoaded, isWorkoutRestored]);
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored]);
 
   // Save workout state when app goes to background (native)
   React.useEffect(() => {
@@ -1666,13 +1684,14 @@ export default function App() {
             startTime: startTime.toISOString(),
             workoutExercises,
             isWorkoutModalVisible,
+            comment: activeWorkoutComment,
           };
           saveToDb('strongern_active_workout_state', activeState);
         }
       }
     });
     return () => sub.remove();
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible]);
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment]);
 
   const workoutExercisesRef = React.useRef(workoutExercises);
   React.useEffect(() => {
@@ -1988,8 +2007,9 @@ export default function App() {
             isRpeMode={isRpeMode}
             exerciseNameLanguage={exerciseNameLanguage}
             previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
-            editingComment={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.comment : undefined}
+            editingComment={activeWorkoutComment}
             onUpdateComment={(newComment) => {
+              setActiveWorkoutComment(newComment);
               if (editingSessionId) {
                 setSessionsList(prev => prev.map(s => s.id === editingSessionId ? { ...s, comment: newComment } : s));
               }
@@ -2552,3 +2572,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+export default function AppWithBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}

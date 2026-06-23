@@ -1,5 +1,5 @@
 // screens/MeasureScreen.tsx
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, cancelAnimation } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -91,6 +91,12 @@ const SwipeableHistoryItem: React.FC<{
 }> = ({ entry, unit, onDelete }) => {
   const swipeX = useSharedValue(0);
 
+  useEffect(() => {
+    return () => {
+      cancelAnimation(swipeX);
+    };
+  }, []);
+
   const animateTranslation = (toVal: number, callback?: () => void) => {
     'worklet';
     if (globalAnimation.speed === 0) {
@@ -135,8 +141,8 @@ const SwipeableHistoryItem: React.FC<{
       <Pressable 
         style={styles.deleteBackground} 
         onPress={() => {
+          cancelAnimation(swipeX);
           onDelete();
-          swipeX.value = withTiming(0, { duration: getScaledDuration(100) });
         }}
         testID={`measure.delete-log-${entry.date}`}
       >

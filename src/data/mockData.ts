@@ -66,6 +66,7 @@ export interface Template {
   }[];
   lastUsed: Date;
   folder?: string;
+  notes?: string;
 }
 
 export interface Exercise {

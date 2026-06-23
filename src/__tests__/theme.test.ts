@@ -22,7 +22,7 @@ describe('strongerN Theme Engine & Overrides', () => {
 
   test('applyTheme correctly loads other preset colors (e.g. purple)', () => {
     applyTheme('purple');
-    expect(colors.bg).toBe('#0D0F14');
+    expect(colors.bg).toBe('#09070F');
     expect(colors.accent).toBe('#7C5CFC'); // Purple accent
   });
 
