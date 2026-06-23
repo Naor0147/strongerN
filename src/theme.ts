@@ -231,10 +231,12 @@ export const globalAnimation = {
 };
 
 export const getScaledDuration = (baseDuration: number): number => {
+  'worklet';
   return baseDuration * globalAnimation.speed;
 };
 
 export const getSpringConfig = (baseStiffness = 140, baseDamping = 16, baseMass = 0.9) => {
+  'worklet';
   const s = globalAnimation.speed;
   if (s <= 0) {
     return {

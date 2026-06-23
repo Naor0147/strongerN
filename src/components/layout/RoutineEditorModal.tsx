@@ -16,7 +16,7 @@ import {
   Alert,
   LayoutAnimation,
 } from 'react-native';
-import Animated, { useSharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -108,6 +108,53 @@ function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
     return item;
   });
 }
+
+// ─── DraggableListItem Component ──────────────────────────────────────────────
+interface DraggableListItemProps {
+  itemKey: string;
+  isActive: boolean;
+  dragY: SharedValue<number>;
+  children: React.ReactNode;
+  itemLayouts: React.MutableRefObject<Record<string, { y: number; height: number }>>;
+}
+
+const DraggableListItem: React.FC<DraggableListItemProps> = ({
+  itemKey,
+  isActive,
+  dragY,
+  children,
+  itemLayouts,
+}) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: isActive ? dragY.value : 0 }],
+      zIndex: isActive ? 999 : undefined,
+      opacity: isActive ? 0.85 : undefined,
+      backgroundColor: isActive ? colors.surface2 : undefined,
+      shadowColor: isActive ? '#000' : undefined,
+      shadowOffset: isActive ? { width: 0, height: 4 } : undefined,
+      shadowOpacity: isActive ? 0.45 : undefined,
+      shadowRadius: isActive ? 10 : undefined,
+      elevation: isActive ? 8 : undefined,
+    };
+  });
+
+  return (
+    <Animated.View
+      onLayout={e => {
+        if (!isActive) {
+          itemLayouts.current[itemKey] = {
+            y: e.nativeEvent.layout.y,
+            height: e.nativeEvent.layout.height,
+          };
+        }
+      }}
+      style={animatedStyle}
+    >
+      {children}
+    </Animated.View>
+  );
+};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const EMPTY_STRING_ARRAY: string[] = [];
@@ -717,27 +764,12 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
                     return (
-                      <Animated.View
+                      <DraggableListItem
                         key={itemKey}
-                        onLayout={e => {
-                          if (!isActive) {
-                            itemLayouts.current[itemKey] = {
-                              y: e.nativeEvent.layout.y,
-                              height: e.nativeEvent.layout.height,
-                            };
-                          }
-                        }}
-                        style={isActive ? {
-                            transform:       [{ translateY: dragY }],
-                            zIndex:          999,
-                            opacity:         0.85,
-                            backgroundColor: colors.surface2,
-                            shadowColor:     '#000',
-                            shadowOffset:    { width: 0, height: 4 },
-                            shadowOpacity:   0.45,
-                            shadowRadius:    10,
-                            elevation:       8,
-                          } : undefined}
+                        itemKey={itemKey}
+                        isActive={isActive}
+                        dragY={dragY}
+                        itemLayouts={itemLayouts}
                       >
                         <SwipeableRow
                           borderRadius={radius.md}
@@ -777,8 +809,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                             dragHandlers={dragHandlers}
                           />
                         </SwipeableRow>
-                    </Animated.View>
-                  );
+                      </DraggableListItem>
+                    );
                   });
                 })()}
 

@@ -19,7 +19,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import Animated, { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, withTiming, Easing, useAnimatedStyle } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -940,6 +940,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const fadeAnim = useSharedValue(0);
   const slideAnim = useSharedValue(0);
 
+  const animatedProfileStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
+
   React.useEffect(() => {
     const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
       ? globalAnimation.speed
@@ -1461,7 +1466,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], width: '100%' }}>
+        <Animated.View style={[animatedProfileStyle, { width: '100%' }]}>
           {/* ── Welcome Empty State / Load Demo Data Card ────────── */}
           {sessions?.length === 0 && !googleUser && authMode === 'guest' && isDeveloperModeEnabled && (
             <Card padding={spacing.lg} style={styles.demoCard}>

@@ -695,6 +695,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const timerFadeAnim = useSharedValue(1);
   const timerScaleAnim = useSharedValue(1);
 
+  const animatedTimerStyle = useAnimatedStyle(() => ({
+    opacity: timerFadeAnim.value,
+    transform: [{ scale: timerScaleAnim.value }],
+  }));
+
   const toggleTimerFormat = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
@@ -2065,13 +2070,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       accessibilityLabel="Toggle elapsed timer format"
                     >
                       <Animated.View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 4,
-                          opacity: timerFadeAnim,
-                          transform: [{ scale: timerScaleAnim }],
-                        }}
+                        style={[
+                          {
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                          },
+                          animatedTimerStyle,
+                        ]}
                       >
                         {showSecondsOnly ? (
                           <Text style={styles.headerTimerText}>{totalSeconds}s</Text>
