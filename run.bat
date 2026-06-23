@@ -5,6 +5,12 @@ cls
 :: Navigate to the directory where the batch file is located
 cd /d "%~dp0"
 
+:: Set compatible JDK 19 environment
+set "JAVA_HOME="
+if exist "C:\Program Files\Java\jdk-19" (
+    set "JAVA_HOME=C:\Program Files\Java\jdk-19"
+)
+
 :menu
 cls
 color 0B
