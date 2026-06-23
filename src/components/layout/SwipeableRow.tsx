@@ -124,7 +124,7 @@ export const SwipeableRow: React.FC<{
       if (newX > 0) newX = 0;
       translateX.value = newX;
 
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
+      const currentThreshold = width.value ? -width.value * 0.85 : -300;
       const past = newX < currentThreshold;
       if (past) {
         if (!hasTriggeredHaptic.value) {
@@ -139,10 +139,10 @@ export const SwipeableRow: React.FC<{
     })
     .onEnd((e) => {
       'worklet';
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
+      const currentThreshold = width.value ? -width.value * 0.85 : -300;
       const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
 
-      if (currentX < currentThreshold || e.velocityX < -500) {
+      if (currentX < currentThreshold) {
         runOnJS(triggerDeleteFlow)();
       } else {
         const threshold = isOpen.value ? -30 : -45;
