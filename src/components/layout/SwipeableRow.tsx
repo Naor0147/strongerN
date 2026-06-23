@@ -9,9 +9,10 @@ import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringC
 export const SwipeableRow: React.FC<{
   children: React.ReactNode;
   onDelete: (() => void) | ((confirm: (cb: () => void) => void, cancel: () => void) => void);
+  useConfirmation?: boolean;
   borderRadius?: number;
   style?: any;
-}> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
+}> = ({ children, onDelete, useConfirmation = false, borderRadius = radius.xs, style }) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
   const width = useSharedValue(0);
@@ -54,15 +55,18 @@ export const SwipeableRow: React.FC<{
   const handlePostDeleteAnimation = useCallback(() => {
     const currentOnDelete = onDeleteRef.current;
 
-    if (currentOnDelete.length === 2) {
+    if (useConfirmation) {
       const confirm = (onConfirmedStateUpdate: () => void) => {
-        cancelAnimation(translateX);
-        translateX.value = 0;
-        isOpen.value = false;
-        hasTriggeredHaptic.value = false;
-        setTimeout(() => {
-          onConfirmedStateUpdate();
-        }, 0);
+        // Animate off-screen first, then update state
+        const w = width.value;
+        const toVal = w ? -(w + 50) : -500;
+        translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+          cancelAnimation(translateX);
+          translateX.value = 0;
+          isOpen.value = false;
+          hasTriggeredHaptic.value = false;
+          runOnJS(onConfirmedStateUpdate)();
+        });
       };
       const cancel = () => {
         isOpen.value = false;
@@ -79,7 +83,7 @@ export const SwipeableRow: React.FC<{
         (currentOnDelete as () => void)();
       }, 0);
     }
-  }, [animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [useConfirmation, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerDeleteFlow = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -88,13 +92,22 @@ export const SwipeableRow: React.FC<{
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
-    const w = width.value;
-    const toVal = w ? -(w + 50) : -500;
 
-    translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
-      runOnJS(handlePostDeleteAnimation)();
-    });
-  }, [handlePostDeleteAnimation]);
+    if (useConfirmation) {
+      // Keep it open at -70, then show alert
+      translateX.value = withSpring(-70, getSpringConfig(140, 16), () => {
+        isOpen.value = true;
+        runOnJS(handlePostDeleteAnimation)();
+      });
+    } else {
+      // Animate all the way off-screen and delete immediately
+      const w = width.value;
+      const toVal = w ? -(w + 50) : -500;
+      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+        runOnJS(handlePostDeleteAnimation)();
+      });
+    }
+  }, [useConfirmation, handlePostDeleteAnimation]);
 
   // ─── panGesture is memoized with [] deps — it is created ONCE and never
   // replaced while a gesture is active. All referenced functions are stable

@@ -316,9 +316,28 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const renderItem = useCallback(
     ({ item }: { item: WorkoutSession }) => (
       <SwipeableRow
+        useConfirmation
         borderRadius={radius.md}
         style={{ marginBottom: spacing.md }}
-        onDelete={() => onDeleteSession(item.id)}
+        onDelete={(confirm, cancel) => {
+          RN.Alert.alert(
+            i18n.t('history.deleteSessionTitle'),
+            i18n.t('history.deleteSessionMsg', { name: item.title }),
+            [
+              { text: i18n.t('common.cancel'), style: 'cancel', onPress: cancel },
+              {
+                text: i18n.t('common.delete'),
+                style: 'destructive',
+                onPress: () => {
+                  confirm(() => {
+                    onDeleteSession(item.id);
+                  });
+                }
+              }
+            ],
+            { cancelable: true, onDismiss: cancel }
+          );
+        }}
       >
         <SessionCard session={item} onResumeWorkout={onResumeWorkout} />
       </SwipeableRow>

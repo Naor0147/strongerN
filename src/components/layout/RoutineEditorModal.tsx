@@ -772,6 +772,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         itemLayouts={itemLayouts}
                       >
                         <SwipeableRow
+                          useConfirmation
                           borderRadius={radius.md}
                           style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
                           onDelete={(confirm, cancel) => {
