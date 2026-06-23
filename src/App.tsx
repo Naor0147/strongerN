@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView } from 'react-native';
 import { NavigationContainer }      from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -1753,6 +1753,20 @@ function App() {
     return () => clearInterval(interval);
   }, [isWorkoutActive, startTime]);
 
+  const renderTabBar = React.useCallback((props: BottomTabBarProps) => (
+    <>
+      {isWorkoutActive && (
+        <ActiveWorkoutBar
+          workoutName={workoutName}
+          startTime={startTime}
+          onPress={() => setIsWorkoutModalVisible(true)}
+          onFinish={() => setIsWorkoutModalVisible(true)}
+        />
+      )}
+      <BottomTabBar {...props} />
+    </>
+  ), [isWorkoutActive, workoutName, startTime]);
+
   if (!fontsLoaded) {
     return (
       <View style={styles.loading}>
@@ -1781,19 +1795,7 @@ function App() {
         <View style={styles.root}>
           <Tab.Navigator
             initialRouteName="Profile"
-            tabBar={props => (
-              <>
-                {isWorkoutActive && (
-                  <ActiveWorkoutBar
-                    workoutName={workoutName}
-                    startTime={startTime}
-                    onPress={() => setIsWorkoutModalVisible(true)}
-                    onFinish={() => setIsWorkoutModalVisible(true)}
-                  />
-                )}
-                <BottomTabBar {...props} />
-              </>
-            )}
+            tabBar={renderTabBar}
             screenOptions={{ headerShown: false }}
           >
             <Tab.Screen name="Profile">

@@ -37,10 +37,12 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
 
   const pulseAnim = useSharedValue(1);
 
+  const startTimeMs = startTime.getTime();
+
   useEffect(() => {
     const id = setInterval(() => setElapsed(formatElapsed(startTime)), 1000);
     return () => clearInterval(id);
-  }, [startTime]);
+  }, [startTimeMs]);
 
   useEffect(() => {
     const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')

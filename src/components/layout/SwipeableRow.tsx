@@ -8,11 +8,10 @@ import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringC
 
 export const SwipeableRow: React.FC<{
   children: React.ReactNode;
-  onDelete: (() => void) | ((confirm: (cb: () => void) => void, cancel: () => void) => void);
-  useConfirmation?: boolean;
+  onDelete: () => void;
   borderRadius?: number;
   style?: any;
-}> = ({ children, onDelete, useConfirmation = false, borderRadius = radius.xs, style }) => {
+}> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
   const width = useSharedValue(0);
@@ -43,6 +42,28 @@ export const SwipeableRow: React.FC<{
     }
   }, []);
 
+  // safeOnDelete has NO dependency on onDelete — it reads the ref.
+  // This makes it stable forever, which in turn makes handleDeletePress
+  // and panGesture stable forever.
+  const safeOnDelete = useCallback(() => {
+    cancelAnimation(translateX);
+    translateX.value = 0;
+    isOpen.value = false;
+    hasTriggeredHaptic.value = false;
+    setTimeout(() => {
+      onDeleteRef.current();
+    }, 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeletePress = useCallback(() => {
+    triggerDeleteHaptic();
+    const w = width.value;
+    const toVal = w ? -(w + 50) : -500;
+    translateX.value = withTiming(toVal, { duration: getScaledDuration(150) }, () => {
+      runOnJS(safeOnDelete)();
+    });
+  }, [safeOnDelete, triggerDeleteHaptic]);
+
   const animateTranslation = useCallback((toVal: number) => {
     'worklet';
     if (globalAnimation.speed === 0) {
@@ -51,63 +72,6 @@ export const SwipeableRow: React.FC<{
       translateX.value = withSpring(toVal, getSpringConfig(140, 16));
     }
   }, []);
-
-  const handlePostDeleteAnimation = useCallback(() => {
-    const currentOnDelete = onDeleteRef.current;
-
-    if (useConfirmation) {
-      const confirm = (onConfirmedStateUpdate: () => void) => {
-        // Animate off-screen first, then update state
-        const w = width.value;
-        const toVal = w ? -(w + 50) : -500;
-        translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
-          cancelAnimation(translateX);
-          translateX.value = 0;
-          isOpen.value = false;
-          hasTriggeredHaptic.value = false;
-          runOnJS(onConfirmedStateUpdate)();
-        });
-      };
-      const cancel = () => {
-        isOpen.value = false;
-        hasTriggeredHaptic.value = false;
-        animateTranslation(0);
-      };
-      (currentOnDelete as any)(confirm, cancel);
-    } else {
-      cancelAnimation(translateX);
-      translateX.value = 0;
-      isOpen.value = false;
-      hasTriggeredHaptic.value = false;
-      setTimeout(() => {
-        (currentOnDelete as () => void)();
-      }, 0);
-    }
-  }, [useConfirmation, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const triggerDeleteFlow = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    }
-
-    if (useConfirmation) {
-      // Keep it open at -70, then show alert
-      translateX.value = withSpring(-70, getSpringConfig(140, 16), () => {
-        isOpen.value = true;
-        runOnJS(handlePostDeleteAnimation)();
-      });
-    } else {
-      // Animate all the way off-screen and delete immediately
-      const w = width.value;
-      const toVal = w ? -(w + 50) : -500;
-      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
-        runOnJS(handlePostDeleteAnimation)();
-      });
-    }
-  }, [useConfirmation, handlePostDeleteAnimation]);
 
   // ─── panGesture is memoized with [] deps — it is created ONCE and never
   // replaced while a gesture is active. All referenced functions are stable
@@ -124,7 +88,7 @@ export const SwipeableRow: React.FC<{
       if (newX > 0) newX = 0;
       translateX.value = newX;
 
-      const currentThreshold = width.value ? -width.value * 0.85 : -300;
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const past = newX < currentThreshold;
       if (past) {
         if (!hasTriggeredHaptic.value) {
@@ -139,11 +103,11 @@ export const SwipeableRow: React.FC<{
     })
     .onEnd((e) => {
       'worklet';
-      const currentThreshold = width.value ? -width.value * 0.85 : -300;
+      const currentThreshold = width.value ? -width.value * 0.45 : -150;
       const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
 
-      if (currentX < currentThreshold) {
-        runOnJS(triggerDeleteFlow)();
+      if (currentX < currentThreshold || e.velocityX < -500) {
+        runOnJS(handleDeletePress)();
       } else {
         const threshold = isOpen.value ? -30 : -45;
         if (e.translationX < threshold) {
@@ -157,7 +121,7 @@ export const SwipeableRow: React.FC<{
       }
     }),
   // All of these are stable (created once), so panGesture is created once.
-  [triggerDeleteFlow, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
+  [handleDeletePress, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,
@@ -211,7 +175,7 @@ export const SwipeableRow: React.FC<{
       >
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={triggerDeleteFlow}
+          onPress={handleDeletePress}
         >
           <View style={[
             swipeStyles.deleteAction, 
