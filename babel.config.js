@@ -6,7 +6,7 @@ module.exports = function(api) {
       '@ohah/react-native-mcp-server/babel-preset',
     ],
     plugins: [
-      'react-native-reanimated/plugin',
+      'react-native-worklets/plugin',
     ],
   };
 };
