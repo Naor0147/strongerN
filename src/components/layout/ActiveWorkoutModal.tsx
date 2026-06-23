@@ -3698,7 +3698,8 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                   });
                 }
               }
-            ]
+            ],
+            { cancelable: true, onDismiss: cancel }
           );
         }}
       >

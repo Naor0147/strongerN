@@ -8,7 +8,7 @@ import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringC
 
 export const SwipeableRow: React.FC<{
   children: React.ReactNode;
-  onDelete: () => void;
+  onDelete: (() => void) | ((confirm: (cb: () => void) => void, cancel: () => void) => void);
   borderRadius?: number;
   style?: any;
 }> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
@@ -42,28 +42,6 @@ export const SwipeableRow: React.FC<{
     }
   }, []);
 
-  // safeOnDelete has NO dependency on onDelete — it reads the ref.
-  // This makes it stable forever, which in turn makes handleDeletePress
-  // and panGesture stable forever.
-  const safeOnDelete = useCallback(() => {
-    cancelAnimation(translateX);
-    translateX.value = 0;
-    isOpen.value = false;
-    hasTriggeredHaptic.value = false;
-    setTimeout(() => {
-      onDeleteRef.current();
-    }, 0);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleDeletePress = useCallback(() => {
-    triggerDeleteHaptic();
-    const w = width.value;
-    const toVal = w ? -(w + 50) : -500;
-    translateX.value = withTiming(toVal, { duration: getScaledDuration(150) }, () => {
-      runOnJS(safeOnDelete)();
-    });
-  }, [safeOnDelete, triggerDeleteHaptic]);
-
   const animateTranslation = useCallback((toVal: number) => {
     'worklet';
     if (globalAnimation.speed === 0) {
@@ -72,6 +50,53 @@ export const SwipeableRow: React.FC<{
       translateX.value = withSpring(toVal, getSpringConfig(140, 16));
     }
   }, []);
+
+  const triggerDeleteFlow = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+
+    const currentOnDelete = onDeleteRef.current;
+
+    const performDeleteAnimation = (onCompleted: () => void) => {
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+      const w = width.value;
+      const toVal = w ? -(w + 50) : -500;
+
+      const safeCleanup = () => {
+        cancelAnimation(translateX);
+        translateX.value = 0;
+        isOpen.value = false;
+        hasTriggeredHaptic.value = false;
+
+        setTimeout(() => {
+          onCompleted();
+        }, 0);
+      };
+
+      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
+        runOnJS(safeCleanup)();
+      });
+    };
+
+    if (currentOnDelete.length === 2) {
+      const confirm = (onConfirmedStateUpdate: () => void) => {
+        performDeleteAnimation(onConfirmedStateUpdate);
+      };
+      const cancel = () => {
+        isOpen.value = false;
+        hasTriggeredHaptic.value = false;
+        animateTranslation(0);
+      };
+      (currentOnDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
+    } else {
+      performDeleteAnimation(() => {
+        (currentOnDelete as () => void)();
+      });
+    }
+  }, [animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── panGesture is memoized with [] deps — it is created ONCE and never
   // replaced while a gesture is active. All referenced functions are stable
@@ -107,7 +132,7 @@ export const SwipeableRow: React.FC<{
       const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
 
       if (currentX < currentThreshold || e.velocityX < -500) {
-        runOnJS(handleDeletePress)();
+        runOnJS(triggerDeleteFlow)();
       } else {
         const threshold = isOpen.value ? -30 : -45;
         if (e.translationX < threshold) {
@@ -121,7 +146,7 @@ export const SwipeableRow: React.FC<{
       }
     }),
   // All of these are stable (created once), so panGesture is created once.
-  [handleDeletePress, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
+  [triggerDeleteFlow, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,
@@ -175,7 +200,7 @@ export const SwipeableRow: React.FC<{
       >
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={handleDeletePress}
+          onPress={triggerDeleteFlow}
         >
           <View style={[
             swipeStyles.deleteAction, 

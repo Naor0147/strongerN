@@ -774,20 +774,23 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         <SwipeableRow
                           borderRadius={radius.md}
                           style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
-                          onDelete={() => {
+                          onDelete={(confirm, cancel) => {
                             Alert.alert(
                               i18n.t('routineEditor.removeExercise'),
                               i18n.t('routineEditor.removeExerciseMsg', { name: exercise.name }),
                               [
-                                { text: i18n.t('common.cancel'), style: 'cancel' },
+                                { text: i18n.t('common.cancel'), style: 'cancel', onPress: cancel },
                                 { text: i18n.t('common.remove'), style: 'destructive', onPress: () => {
-                                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                                  setEditorExercises(prev => {
-                                    const filtered = prev.filter((_, i) => i !== exIdx);
-                                    return sanitizeSuperSets(filtered);
+                                  confirm(() => {
+                                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                    setEditorExercises(prev => {
+                                      const filtered = prev.filter((_, i) => i !== exIdx);
+                                      return sanitizeSuperSets(filtered);
+                                    });
                                   });
                                 }},
-                              ]
+                              ],
+                              { cancelable: true, onDismiss: cancel }
                             );
                           }}
                         >
