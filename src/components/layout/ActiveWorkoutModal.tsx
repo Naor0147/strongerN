@@ -3272,30 +3272,210 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
   const isCompleted = set.completed;
   const showPrevConnected = false;
-  const showNextConnected = false;
+  const showNextConnected = isCompleted && isNextCompleted;
 
   const rowStyle = {
-    borderTopLeftRadius: showPrevConnected ? 0 : radius.xs,
-    borderTopRightRadius: showPrevConnected ? 0 : radius.xs,
-    borderBottomLeftRadius: showNextConnected ? 0 : radius.xs,
-    borderBottomRightRadius: showNextConnected ? 0 : radius.xs,
+    borderTopLeftRadius: radius.xs,
+    borderTopRightRadius: radius.xs,
+    borderBottomLeftRadius: radius.xs,
+    borderBottomRightRadius: radius.xs,
   };
 
   // Unilateral set rendering
   if (set.isUnilateral) {
     return (
+      <View style={{ marginBottom: showNextConnected ? 0 : 4 }}>
+        <SwipeableRow
+          onDelete={() => deleteSet(exIdx, setIdx)}
+          borderRadius={radius.xs}
+          style={rowStyle}
+        >
+          <View
+            style={[
+              styles.setRow,
+              styles.unilateralSetRow,
+              set.completed && styles.setRowCompleted,
+              rowStyle,
+            ]}
+          >
+            {/* Set Number / Category Cycle */}
+            <Pressable
+              style={[
+                styles.colSet,
+                styles.setNumCol,
+                { justifyContent: 'center', alignItems: 'center' }
+              ]}
+              onPress={() => {
+                if (set.completed) return;
+                const categories: ('S' | 'W' | 'D' | 'F')[] = ['S', 'W', 'D', 'F'];
+                const currIdx = categories.indexOf(set.category || 'S');
+                const nextIdx = (currIdx + 1) % categories.length;
+                updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
+              }}
+              onLongPress={() => deleteSet(exIdx, setIdx)}
+              accessibilityLabel={`Cycle set category, long press to delete set ${setIdx + 1}`}
+            >
+              <View
+                style={[
+                  styles.categoryCircle,
+                  set.category === 'W' && styles.categoryWarmup,
+                  set.category === 'D' && styles.categoryDrop,
+                  set.category === 'F' && styles.categoryFailure,
+                  set.completed && styles.categoryCompleted,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.setNumText,
+                    (set.category && set.category !== 'S') && styles.categoryLabelText,
+                    (set.category && set.category !== 'S') && { color: set.category === 'W' ? colors.gold : set.category === 'D' ? colors.highlight : colors.error },
+                    set.completed && styles.textCompleted,
+                  ]}
+                >
+                  {set.category && set.category !== 'S' ? set.category : (setIdx + 1)}
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Left/Right Rows Container */}
+            <View style={styles.unilateralContainer}>
+              {/* Left Row */}
+              <View style={styles.unilateralRow}>
+                <Text style={styles.unilateralLabel}>L</Text>
+                <View style={styles.unilateralInputWrapper}>
+                  <TextInput
+                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
+                    style={[
+                      styles.unilateralInput,
+                      set.completed && styles.inputCompleted,
+                    ]}
+                    showSoftInputOnFocus={false}
+                    value={
+                      activeInput?.exIdx === exIdx &&
+                      activeInput?.setIdx === setIdx &&
+                      activeInput?.fieldName === 'leftWeight'
+                        ? (tempInputValue ?? '')
+                        : String(set.leftWeight || set.weight || '')
+                    }
+                    onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!set.completed}
+                    selectTextOnFocus
+                  />
+                </View>
+                <View style={styles.unilateralInputWrapper}>
+                  <TextInput
+                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
+                    style={[
+                      styles.unilateralInput,
+                      set.completed && styles.textCompleted,
+                    ]}
+                    showSoftInputOnFocus={false}
+                    value={
+                      activeInput?.exIdx === exIdx &&
+                      activeInput?.setIdx === setIdx &&
+                      activeInput?.fieldName === 'leftReps'
+                        ? (tempInputValue ?? '')
+                        : String(set.leftReps || set.reps || '')
+                    }
+                    onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!set.completed}
+                    selectTextOnFocus
+                  />
+                </View>
+              </View>
+
+              {/* Right Row */}
+              <View style={styles.unilateralRow}>
+                <Text style={styles.unilateralLabel}>R</Text>
+                <View style={styles.unilateralInputWrapper}>
+                  <TextInput
+                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
+                    style={[
+                      styles.unilateralInput,
+                      set.completed && styles.inputCompleted,
+                    ]}
+                    showSoftInputOnFocus={false}
+                    value={
+                      activeInput?.exIdx === exIdx &&
+                      activeInput?.setIdx === setIdx &&
+                      activeInput?.fieldName === 'rightWeight'
+                        ? (tempInputValue ?? '')
+                        : String(set.rightWeight || set.weight || '')
+                    }
+                    onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!set.completed}
+                    selectTextOnFocus
+                  />
+                </View>
+                <View style={styles.unilateralInputWrapper}>
+                  <TextInput
+                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
+                    style={[
+                      styles.unilateralInput,
+                      set.completed && styles.textCompleted,
+                    ]}
+                    showSoftInputOnFocus={false}
+                    value={
+                      activeInput?.exIdx === exIdx &&
+                      activeInput?.setIdx === setIdx &&
+                      activeInput?.fieldName === 'rightReps'
+                        ? (tempInputValue ?? '')
+                        : String(set.rightReps || set.reps || '')
+                    }
+                    onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
+                    placeholder="0"
+                    placeholderTextColor={colors.textMuted}
+                    editable={!set.completed}
+                    selectTextOnFocus
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Done Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.colCheck,
+                styles.checkButton,
+                pressed && { transform: [{ scale: 0.96 }] }
+              ]}
+              onPress={() => toggleSetComplete(exIdx, setIdx)}
+            >
+              <View
+                style={[
+                  styles.checkCircle,
+                  set.completed && styles.checkCircleCompleted,
+                ]}
+              >
+                <AnimatedCheckmark completed={set.completed} />
+              </View>
+            </Pressable>
+          </View>
+        </SwipeableRow>
+        {showNextConnected && (
+          <View style={{ height: 4, backgroundColor: '#111A2E' }} />
+        )}
+      </View>
+    );
+  }
+
+  // Standard bilateral set rendering
+  return (
+    <View style={{ marginBottom: showNextConnected ? 0 : 4 }}>
       <SwipeableRow
         onDelete={() => deleteSet(exIdx, setIdx)}
         borderRadius={radius.xs}
-        style={{
-          marginBottom: showNextConnected ? 0 : 4,
-          ...rowStyle,
-        }}
+        style={rowStyle}
       >
         <View
           style={[
             styles.setRow,
-            styles.unilateralSetRow,
             set.completed && styles.setRowCompleted,
             rowStyle,
           ]}
@@ -3339,104 +3519,61 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
             </View>
           </Pressable>
 
-          {/* Left/Right Rows Container */}
-          <View style={styles.unilateralContainer}>
-            {/* Left Row */}
-            <View style={styles.unilateralRow}>
-              <Text style={styles.unilateralLabel}>L</Text>
-              <View style={styles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
-                  style={[
-                    styles.unilateralInput,
-                    set.completed && styles.inputCompleted,
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'leftWeight'
-                      ? (tempInputValue ?? '')
-                      : String(set.leftWeight || set.weight || '')
-                  }
-                  onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
-              <View style={styles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
-                  style={[
-                    styles.unilateralInput,
-                    set.completed && styles.textCompleted,
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'leftReps'
-                      ? (tempInputValue ?? '')
-                      : String(set.leftReps || set.reps || '')
-                  }
-                  onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
-            </View>
+          {/* Weight Input */}
+          <View style={[styles.colWeight, styles.inputWrapper]}>
+            <TextInput
+              ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
+              style={[
+                styles.input,
+                set.completed && styles.inputCompleted,
+                isWeightFocused && { borderColor: colors.accent },
+              ]}
+              showSoftInputOnFocus={false}
+              value={
+                isWeightFocused
+                  ? (tempInputValue ?? '')
+                  : String(set.weight || '')
+              }
+              onFocus={() => onFocus(exIdx, setIdx, 'weight')}
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+              editable={!set.completed}
+              selectTextOnFocus
+            />
+          </View>
 
-            {/* Right Row */}
-            <View style={styles.unilateralRow}>
-              <Text style={styles.unilateralLabel}>R</Text>
-              <View style={styles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
-                  style={[
-                    styles.unilateralInput,
-                    set.completed && styles.inputCompleted,
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'rightWeight'
-                      ? (tempInputValue ?? '')
-                      : String(set.rightWeight || set.weight || '')
-                  }
-                  onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
-              <View style={styles.unilateralInputWrapper}>
-                <TextInput
-                  ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
-                  style={[
-                    styles.unilateralInput,
-                    set.completed && styles.textCompleted,
-                  ]}
-                  showSoftInputOnFocus={false}
-                  value={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'rightReps'
-                      ? (tempInputValue ?? '')
-                      : String(set.rightReps || set.reps || '')
-                  }
-                  onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  editable={!set.completed}
-                  selectTextOnFocus
-                />
-              </View>
+          {/* Reps & RPE Container (Combined UI block) */}
+          <View style={[styles.colReps, styles.inputWrapper]}>
+            <View
+              style={[
+                styles.repsRpeContainer,
+                set.completed && styles.inputCompleted,
+                isRepsFocused && { borderColor: colors.accent },
+              ]}
+            >
+              <TextInput
+                ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
+                style={[
+                  styles.repsInput,
+                  set.completed && styles.textCompleted,
+                ]}
+                showSoftInputOnFocus={false}
+                value={
+                  isRepsFocused
+                    ? (tempInputValue ?? '')
+                    : String(set.reps || '')
+                }
+                onFocus={() => onFocus(exIdx, setIdx, 'reps')}
+                placeholder="0"
+                placeholderTextColor={colors.textMuted}
+                editable={!set.completed}
+                selectTextOnFocus
+              />
+              {set.rpe ? (
+                <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
+                  {isRpeMode ? `@${set.rpe}` : `${set.rpe}RIR`}
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -3460,143 +3597,10 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           </Pressable>
         </View>
       </SwipeableRow>
-    );
-  }
-
-  // Standard bilateral set rendering
-  return (
-    <SwipeableRow
-      onDelete={() => deleteSet(exIdx, setIdx)}
-      borderRadius={radius.xs}
-      style={{
-        marginBottom: showNextConnected ? 0 : 4,
-        ...rowStyle,
-      }}
-    >
-      <View
-        style={[
-          styles.setRow,
-          set.completed && styles.setRowCompleted,
-          rowStyle,
-        ]}
-      >
-        {/* Set Number / Category Cycle */}
-        <Pressable
-          style={[
-            styles.colSet,
-            styles.setNumCol,
-            { justifyContent: 'center', alignItems: 'center' }
-          ]}
-          onPress={() => {
-            if (set.completed) return;
-            const categories: ('S' | 'W' | 'D' | 'F')[] = ['S', 'W', 'D', 'F'];
-            const currIdx = categories.indexOf(set.category || 'S');
-            const nextIdx = (currIdx + 1) % categories.length;
-            updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
-          }}
-          onLongPress={() => deleteSet(exIdx, setIdx)}
-          accessibilityLabel={`Cycle set category, long press to delete set ${setIdx + 1}`}
-        >
-          <View
-            style={[
-              styles.categoryCircle,
-              set.category === 'W' && styles.categoryWarmup,
-              set.category === 'D' && styles.categoryDrop,
-              set.category === 'F' && styles.categoryFailure,
-              set.completed && styles.categoryCompleted,
-            ]}
-          >
-            <Text
-              style={[
-                styles.setNumText,
-                (set.category && set.category !== 'S') && styles.categoryLabelText,
-                (set.category && set.category !== 'S') && { color: set.category === 'W' ? colors.gold : set.category === 'D' ? colors.highlight : colors.error },
-                set.completed && styles.textCompleted,
-              ]}
-            >
-              {set.category && set.category !== 'S' ? set.category : (setIdx + 1)}
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Weight Input */}
-        <View style={[styles.colWeight, styles.inputWrapper]}>
-          <TextInput
-            ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
-            style={[
-              styles.input,
-              set.completed && styles.inputCompleted,
-              isWeightFocused && { borderColor: colors.accent },
-            ]}
-            showSoftInputOnFocus={false}
-            value={
-              isWeightFocused
-                ? (tempInputValue ?? '')
-                : String(set.weight || '')
-            }
-            onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-            editable={!set.completed}
-            selectTextOnFocus
-          />
-        </View>
-
-        {/* Reps & RPE Container (Combined UI block) */}
-        <View style={[styles.colReps, styles.inputWrapper]}>
-          <View
-            style={[
-              styles.repsRpeContainer,
-              set.completed && styles.inputCompleted,
-              isRepsFocused && { borderColor: colors.accent },
-            ]}
-          >
-            <TextInput
-              ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
-              style={[
-                styles.repsInput,
-                set.completed && styles.textCompleted,
-              ]}
-              showSoftInputOnFocus={false}
-              value={
-                isRepsFocused
-                  ? (tempInputValue ?? '')
-                  : String(set.reps || '')
-              }
-              onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-              placeholder="0"
-              placeholderTextColor={colors.textMuted}
-              editable={!set.completed}
-              selectTextOnFocus
-            />
-            {set.rpe ? (
-              <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
-                {isRpeMode ? `@${set.rpe}` : `${set.rpe}RIR`}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Done Button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.colCheck,
-            styles.checkButton,
-            pressed && { transform: [{ scale: 0.96 }] }
-          ]}
-          onPress={() => toggleSetComplete(exIdx, setIdx)}
-        >
-          <View
-            style={[
-              styles.checkCircle,
-              set.completed && styles.checkCircleCompleted,
-            ]}
-          >
-            <AnimatedCheckmark completed={set.completed} />
-          </View>
-        </Pressable>
-      </View>
-    </SwipeableRow>
+      {showNextConnected && (
+        <View style={{ height: 4, backgroundColor: '#111A2E' }} />
+      )}
+    </View>
   );
 });
 
@@ -3914,7 +3918,6 @@ const styles = StyleSheet.create({
     color:      colors.accent,
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
-    fontVariant: ['tabular-nums'],
   },
   headerRight: {
     flexDirection: 'row',

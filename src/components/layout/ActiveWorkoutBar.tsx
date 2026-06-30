@@ -63,6 +63,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       >
         {/* Left: live indicator + info */}
         <View style={styles.left}>
+          <View style={styles.liveDot} />
           <View style={styles.textBlock}>
             <Text style={styles.name} numberOfLines={1}>{workoutName}</Text>
           </View>
@@ -71,7 +72,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
         {/* Right: up chevron + timer */}
         <View style={styles.right}>
           <Text style={styles.rightTimer}>{elapsed}</Text>
-          <Ionicons name="chevron-up-outline" size={18} color={colors.textSecondary} style={{ marginLeft: spacing.sm }} />
+          <Ionicons name="chevron-up-outline" size={20} color={colors.textSecondary} style={{ marginLeft: spacing.sm }} />
         </View>
       </Pressable>
     </View>
@@ -86,13 +87,13 @@ const styles = StyleSheet.create({
     flexDirection:   'row',
   },
   glowBar: {
-    width:           3,
+    width:           4,
     backgroundColor: colors.accent,
     boxShadow:       '0px 0px 8px ' + colors.accent + 'CC',
   },
   inner: {
     flex:              1,
-    paddingVertical:   spacing.md,
+    paddingVertical:   22, // 1.8X taller
     paddingHorizontal: spacing.lg,
     flexDirection:     'row',
     alignItems:        'center',
@@ -104,19 +105,24 @@ const styles = StyleSheet.create({
     flex:          1,
     columnGap:     spacing.sm,
   },
+  liveDot: {
+    width:           8,
+    height:          8,
+    borderRadius:    4,
+    backgroundColor: colors.accent,
+  },
   textBlock: {
     flex: 1,
   },
   name: {
     color:      colors.textPrimary,
-    fontSize:   font.sizes.sm,
+    fontSize:   font.sizes.md, // Larger text size
     fontFamily: font.semibold,
   },
   rightTimer: {
     color:        colors.accent,
-    fontSize:     font.sizes.sm,
+    fontSize:     font.sizes.md, // Larger text size
     fontFamily:   font.semibold,
-    fontVariant:  ['tabular-nums'],
   },
   right: {
     flexDirection: 'row',

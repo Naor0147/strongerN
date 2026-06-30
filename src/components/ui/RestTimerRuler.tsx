@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     position: 'relative',
     paddingHorizontal: 20,
     paddingTop: 12,
@@ -729,7 +729,8 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     lineHeight: 56,
     fontFamily: font.medium,
-    textAlign: 'center',
+    textAlign: 'right',
+    marginLeft: 'auto',
   },
 });
 
