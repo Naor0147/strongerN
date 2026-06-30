@@ -28,6 +28,7 @@ export interface SetRowProps {
   isPrevCompleted?: boolean;
   isNextCompleted?: boolean;
   isRpeMode?: boolean;
+  tempInputValue?: string;
 }
 
 export const SetRow: React.FC<SetRowProps> = React.memo(({
@@ -44,6 +45,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
   isPrevCompleted = false,
   isNextCompleted = false,
   isRpeMode = true,
+  tempInputValue,
 }) => {
   const isActive = mode === 'active';
   const isCompleted = isActive && set.completed;
@@ -140,7 +142,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   ]}
                   showSoftInputOnFocus={false}
                   keyboardType="numeric"
-                  value={String(set.leftWeight ?? '')}
+                  value={isLeftWeightFocused ? (tempInputValue ?? '') : String(set.leftWeight ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
                   placeholder={String(set.suggestedLeftWeight ?? set.suggestedWeight ?? '0')}
                   placeholderTextColor={colors.textMuted}
@@ -158,7 +160,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   ]}
                   showSoftInputOnFocus={false}
                   keyboardType="numeric"
-                  value={String(set.leftReps ?? '')}
+                  value={isLeftRepsFocused ? (tempInputValue ?? '') : String(set.leftReps ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
                   placeholder={String(set.suggestedLeftReps ?? set.suggestedReps ?? '0')}
                   placeholderTextColor={colors.textMuted}
@@ -181,7 +183,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   ]}
                   showSoftInputOnFocus={false}
                   keyboardType="numeric"
-                  value={String(set.rightWeight ?? '')}
+                  value={isRightWeightFocused ? (tempInputValue ?? '') : String(set.rightWeight ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
                   placeholder={String(set.suggestedRightWeight ?? set.suggestedWeight ?? '0')}
                   placeholderTextColor={colors.textMuted}
@@ -199,7 +201,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   ]}
                   showSoftInputOnFocus={false}
                   keyboardType="numeric"
-                  value={String(set.rightReps ?? '')}
+                  value={isRightRepsFocused ? (tempInputValue ?? '') : String(set.rightReps ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
                   placeholder={String(set.suggestedRightReps ?? set.suggestedReps ?? '0')}
                   placeholderTextColor={colors.textMuted}
@@ -306,7 +308,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
             ]}
             showSoftInputOnFocus={false}
             keyboardType="numeric"
-            value={String(set.weight || '')}
+            value={isWeightFocused ? (tempInputValue ?? '') : String(set.weight || '')}
             onFocus={() => onFocus(exIdx, setIdx, 'weight')}
             placeholder={String(set.suggestedWeight || '0')}
             placeholderTextColor={colors.textMuted}
@@ -329,7 +331,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                 ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
                 style={[s.repsInput, isCompleted && s.textCompleted]}
                 showSoftInputOnFocus={false}
-                value={String(set.reps || '')}
+                value={isRepsFocused ? (tempInputValue ?? '') : String(set.reps || '')}
                 onFocus={() => onFocus(exIdx, setIdx, 'reps')}
                 placeholder={String(set.suggestedReps || '0')}
                 placeholderTextColor={colors.textMuted}
@@ -353,7 +355,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
               ]}
               showSoftInputOnFocus={false}
               keyboardType="numeric"
-              value={String(set.reps || '')}
+              value={isRepsFocused ? (tempInputValue ?? '') : String(set.reps || '')}
               onFocus={() => onFocus(exIdx, setIdx, 'reps')}
               placeholder={String(set.suggestedReps || '0')}
               placeholderTextColor={colors.textMuted}

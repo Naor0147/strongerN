@@ -26,6 +26,7 @@ export interface ExerciseCardProps {
   isRpeMode?: boolean;
   notes?: string;
   dragHandlers?: any;
+  tempInputValue?: string;
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
@@ -47,6 +48,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
   isRpeMode = true,
   notes,
   dragHandlers,
+  tempInputValue,
 }) => {
   const isActive = mode === 'active';
 
@@ -131,6 +133,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
       {exercise.sets.map((set: any, setIdx: number) => {
         const isPrevCompleted = isActive && setIdx > 0 && exercise.sets[setIdx - 1].completed;
         const isNextCompleted = isActive && setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
+        const isActiveRow = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx;
         return (
           <SetRow
             key={set.id}
@@ -147,6 +150,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
             isPrevCompleted={isPrevCompleted}
             isNextCompleted={isNextCompleted}
             isRpeMode={isRpeMode}
+            tempInputValue={isActiveRow ? tempInputValue : undefined}
           />
         );
       })}

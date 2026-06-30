@@ -25,8 +25,8 @@ if defined STRONGERN_AUTO if /i "%STRONGERN_AUTO%"=="1" set "AUTO_MODE=true"
 
 :: Check if ADB device is connected
 set "DEVICE_CONNECTED=false"
-for /f "delims=" %%d in ('adb.exe get-state 2^>nul') do (
-    if /i "%%d"=="device" set "DEVICE_CONNECTED=true"
+for /f "tokens=1,2" %%A in ('adb.exe devices 2^>nul') do (
+    if "%%B"=="device" set "DEVICE_CONNECTED=true"
 )
 if "%DEVICE_CONNECTED%"=="true" (
     echo [SYSTEM] USB Device detected! Enabling automatic installation mode.
@@ -202,21 +202,39 @@ echo ======================================================================
 echo.
 echo [ADB] Checking for connected devices...
 echo.
-call adb.exe devices
-echo.
-echo If your device is not listed above as "device", please ensure:
-echo  1. The phone is connected to this PC via USB.
-echo  2. USB Debugging is turned ON in Developer Options on your phone.
-echo  3. You accepted the "Allow USB debugging" prompt on your phone's screen.
-echo.
-if "%DEVICE_CONNECTED%"=="true" goto proceed_install
-set /p proceed="Attempt installation? (y/n): "
-if /i "%proceed%" neq "y" goto post_build_menu
+
+set "SELECTED_DEVICE="
+set "TEMP_DEVICE_FILE=%TEMP%\selected_adb_device.txt"
+if exist "%TEMP_DEVICE_FILE%" del /q "%TEMP_DEVICE_FILE%"
+
+call powershell -ExecutionPolicy Bypass -File "%~dp0scripts\select-device.ps1" "%AUTO_MODE%"
+
+if exist "%TEMP_DEVICE_FILE%" (
+    for /f "usebackq tokens=*" %%a in ("%TEMP_DEVICE_FILE%") do (
+        set "SELECTED_DEVICE=%%a"
+    )
+    del /q "%TEMP_DEVICE_FILE%"
+)
+
+if "%SELECTED_DEVICE%"=="" (
+    color 0E
+    echo [WARN] No active ADB devices found.
+    echo.
+    echo If your device is connected, please ensure:
+    echo  1. The phone is connected to this PC via USB.
+    echo  2. USB Debugging is turned ON in Developer Options on your phone.
+    echo  3. You accepted the "Allow USB debugging" prompt on your phone's screen.
+    echo.
+    set /p proceed="Retry installation? (y/n): "
+    if /i "%proceed%"=="y" goto install_usb
+    goto post_build_menu
+)
 
 :proceed_install
 echo.
-echo [ADB] Installing "%APK_DEST%" on your device...
-call adb.exe install -r "%APK_DEST%"
+echo [ADB] Target device: %SELECTED_DEVICE%
+echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE%...
+call adb.exe -s %SELECTED_DEVICE% install -r "%APK_DEST%"
 if %ERRORLEVEL% neq 0 (
     color 0C
     echo.
@@ -228,9 +246,9 @@ if %ERRORLEVEL% neq 0 (
 
 color 0A
 echo.
-echo [SUCCESS] App successfully installed on your device!
+echo [SUCCESS] App successfully installed on %SELECTED_DEVICE%!
 echo.
-if "%DEVICE_CONNECTED%"=="true" (
+if "%AUTO_MODE%"=="true" (
     echo [SYSTEM] Exiting automatically in 5 seconds...
     timeout /t 5 >nul
     goto exit_script

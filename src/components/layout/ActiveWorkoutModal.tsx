@@ -105,10 +105,17 @@ interface ActiveWorkoutModalProps {
 function formatElapsed(startTime: Date, offsetSeconds: number = 0): string {
   const sessionSec = Math.floor((Date.now() - startTime.getTime()) / 1000);
   const totalSec = Math.max(0, sessionSec + offsetSeconds);
-  const h   = Math.floor(totalSec / 3600);
-  const min = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
-  const sec = (totalSec % 60).toString().padStart(2, '0');
-  return h > 0 ? `${h}:${min}:${sec}` : `${min}:${sec}`;
+  const h = Math.floor(totalSec / 3600);
+  const min = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+  
+  const secStr = sec.toString().padStart(2, '0');
+  if (h > 0) {
+    const minStr = min.toString().padStart(2, '0');
+    return `${h}:${minStr}:${secStr}`;
+  } else {
+    return `${min}:${secStr}`;
+  }
 }
 
 const AnimatedCheckmark: React.FC<{ completed: boolean }> = ({ completed }) => {
@@ -690,28 +697,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
     focusTime?: number;
   } | null>(null);
+  const [tempInputValue, setTempInputValue] = useState('');
+  const tempInputValueRef = useRef('');
+  const activeInputRef = useRef<typeof activeInput>(null);
+  useEffect(() => {
+    activeInputRef.current = activeInput;
+  }, [activeInput]);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
 
   const [showSecondsOnly, setShowSecondsOnly] = useState(false);
-  const timerFadeAnim = useSharedValue(1);
-  const timerScaleAnim = useSharedValue(1);
-
   const animatedTimerStyle = useAnimatedStyle(() => ({
-    opacity: timerFadeAnim.value,
-    transform: [{ scale: timerScaleAnim.value }],
+    opacity: 1,
+    transform: [{ scale: 1 }],
   }));
 
   const toggleTimerFormat = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-
-    timerFadeAnim.value = withTiming(0.2, { duration: 120 });
-    timerScaleAnim.value = withTiming(0.85, { duration: 120 }, () => {
-      runOnJS(setShowSecondsOnly)(!showSecondsOnly);
-      timerFadeAnim.value = withTiming(1, { duration: 180 });
-      timerScaleAnim.value = withSpring(1, { damping: 6, stiffness: 80 });
-    });
-  }, [timerFadeAnim, timerScaleAnim]);
+    setShowSecondsOnly(prev => !prev);
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -964,7 +968,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const startKey = startTime.toISOString();
       const isNewWorkout = lastStartTimeRef.current !== startKey;
 
-      if (!wasInitializedRef.current || isNewWorkout || activeExercises.length === 0) {
+      if (!wasInitializedRef.current || isNewWorkout) {
         lastStartTimeRef.current = startKey;
         wasInitializedRef.current = true;
 
@@ -1393,10 +1397,30 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   }, []);
 
+  // Stable keyboard close/dismiss handler
+  const handleCloseKeyboard = useCallback(() => {
+    if (activeInputRef.current) {
+      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+    }
+    setActiveInput(null);
+  }, [updateSetField]);
+
   // Stable input focus handler (must NOT be inside .map())
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
-    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
-  }, []);
+    // 1. Commit the active input first (using activeInput and tempInputValueRef.current)
+    if (activeInputRef.current) {
+      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+    }
+    
+    // 2. Set the new input value and focus
+    const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] || '';
+    setTempInputValue(String(currentVal));
+    tempInputValueRef.current = String(currentVal);
+    
+    const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
+    setActiveInput(newInput);
+    activeInputRef.current = newInput;
+  }, [updateSetField]);
 
   // Add a set
   const addSet = useCallback((exIdx: number, isUnilateral: boolean = false) => {
@@ -1471,6 +1495,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!activeInput) return;
     const { exIdx, setIdx, fieldName } = activeInput;
 
+    // Commit current temp value before jumping
+    updateSetField(exIdx, setIdx, fieldName, tempInputValueRef.current);
+
     // 1. Auto-Finish Set: When pressing "Next" inside Reps box (bilateral) or rightReps (unilateral)
     if ((fieldName === 'reps' || fieldName === 'rightReps') && isAutoFinishSetEnabled) {
       const targetSet = activeExercises[exIdx]?.sets[setIdx];
@@ -1503,7 +1530,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box (bilateral) or rightReps (unilateral)
     if ((fieldName === 'reps' || fieldName === 'rightReps') && isKeyboardDismissOnNextEnabled) {
-      setActiveInput(null);
+      handleCloseKeyboard();
       return;
     }
 
@@ -1569,8 +1596,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
 
     // 6. Otherwise, close/blur
-    setActiveInput(null);
-  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isAutoTimerEnabled, defaultRestDuration]);
+    handleCloseKeyboard();
+  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isAutoTimerEnabled, defaultRestDuration, updateSetField, handleCloseKeyboard]);
 
   // Calculate volume & sets for summary
   const handleFinishPress = () => {
@@ -2235,6 +2262,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       isRpeMode={isRpeMode}
                       addSet={addSet}
                       setActiveExercises={setActiveExercises}
+                      tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
                     />
                   );
                 })
@@ -3168,15 +3196,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             <CustomWorkoutKeyboard
               visible={activeInput !== null}
               inputKey={activeInput ? `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}` : ''}
-              value={
-                activeInput
-                  ? activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.[activeInput.fieldName] || ''
-                  : ''
-              }
+              value={tempInputValue}
               onChange={(newValue) => {
-                if (activeInput) {
-                  updateSetField(activeInput.exIdx, activeInput.setIdx, activeInput.fieldName, newValue);
-                }
+                setTempInputValue(newValue);
+                tempInputValueRef.current = newValue;
               }}
               rpeValue={
                 activeInput
@@ -3192,7 +3215,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               title={activeInput ? activeExercises[activeInput.exIdx]?.name : ''}
               isRpeMode={isRpeMode}
               onNext={handleNextField}
-              onClose={() => setActiveInput(null)}
+              onClose={handleCloseKeyboard}
             />
           </View>
         </View>
@@ -3224,6 +3247,7 @@ interface ActiveSetRowItemProps {
   isPrevCompleted: boolean;
   isNextCompleted: boolean;
   isRpeMode?: boolean;
+  tempInputValue?: string;
 }
 
 const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
@@ -3239,6 +3263,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   isPrevCompleted,
   isNextCompleted,
   isRpeMode = true,
+  tempInputValue,
 }) => {
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
@@ -3325,19 +3350,18 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.inputCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={String(set.leftWeight || set.weight || '')}
+                  value={
+                    activeInput?.exIdx === exIdx &&
+                    activeInput?.setIdx === setIdx &&
+                    activeInput?.fieldName === 'leftWeight'
+                      ? (tempInputValue ?? '')
+                      : String(set.leftWeight || set.weight || '')
+                  }
                   onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   editable={!set.completed}
                   selectTextOnFocus
-                  selection={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'leftWeight'
-                      ? { start: String(set.leftWeight || set.weight || '').length, end: String(set.leftWeight || set.weight || '').length }
-                      : undefined
-                  }
                 />
               </View>
               <View style={styles.unilateralInputWrapper}>
@@ -3348,19 +3372,18 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.textCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={String(set.leftReps || set.reps || '')}
+                  value={
+                    activeInput?.exIdx === exIdx &&
+                    activeInput?.setIdx === setIdx &&
+                    activeInput?.fieldName === 'leftReps'
+                      ? (tempInputValue ?? '')
+                      : String(set.leftReps || set.reps || '')
+                  }
                   onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   editable={!set.completed}
                   selectTextOnFocus
-                  selection={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'leftReps'
-                      ? { start: String(set.leftReps || set.reps || '').length, end: String(set.leftReps || set.reps || '').length }
-                      : undefined
-                  }
                 />
               </View>
             </View>
@@ -3376,19 +3399,18 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.inputCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={String(set.rightWeight || set.weight || '')}
+                  value={
+                    activeInput?.exIdx === exIdx &&
+                    activeInput?.setIdx === setIdx &&
+                    activeInput?.fieldName === 'rightWeight'
+                      ? (tempInputValue ?? '')
+                      : String(set.rightWeight || set.weight || '')
+                  }
                   onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   editable={!set.completed}
                   selectTextOnFocus
-                  selection={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'rightWeight'
-                      ? { start: String(set.rightWeight || set.weight || '').length, end: String(set.rightWeight || set.weight || '').length }
-                      : undefined
-                  }
                 />
               </View>
               <View style={styles.unilateralInputWrapper}>
@@ -3399,19 +3421,18 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     set.completed && styles.textCompleted,
                   ]}
                   showSoftInputOnFocus={false}
-                  value={String(set.rightReps || set.reps || '')}
+                  value={
+                    activeInput?.exIdx === exIdx &&
+                    activeInput?.setIdx === setIdx &&
+                    activeInput?.fieldName === 'rightReps'
+                      ? (tempInputValue ?? '')
+                      : String(set.rightReps || set.reps || '')
+                  }
                   onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
                   placeholder="0"
                   placeholderTextColor={colors.textMuted}
                   editable={!set.completed}
                   selectTextOnFocus
-                  selection={
-                    activeInput?.exIdx === exIdx &&
-                    activeInput?.setIdx === setIdx &&
-                    activeInput?.fieldName === 'rightReps'
-                      ? { start: String(set.rightReps || set.reps || '').length, end: String(set.rightReps || set.reps || '').length }
-                      : undefined
-                  }
                 />
               </View>
             </View>
@@ -3506,19 +3527,16 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               isWeightFocused && { borderColor: colors.accent },
             ]}
             showSoftInputOnFocus={false}
-            value={String(set.weight || '')}
+            value={
+              isWeightFocused
+                ? (tempInputValue ?? '')
+                : String(set.weight || '')
+            }
             onFocus={() => onFocus(exIdx, setIdx, 'weight')}
             placeholder="0"
             placeholderTextColor={colors.textMuted}
             editable={!set.completed}
             selectTextOnFocus
-            selection={
-              activeInput?.exIdx === exIdx &&
-              activeInput?.setIdx === setIdx &&
-              activeInput?.fieldName === 'weight'
-                ? { start: String(set.weight || '').length, end: String(set.weight || '').length }
-                : undefined
-            }
           />
         </View>
 
@@ -3538,19 +3556,16 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 set.completed && styles.textCompleted,
               ]}
               showSoftInputOnFocus={false}
-              value={String(set.reps || '')}
+              value={
+                isRepsFocused
+                  ? (tempInputValue ?? '')
+                  : String(set.reps || '')
+              }
               onFocus={() => onFocus(exIdx, setIdx, 'reps')}
               placeholder="0"
               placeholderTextColor={colors.textMuted}
               editable={!set.completed}
               selectTextOnFocus
-              selection={
-                activeInput?.exIdx === exIdx &&
-                activeInput?.setIdx === setIdx &&
-                activeInput?.fieldName === 'reps'
-                  ? { start: String(set.reps || '').length, end: String(set.reps || '').length }
-                  : undefined
-              }
             />
             {set.rpe ? (
               <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
@@ -3607,6 +3622,7 @@ interface ActiveExerciseRowProps {
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
   setActiveExercises: React.Dispatch<React.SetStateAction<any[]>>;
+  tempInputValue?: string;
 }
 
 const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
@@ -3632,6 +3648,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   isRpeMode,
   addSet,
   setActiveExercises,
+  tempInputValue,
 }) => {
   const enterScale = useSharedValue(0.95);
   const enterOpacity = useSharedValue(0);
@@ -3772,6 +3789,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           {exercise.sets.map((set: any, setIdx: number) => {
             const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
             const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
+            const isActiveRow = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx;
             return (
               <ActiveSetRowItem
                 key={set.id}
@@ -3787,6 +3805,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 isPrevCompleted={isPrevCompleted}
                 isNextCompleted={isNextCompleted}
                 isRpeMode={isRpeMode}
+                tempInputValue={isActiveRow ? tempInputValue : undefined}
               />
             );
           })}
@@ -3890,7 +3909,7 @@ const styles = StyleSheet.create({
     zIndex:         -1,
   },
   headerTimerText: {
-    color:      colors.textPrimary,
+    color:      colors.accent,
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
     fontVariant: ['tabular-nums'],

@@ -195,6 +195,13 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
     focusTime?: number;
   } | null>(null);
+  const [tempInputValue, setTempInputValue] = useState('');
+  const tempInputValueRef = useRef('');
+  const activeInputRef = useRef<typeof activeInput>(null);
+
+  useEffect(() => {
+    activeInputRef.current = activeInput;
+  }, [activeInput]);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
   const initialRef = useRef<{ name: string; folder: string; exercisesStr: string } | null>(null);
@@ -408,10 +415,21 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     });
   }, []);
 
+  // Stable keyboard close/dismiss handler
+  const handleCloseKeyboard = useCallback(() => {
+    if (activeInputRef.current) {
+      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+    }
+    setActiveInput(null);
+  }, [updateSetField]);
+
   // Handle custom keyboard "Next" button click
   const handleNextField = useCallback(() => {
     if (!activeInput) return;
     const { exIdx, setIdx, fieldName } = activeInput;
+
+    // Commit current temp value
+    updateSetField(exIdx, setIdx, fieldName, tempInputValueRef.current);
 
     const currentEx = editorExercises[exIdx];
     if (!currentEx) return;
@@ -464,8 +482,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       }
     }
 
-    setActiveInput(null);
-  }, [activeInput, editorExercises]);
+    handleCloseKeyboard();
+  }, [activeInput, editorExercises, updateSetField, handleCloseKeyboard]);
 
   // ── Drag helpers (long-press handle) ─────────────────────────────────────────
   const handleMove = useCallback((gestureStateY: number) => {
@@ -542,8 +560,20 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // ── Add exercises callback ────────────────────────────────────────────────────
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
-    setActiveInput({ exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() });
-  }, []);
+    // 1. Commit the active input first
+    if (activeInputRef.current) {
+      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+    }
+    
+    // 2. Set the new input value and focus
+    const currentVal = editorExercisesRef.current[ex]?.sets[s]?.[field] || '';
+    setTempInputValue(String(currentVal));
+    tempInputValueRef.current = String(currentVal);
+    
+    const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
+    setActiveInput(newInput);
+    activeInputRef.current = newInput;
+  }, [updateSetField]);
 
   const handleConfirmExercises = (names: string[]) => {
     setEditorExercises(prev => [
@@ -807,6 +837,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                             onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
                             onAddSet={addSet}
                             dragHandlers={dragHandlers}
+                            tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
                           />
                         </SwipeableRow>
                       </DraggableListItem>
@@ -1061,20 +1092,15 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
             <CustomWorkoutKeyboard
               visible={activeInput !== null}
               inputKey={activeInput ? `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}` : ''}
-              value={
-                activeInput
-                  ? editorExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.[activeInput.fieldName] || ''
-                  : ''
-              }
+              value={tempInputValue}
               onChange={(newValue) => {
-                if (activeInput) {
-                  updateSetField(activeInput.exIdx, activeInput.setIdx, activeInput.fieldName, newValue);
-                }
+                setTempInputValue(newValue);
+                tempInputValueRef.current = newValue;
               }}
               fieldName={activeInput?.fieldName}
               title={activeInput ? editorExercises[activeInput.exIdx]?.name : ''}
               onNext={handleNextField}
-              onClose={() => setActiveInput(null)}
+              onClose={handleCloseKeyboard}
             />
           </View>
         </KeyboardAvoidingView>

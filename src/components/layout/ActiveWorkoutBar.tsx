@@ -7,9 +7,8 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, ripple as rippleTokens, radius, globalAnimation, getScaledDuration } from '../../theme';
+import { colors, font, spacing, ripple as rippleTokens, radius } from '../../theme';
 import i18n from '../../utils/i18n';
 
 interface ActiveWorkoutBarProps {
@@ -20,11 +19,17 @@ interface ActiveWorkoutBarProps {
 }
 
 function formatElapsed(startTime: Date): string {
-  const totalSec = Math.floor((Date.now() - startTime.getTime()) / 1000);
+  const totalSec = Math.max(0, Math.floor((Date.now() - startTime.getTime()) / 1000));
   const h   = Math.floor(totalSec / 3600);
-  const min = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
-  const sec = (totalSec % 60).toString().padStart(2, '0');
-  return h > 0 ? `${h}:${min}:${sec}` : `${min}:${sec}`;
+  const min = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+  const secStr = sec.toString().padStart(2, '0');
+  if (h > 0) {
+    const minStr = min.toString().padStart(2, '0');
+    return `${h}:${minStr}:${secStr}`;
+  } else {
+    return `${min}:${secStr}`;
+  }
 }
 
 const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
@@ -35,43 +40,12 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
 }) => {
   const [elapsed, setElapsed] = useState(() => formatElapsed(startTime));
 
-  const pulseAnim = useSharedValue(1);
-
   const startTimeMs = startTime.getTime();
 
   useEffect(() => {
     const id = setInterval(() => setElapsed(formatElapsed(startTime)), 1000);
     return () => clearInterval(id);
   }, [startTimeMs]);
-
-  useEffect(() => {
-    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
-      ? globalAnimation.speed
-      : 1;
-
-    if (speed === 0) {
-      pulseAnim.value = 1;
-      return;
-    }
-
-    const dur = getScaledDuration(700);
-    pulseAnim.value = withRepeat(
-      withSequence(
-        withTiming(0.2, { duration: dur, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: dur, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
-
-    return () => {
-      pulseAnim.value = 1;
-    };
-  }, [pulseAnim, globalAnimation?.speed]);
-
-  const dotStyle = useAnimatedStyle(() => ({
-    opacity: pulseAnim.value,
-  }));
 
   const label = i18n.t('extras.activeWorkoutA11y', { name: workoutName, time: elapsed });
 
@@ -89,24 +63,14 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       >
         {/* Left: live indicator + info */}
         <View style={styles.left}>
-          <Animated.View style={[styles.dot, dotStyle]} />
           <View style={styles.textBlock}>
             <Text style={styles.name} numberOfLines={1}>{workoutName}</Text>
-            <Text style={styles.timer}>{elapsed}</Text>
           </View>
         </View>
 
-        {/* Right: up chevron + finish */}
+        {/* Right: up chevron + timer */}
         <View style={styles.right}>
-          <Pressable
-            style={({ pressed }) => [styles.finishBtn, pressed && { transform: [{ scale: 0.96 }] }]}
-            onPress={onFinish}
-            android_ripple={rippleTokens.accent}
-            accessibilityLabel={i18n.t('extras.finishWorkoutBarA11y')}
-            testID="active-workout-bar.finish"
-          >
-            <Text style={styles.finishText}>{i18n.t('activeWorkoutBar.finish')}</Text>
-          </Pressable>
+          <Text style={styles.rightTimer}>{elapsed}</Text>
           <Ionicons name="chevron-up-outline" size={18} color={colors.textSecondary} style={{ marginLeft: spacing.sm }} />
         </View>
       </Pressable>
@@ -140,13 +104,6 @@ const styles = StyleSheet.create({
     flex:          1,
     columnGap:     spacing.sm,
   },
-  dot: {
-    width:           10,
-    height:          10,
-    borderRadius:    5,
-    backgroundColor: colors.accent,
-    boxShadow:       '0px 0px 6px ' + colors.accent + 'CC',
-  },
   textBlock: {
     flex: 1,
   },
@@ -155,31 +112,15 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.sm,
     fontFamily: font.semibold,
   },
-  timer: {
+  rightTimer: {
     color:        colors.accent,
-    fontSize:     font.sizes.xs,
-    fontFamily:   'monospace',
+    fontSize:     font.sizes.sm,
+    fontFamily:   font.semibold,
     fontVariant:  ['tabular-nums'],
-    marginTop:    2,
-    letterSpacing: 1.2,
   },
   right: {
     flexDirection: 'row',
     alignItems:    'center',
-  },
-  finishBtn: {
-    backgroundColor:   colors.accent + '22',
-    borderColor:       colors.accent,
-    borderWidth:       1,
-    borderRadius:      radius.full,
-    paddingVertical:   4,
-    paddingHorizontal: spacing.md,
-  },
-  finishText: {
-    color:         colors.accent,
-    fontSize:      font.sizes.xs,
-    fontFamily:    font.bold,
-    letterSpacing: 0.8,
   },
 });
 
