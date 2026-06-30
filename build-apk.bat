@@ -207,7 +207,7 @@ set "SELECTED_DEVICE="
 set "TEMP_DEVICE_FILE=%TEMP%\selected_adb_device.txt"
 if exist "%TEMP_DEVICE_FILE%" del /q "%TEMP_DEVICE_FILE%"
 
-call powershell -ExecutionPolicy Bypass -File "%~dp0scripts\select-device.ps1" "%AUTO_MODE%"
+call powershell -NonInteractive -ExecutionPolicy Bypass -File "%~dp0scripts\select-device.ps1" "%AUTO_MODE%" <nul
 
 if exist "%TEMP_DEVICE_FILE%" (
     for /f "usebackq tokens=*" %%a in ("%TEMP_DEVICE_FILE%") do (
@@ -237,12 +237,18 @@ if "%SELECTED_DEVICE%"=="" (
 :proceed_install
 echo.
 echo [ADB] Target device: %SELECTED_DEVICE%
-echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE%...
-call adb.exe -s %SELECTED_DEVICE% install -r "%APK_DEST%"
+echo.
+echo ======================================================================
+echo IMPORTANT: Please UNLOCK your phone screen and keep it awake!
+echo Accept any "Install via USB" or "Play Protect" prompts on your phone.
+echo ======================================================================
+echo.
+echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE% (30s timeout)...
+call powershell -NonInteractive -ExecutionPolicy Bypass -Command "$p = Start-Process adb.exe -ArgumentList '-s %SELECTED_DEVICE% install -r \"%APK_DEST%\"' -NoNewWindow -PassThru; if ($p) { if (-not $p.WaitForExit(30000)) { $p | Stop-Process -Force; Write-Host '[ERROR] Installation timed out! Please unlock your phone screen and allow install via USB.' -ForegroundColor Red; exit 1 } else { exit $p.ExitCode } }" <nul
 if %ERRORLEVEL% neq 0 (
     color 0C
     echo.
-    echo [ERROR] ADB installation failed. Please check the error message above.
+    echo [ERROR] ADB installation failed or timed out.
     echo.
     if "%AUTO_MODE%"=="true" (
         goto exit_script
