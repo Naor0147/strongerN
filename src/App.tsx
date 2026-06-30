@@ -2008,6 +2008,7 @@ function App() {
             isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
             isRpeMode={isRpeMode}
             exerciseNameLanguage={exerciseNameLanguage}
+            isEditing={!!editingSessionId}
             previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
             editingComment={activeWorkoutComment}
             onUpdateComment={(newComment) => {

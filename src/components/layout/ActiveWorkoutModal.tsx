@@ -91,6 +91,7 @@ interface ActiveWorkoutModalProps {
   isKeyboardDismissOnNextEnabled?: boolean;
   isRpeMode?: boolean;
   exerciseNameLanguage?: 'en' | 'he';
+  isEditing?:         boolean;
   /** When editing/resuming, the original session's duration in minutes */
   previousDurationMin?: number;
   /** When editing, the session comment (user's workout note) */
@@ -654,6 +655,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isKeyboardDismissOnNextEnabled = true,
   isRpeMode = true,
   exerciseNameLanguage,
+  isEditing = false,
   previousDurationMin = 0,
   editingComment,
   onUpdateComment,
@@ -662,9 +664,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   // Track the actual resume/edit start time (when THIS session started, not the original workout)
-  const resumeStartTime = useRef(new Date());
+  const resumeStartTime = useRef(isEditing ? new Date() : (startTime || new Date()));
   // Offset in seconds from previous session duration (for edit/resume)
-  const accumulatedOffsetSeconds = useRef(previousDurationMin * 60);
+  const accumulatedOffsetSeconds = useRef((previousDurationMin || 0) * 60);
   const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
   const wasInitializedRef = useRef(false);
   const [elapsed, setElapsed] = useState(() => formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
@@ -967,7 +969,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         wasInitializedRef.current = true;
 
         // Reset timer refs and note state on a fresh track/edit session start
-        resumeStartTime.current = new Date();
+        resumeStartTime.current = isEditing ? new Date() : (startTime || new Date());
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
         setElapsed(formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
         setWorkoutNote(editingComment || '');
@@ -3029,7 +3031,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 if (onUpdateStartTime) {
                                   onUpdateStartTime(newStart);
                                 }
-                                if (previousDurationMin === 0) {
+                                if (!isEditing) {
                                   resumeStartTime.current = newStart;
                                 }
                                 setIsStartTimePickerVisible(false);
