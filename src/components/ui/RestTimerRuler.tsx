@@ -644,10 +644,10 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = ({
   const isStopping = isStoppingRef.current;
   const isZero = phase === 'zero' && !isStopping;
   const isSweep = phase === 'sweeping';
-  const btnBg = isZero ? colors.success : colors.error;
-  const btnLabel = isZero ? 'Start' : 'Stop';
-  const btnTxt = isZero ? colors.textInverse : colors.textPrimary;
-  const secsColor = isZero ? colors.success : colors.accent;
+  const btnBg = colors.error;
+  const btnLabel = 'Stop';
+  const btnTxt = colors.textPrimary;
+  const secsColor = isZero ? colors.error : colors.accent;
   const isDisabled = isSweep || isStopping;
 
   return (
@@ -664,18 +664,20 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = ({
 
       {/* ── Bottom row ── */}
       <View style={styles.bottomRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.actionBtn,
-            { backgroundColor: btnBg, opacity: isDisabled ? 0.5 : (pressed ? 0.85 : 1) },
-            pressed && !isDisabled && { transform: [{ scale: 0.96 }] }
-          ]}
-          onPress={handleActionBtn}
-          disabled={isDisabled}
-          android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
-        >
-          <Text style={[styles.actionBtnText, { color: btnTxt }]}>{btnLabel}</Text>
-        </Pressable>
+        {!isZero && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: btnBg, opacity: isDisabled ? 0.5 : (pressed ? 0.85 : 1) },
+              pressed && !isDisabled && { transform: [{ scale: 0.96 }] }
+            ]}
+            onPress={handleActionBtn}
+            disabled={isDisabled}
+            android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
+          >
+            <Text style={[styles.actionBtnText, { color: btnTxt }]}>{btnLabel}</Text>
+          </Pressable>
+        )}
 
         {/* fmt() rounds internally — user sees clean integers */}
         <Text style={[styles.timeDisplay, { color: secsColor }]}>{fmt(displaySecs)}</Text>
@@ -701,12 +703,16 @@ const styles = StyleSheet.create({
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    position: 'relative',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
+    minHeight: 80,
   },
   actionBtn: {
+    position: 'absolute',
+    left: 20,
     width: 100,
     paddingVertical: 10,
     borderRadius: 20,
@@ -720,11 +726,10 @@ const styles = StyleSheet.create({
   },
   timeDisplay: {
     fontSize: 50,
-    fontWeight: '100',
-    letterSpacing: -2,
-    lineHeight: 54,
-    fontFamily: font.regular,
-    fontVariant: ['tabular-nums'],
+    letterSpacing: -1,
+    lineHeight: 56,
+    fontFamily: font.medium,
+    textAlign: 'center',
   },
 });
 

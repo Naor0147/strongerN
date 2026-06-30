@@ -2038,21 +2038,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 
                 <Pressable
                   onPress={() => {
-                    if (isTimerActive) {
-                      setIsTimerSubMenuVisible(!isTimerSubMenuVisible);
-                    } else {
+                    if (!isTimerActive) {
                       restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
                       setRestTimeRemaining(defaultRestDuration);
                       setIsTimerActive(true);
                       cancelAndScheduleRestNotification(defaultRestDuration);
                     }
                   }}
+                  disabled={isTimerActive}
                   style={({ pressed }) => [
                     styles.headerStopwatchBtn,
                     isTimerActive && styles.headerTimerBtnActive,
-                    pressed && { transform: [{ scale: 0.96 }] }
+                    pressed && !isTimerActive && { transform: [{ scale: 0.96 }] }
                   ]}
-                  android_ripple={rippleTokens.surface}
+                  android_ripple={isTimerActive ? undefined : rippleTokens.surface}
                   accessibilityLabel="Toggle rest timer"
                 >
                   <Ionicons 
@@ -2061,7 +2060,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     color={isTimerActive ? colors.accent : colors.textPrimary} 
                   />
                   {isTimerActive && (
-                    <Text style={styles.headerRestTimerText}>{restTimeRemaining}s</Text>
+                    <Text style={styles.headerRestTimerText}>{restTimeRemaining} sec</Text>
                   )}
                 </Pressable>
  
@@ -3271,8 +3270,8 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
 
   const isCompleted = set.completed;
-  const showPrevConnected = isCompleted && isPrevCompleted;
-  const showNextConnected = isCompleted && isNextCompleted;
+  const showPrevConnected = false;
+  const showNextConnected = false;
 
   const rowStyle = {
     borderTopLeftRadius: showPrevConnected ? 0 : radius.xs,

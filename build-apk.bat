@@ -81,7 +81,7 @@ if not exist "android" (
         echo.
         echo [ERROR] Expo prebuild failed. Please check dependencies.
         echo.
-        pause
+        if not "%AUTO_MODE%"=="true" pause
         exit /b 1
     )
     color 0B
@@ -141,7 +141,7 @@ if %ERRORLEVEL% neq 0 (
     echo [ERROR] Gradle compilation failed. Please verify build configuration or Java version.
     echo.
     cd ..
-    pause
+    if not "%AUTO_MODE%"=="true" pause
     exit /b 1
 )
 
@@ -153,7 +153,7 @@ if not exist "%APK_SRC%" (
     echo.
     echo [ERROR] Compiled APK not found at: %APK_SRC%
     echo.
-    pause
+    if not "%AUTO_MODE%"=="true" pause
     exit /b 1
 )
 
@@ -219,6 +219,10 @@ if exist "%TEMP_DEVICE_FILE%" (
 if "%SELECTED_DEVICE%"=="" (
     color 0E
     echo [WARN] No active ADB devices found.
+    if "%AUTO_MODE%"=="true" (
+        echo [SYSTEM] Exiting auto build script since no devices are connected.
+        goto exit_script
+    )
     echo.
     echo If your device is connected, please ensure:
     echo  1. The phone is connected to this PC via USB.
@@ -240,6 +244,9 @@ if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] ADB installation failed. Please check the error message above.
     echo.
+    if "%AUTO_MODE%"=="true" (
+        goto exit_script
+    )
     pause
     goto post_build_menu
 )
@@ -249,8 +256,6 @@ echo.
 echo [SUCCESS] App successfully installed on %SELECTED_DEVICE%!
 echo.
 if "%AUTO_MODE%"=="true" (
-    echo [SYSTEM] Exiting automatically in 5 seconds...
-    timeout /t 5 >nul
     goto exit_script
 )
 pause
@@ -316,5 +321,5 @@ color 0F
 echo.
 echo Thank you for using strongerN! Happy training.
 echo.
-timeout /t 2 >nul
+if not "%AUTO_MODE%"=="true" timeout /t 2 >nul
 exit /b 0
