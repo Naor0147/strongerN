@@ -526,6 +526,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const getDragHandlers = useCallback((itemKey: string, index: number) => {
     if (!gestureMap.current[itemKey]) {
       const panGesture = Gesture.Pan()
+        .activateAfterLongPress(250)
         .runOnJS(true)
         .onStart(() => {
           setActiveId(itemKey);
@@ -694,6 +695,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 showsVerticalScrollIndicator={false}
                 overScrollMode="never"
                 keyboardShouldPersistTaps="handled"
+                scrollEnabled={activeId === null}
               >
                 {/* Folder Selector */}
                 <View style={edStyles.folderRow}>
@@ -883,41 +885,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       {editorExercises[exMenuIdx]?.name.toUpperCase()}
                     </Text>
 
-                    <Pressable
-                      style={edStyles.sheetItem}
-                      onPress={() => {
-                        setEditorExercises(prev => {
-                          const next = [...prev];
-                          if (exMenuIdx > 0) {
-                            [next[exMenuIdx - 1], next[exMenuIdx]] = [next[exMenuIdx], next[exMenuIdx - 1]];
-                          }
-                          return sanitizeSuperSets(next);
-                        });
-                        setIsExMenuVisible(false);
-                      }}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Ionicons name="arrow-up-outline" size={20} color={colors.accent} />
-                      <Text style={edStyles.sheetItemText}>{i18n.t('extras.moveUp')}</Text>
-                    </Pressable>
 
-                    <Pressable
-                      style={edStyles.sheetItem}
-                      onPress={() => {
-                        setEditorExercises(prev => {
-                          const next = [...prev];
-                          if (exMenuIdx < next.length - 1) {
-                            [next[exMenuIdx], next[exMenuIdx + 1]] = [next[exMenuIdx + 1], next[exMenuIdx]];
-                          }
-                          return sanitizeSuperSets(next);
-                        });
-                        setIsExMenuVisible(false);
-                      }}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Ionicons name="arrow-down-outline" size={20} color={colors.accent} />
-                      <Text style={edStyles.sheetItemText}>{i18n.t('extras.moveDown')}</Text>
-                    </Pressable>
 
                     {(() => {
                       const currentEx = editorExercises[exMenuIdx];

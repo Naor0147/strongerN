@@ -11,6 +11,8 @@ import {
   ScrollView,
   Alert,
   Clipboard,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -724,8 +726,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     <Text style={styles.ctaOutlineText}>{i18n.t('workout.startEmptyWorkout')}</Text>
                   </Pressable>
 
-                  {/* Quick Start */}
-                  {lastUsed && <QuickStartCard template={lastUsed} onStart={onStartWorkout} />}
+                  {/* Folders section header */}
 
                   {/* Folders section header */}
                   <SectionLabel
@@ -793,8 +794,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   </Pressable>
                 )}
 
-                {/* Quick Start */}
-                {!currentFolder && lastUsed && <QuickStartCard template={lastUsed} onStart={onStartWorkout} />}
+                {/* Templates section header */}
 
                 {/* Templates section header */}
                 <SectionLabel
@@ -1129,97 +1129,78 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         transparent
         onRequestClose={() => setIsImportModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{i18n.t('workout.importSharedRoutine')}</Text>
-              <IconButton
-                name="close"
-                size={22}
-                color={colors.textSecondary}
-                onPress={() => setIsImportModalVisible(false)}
-              />
-            </View>
-
-            <View style={styles.modalForm}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
-                <Text style={[styles.inputLabel, { marginTop: 0, flex: 1 }]}>
-                  {i18n.t('workout.pasteSharePayload', { defaultValue: 'Paste sharing link or JSON routine payload' })}
-                </Text>
-                <Pressable
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: colors.surface2,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: radius.xs,
-                    paddingVertical: 5,
-                    paddingHorizontal: 8,
-                    columnGap: 4,
-                  }}
-                  onPress={handlePasteFromClipboard}
-                  android_ripple={rippleTokens.surface}
-                >
-                  <Ionicons name="clipboard-outline" size={12} color={colors.accent} />
-                  <Text style={{
-                    color: colors.accent,
-                    fontSize: font.sizes.xs,
-                    fontFamily: font.bold,
-                  }}>
-                    Paste
-                  </Text>
-                </Pressable>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => setIsImportModalVisible(false)}>
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{i18n.t('workout.importSharedRoutine')}</Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
+                  onPress={() => setIsImportModalVisible(false)}
+                />
               </View>
 
-              <TextInput
-                style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
-                placeholder={i18n.t('workout.pasteSharePlaceholder', { defaultValue: 'Paste deep link or routine JSON here...' })}
-                placeholderTextColor={colors.textMuted}
-                value={importPayloadText}
-                onChangeText={setImportPayloadText}
-                multiline
-                keyboardAppearance="dark"
-              />
+              <View style={styles.modalForm}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+                  <Text style={[styles.inputLabel, { marginTop: 0, flex: 1 }]}>
+                    {i18n.t('workout.pasteSharePayload', { defaultValue: 'Paste sharing link or JSON routine payload' })}
+                  </Text>
+                  <Pressable
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: colors.surface2,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      borderRadius: radius.xs,
+                      paddingVertical: 5,
+                      paddingHorizontal: 8,
+                      columnGap: 4,
+                    }}
+                    onPress={handlePasteFromClipboard}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <Ionicons name="clipboard-outline" size={12} color={colors.accent} />
+                    <Text style={{
+                      color: colors.accent,
+                      fontSize: font.sizes.xs,
+                      fontFamily: font.bold,
+                    }}>
+                      Paste
+                    </Text>
+                  </Pressable>
+                </View>
 
-              <Pressable
-                style={styles.submitBtn}
-                onPress={handleImportRoutine}
-                android_ripple={rippleTokens.accent}
-              >
-                <Text style={styles.submitBtnText}>{i18n.t('workout.importRoutine')}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
+                <TextInput
+                  style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
+                  placeholder={i18n.t('workout.pasteSharePlaceholder', { defaultValue: 'Paste deep link or routine JSON here...' })}
+                  placeholderTextColor={colors.textMuted}
+                  value={importPayloadText}
+                  onChangeText={setImportPayloadText}
+                  multiline
+                  keyboardAppearance="dark"
+                />
+
+                <Pressable
+                  style={styles.submitBtn}
+                  onPress={handleImportRoutine}
+                  android_ripple={rippleTokens.accent}
+                >
+                  <Text style={styles.submitBtnText}>{i18n.t('workout.importRoutine')}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 };
-
-const QuickStartCard: React.FC<{ template: Template; onStart?: (name: string, exercises: string[], exercisesDetails?: any[]) => void }> = React.memo(({ template, onStart }) => (
-  <Card padding={0} variant="active" style={styles.quickCard} testID="workout.quick-start">
-    <PressableRow
-      onPress={() => onStart && onStart(template.name, template.exercises, template.exercisesDetails)}
-      padding={{ vertical: spacing.md, horizontal: spacing.lg }}
-      ripple={rippleTokens.accent}
-      accessibilityLabel={i18n.t('extras.quickStartA11y', { name: template.name })}
-    >
-      <View style={styles.quickInner}>
-        <View style={styles.quickLeft}>
-          <View style={styles.quickIconWrap}>
-            <Ionicons name="flash" size={18} color={colors.accent} />
-          </View>
-          <View>
-            <Text style={styles.quickLabel}>{i18n.t('workout.quickStart')}</Text>
-            <Text style={styles.quickName}>{template.name}</Text>
-          </View>
-        </View>
-        <Ionicons name="arrow-forward-circle" size={28} color={colors.accent} />
-      </View>
-    </PressableRow>
-  </Card>
-));
 
 const styles = StyleSheet.create({
   safe: {

@@ -639,6 +639,46 @@ const serializeState = (exercises: any[], note: string): string => {
   }
 };
 
+// Contiguous supersets verification & dissolution helper
+function sanitizeSuperSets<T extends { superSetGroupId?: string }>(items: T[]): T[] {
+  const seenGroups = new Set<string>();
+  let lastGroupId: string | undefined = undefined;
+  
+  const result = items.map((item, idx) => {
+    const gid = item.superSetGroupId;
+    if (!gid) {
+      lastGroupId = undefined;
+      return item;
+    }
+    
+    // If we've seen this group ID before, but it's not contiguous with the last one, split it!
+    if (seenGroups.has(gid) && lastGroupId !== gid) {
+      const newGid = `ss-split-${Date.now()}-${idx}-${Math.random()}`;
+      lastGroupId = newGid;
+      return { ...item, superSetGroupId: newGid };
+    }
+    
+    seenGroups.add(gid);
+    lastGroupId = gid;
+    return item;
+  });
+  
+  // Dissolve groups containing < 2 exercises
+  const groupCounts: Record<string, number> = {};
+  result.forEach(item => {
+    if (item.superSetGroupId) {
+      groupCounts[item.superSetGroupId] = (groupCounts[item.superSetGroupId] || 0) + 1;
+    }
+  });
+  
+  return result.map(item => {
+    if (item.superSetGroupId && groupCounts[item.superSetGroupId] < 2) {
+      return { ...item, superSetGroupId: undefined };
+    }
+    return item;
+  });
+}
+
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
   workoutName,
@@ -1925,6 +1965,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const getExerciseDragHandlers = useCallback((itemKey: string) => {
     if (!exGestureMap.current[itemKey]) {
       const panGesture = Gesture.Pan()
+        .activateAfterLongPress(250)
         .runOnJS(true)
         .onStart(() => {
           const currentIndex = exIndicesRef.current[itemKey];
@@ -1957,12 +1998,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           exDragIdx.current  = -1;
           exHoverIdx.current = -1;
           exDragY.value = 0;
+          setActiveExercises(prev => sanitizeSuperSets(prev));
         })
         .onFinalize(() => {
           setExActiveKey(null);
           exDragIdx.current  = -1;
           exHoverIdx.current = -1;
           exDragY.value = 0;
+          setActiveExercises(prev => sanitizeSuperSets(prev));
         });
       exGestureMap.current[itemKey] = panGesture;
     }

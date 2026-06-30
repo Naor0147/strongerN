@@ -631,6 +631,34 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { top } = useSafeAreaInsets();
   
+  const [showHypertrophyGoal, setShowHypertrophyGoal] = useState(false);
+
+  React.useEffect(() => {
+    const loadGoalSetting = async () => {
+      try {
+        const { loadFromDb } = require('../utils/db');
+        const val = await loadFromDb('strongern_show_hypertrophy_goal');
+        if (val !== null) {
+          setShowHypertrophyGoal(!!val);
+        }
+      } catch (e) {
+        console.warn('Error loading hypertrophy goal setting:', e);
+      }
+    };
+    loadGoalSetting();
+  }, []);
+
+  const handleToggleHypertrophyGoal = async () => {
+    const nextVal = !showHypertrophyGoal;
+    setShowHypertrophyGoal(nextVal);
+    try {
+      const { saveToDb } = require('../utils/db');
+      await saveToDb('strongern_show_hypertrophy_goal', nextVal);
+    } catch (e) {
+      console.warn('Error saving hypertrophy goal setting:', e);
+    }
+  };
+  
   // Snap points
   const T_EXPANDED = 0;
   const T_COLLAPSED = SCREEN_HEIGHT * 0.52;
@@ -762,42 +790,6 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     opacity: interpolate(sheetTranslateY.value, [T_EXPANDED, T_EXPANDED + 80, T_COLLAPSED], [1, 0, 0], 'clamp'),
   }));
 
-  const weeklyExercisesForMuscle = useMemo(() => {
-    if (!selectedMuscle) return [];
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
-    const exerciseSetsMap: Record<string, { sets: number; maxWeight: number }> = {};
-    sessions.forEach(session => {
-      if (!session || !session.datetime) return;
-      const sessionDate = new Date(session.datetime);
-      if (sessionDate >= oneWeekAgo && session.exercises && Array.isArray(session.exercises)) {
-        session.exercises.forEach((ex: any) => {
-          if (!ex || !ex.name) return;
-          const libEx = exercisesList.find((le: any) => le && le.name && le.name.toLowerCase() === ex.name.toLowerCase());
-          let group = libEx ? libEx.muscleGroup : '';
-          if (group === 'Core') group = 'Abs';
-          if (group && group.toLowerCase() === selectedMuscle.toLowerCase()) {
-            const setsCount = ex.sets || 0;
-            const weight = ex.bestWeight || 0;
-            if (exerciseSetsMap[ex.name]) {
-              exerciseSetsMap[ex.name].sets += setsCount;
-              exerciseSetsMap[ex.name].maxWeight = Math.max(exerciseSetsMap[ex.name].maxWeight, weight);
-            } else {
-              exerciseSetsMap[ex.name] = { sets: setsCount, maxWeight: weight };
-            }
-          }
-        });
-      }
-    });
-
-    return Object.keys(exerciseSetsMap).map(name => ({
-      name,
-      sets: exerciseSetsMap[name].sets,
-      weight: exerciseSetsMap[name].maxWeight
-    }));
-  }, [selectedMuscle, sessions, exercisesList]);
-
   const suggestedExercisesForMuscle = useMemo(() => {
     if (!selectedMuscle) return [];
     return exercisesList.filter((ex: any) => {
@@ -805,7 +797,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       let group = ex.muscleGroup;
       if (group === 'Core') group = 'Abs';
       return group.toLowerCase() === selectedMuscle.toLowerCase();
-    });
+    }).slice(0, 3);
   }, [selectedMuscle, exercisesList]);
 
   const weeklyWorkouts = useMemo(() => {
@@ -890,8 +882,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   }, [selectedMuscle, sessions, exercisesList]);
 
   const weeklyMuscleStats = useMemo(() => {
-    if (!selectedMuscle) return { sets: 0, tonnage: 0 };
+    if (!selectedMuscle) return { sets: 0, tonnage: 0, avgSets: 0 };
     let setsCount = 0;
+    let exerciseCount = 0;
     let totalTonnage = 0;
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -906,7 +899,11 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
           let group = libEx ? libEx.muscleGroup : '';
           if (group === 'Core') group = 'Abs';
           if (group && group.toLowerCase() === selectedMuscle.toLowerCase()) {
-            setsCount += ex.sets || 0;
+            const exSets = ex.sets || 0;
+            setsCount += exSets;
+            if (exSets > 0) {
+              exerciseCount++;
+            }
             if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
               ex.setsDetails.forEach((set: any) => {
                 totalTonnage += (set.weight || 0) * (set.reps || 0);
@@ -918,7 +915,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         });
       }
     });
-    return { sets: setsCount, tonnage: totalTonnage };
+    const avgSets = exerciseCount > 0 ? (setsCount / exerciseCount) : 0;
+    return { sets: setsCount, tonnage: totalTonnage, avgSets };
   }, [selectedMuscle, sessions, exercisesList]);
 
   const maxSets = useMemo(() => {
@@ -957,6 +955,30 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       <ScreenHeader
         title={i18n.t('muscleMap.title')}
         subtitle={i18n.t('muscleMap.weekFocus')}
+        actions={[
+          {
+            icon: 'options-outline',
+            label: i18n.t('muscleMap.settingsLabel', { defaultValue: 'Settings' }),
+            onPress: () => {
+              Alert.alert(
+                i18n.t('muscleMap.settingsTitle', { defaultValue: 'Muscle Map Settings' }),
+                i18n.t('muscleMap.settingsDesc', { defaultValue: 'Configure Muscle Map display preferences' }),
+                [
+                  {
+                    text: showHypertrophyGoal 
+                      ? i18n.t('muscleMap.hideHypertrophyGoal', { defaultValue: 'Hide Hypertrophy Goal' }) 
+                      : i18n.t('muscleMap.showHypertrophyGoal', { defaultValue: 'Show Hypertrophy Goal' }),
+                    onPress: handleToggleHypertrophyGoal
+                  },
+                  {
+                    text: i18n.t('common.cancel'),
+                    style: 'cancel'
+                  }
+                ]
+              );
+            }
+          }
+        ]}
         testID="musclemap.header"
       />
       <ScrollView
@@ -1118,34 +1140,36 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
               </View>
               <View style={styles.sheetStatDivider} />
               <View style={styles.sheetStatItem}>
-                <Text style={styles.sheetStatValue}>{weeklyMuscleStats.tonnage.toLocaleString()} {i18n.t('extras.kgSuffix')}</Text>
-                <Text style={styles.sheetStatLabel}>{i18n.t('extras.estTonnage')}</Text>
+                <Text style={styles.sheetStatValue}>{weeklyMuscleStats.avgSets.toFixed(2)}</Text>
+                <Text style={styles.sheetStatLabel}>{i18n.t('extras.avgSetAmount', { defaultValue: 'AVG. SETS' })}</Text>
               </View>
             </View>
 
             {/* Hypertrophy Goal progress bar */}
-            <View style={styles.goalContainer}>
-              <View style={styles.goalHeader}>
-                <Text style={styles.goalTitle}>{i18n.t('extras.hypertrophyGoal')}</Text>
-                <Text style={styles.goalValue}>{i18n.t('extras.setsGoalValue', { current: weeklyMuscleStats.sets })}</Text>
+            {showHypertrophyGoal && (
+              <View style={styles.goalContainer}>
+                <View style={styles.goalHeader}>
+                  <Text style={styles.goalTitle}>{i18n.t('extras.hypertrophyGoal')}</Text>
+                  <Text style={styles.goalValue}>{i18n.t('extras.setsGoalValue', { current: weeklyMuscleStats.sets })}</Text>
+                </View>
+                <View style={styles.goalBarBg}>
+                  <View 
+                    style={[
+                      styles.goalBarFill, 
+                      { 
+                        width: `${Math.min(100, Math.round((weeklyMuscleStats.sets / 12) * 100))}%`,
+                        backgroundColor: weeklyMuscleStats.sets >= 12 ? colors.success : colors.highlight
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.goalDescription}>
+                  {weeklyMuscleStats.sets >= 12 
+                    ? i18n.t('extras.hypertrophyTargetMet')
+                    : i18n.t('extras.needMoreSets', { count: 12 - weeklyMuscleStats.sets })}
+                </Text>
               </View>
-              <View style={styles.goalBarBg}>
-                <View 
-                  style={[
-                    styles.goalBarFill, 
-                    { 
-                      width: `${Math.min(100, Math.round((weeklyMuscleStats.sets / 12) * 100))}%`,
-                      backgroundColor: weeklyMuscleStats.sets >= 12 ? colors.success : colors.highlight
-                    }
-                  ]} 
-                />
-              </View>
-              <Text style={styles.goalDescription}>
-                {weeklyMuscleStats.sets >= 12 
-                  ? i18n.t('extras.hypertrophyTargetMet')
-                  : i18n.t('extras.needMoreSets', { count: 12 - weeklyMuscleStats.sets })}
-              </Text>
-            </View>
+            )}
 
             {/* Detailed Expanded Sections (fade in smoothly as the sheet expands) */}
             <Animated.View style={[detailsOpacityStyle, { pointerEvents: sheetState === 'expanded' ? 'auto' : 'none' }]}>

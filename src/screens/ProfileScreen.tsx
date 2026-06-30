@@ -1443,13 +1443,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         title={i18n.t('tabs.profile')}
         actions={[
           {
-            icon: 'notifications-outline',
-            label: i18n.t('extras.notifications'),
-            onPress: () => {
-              Alert.alert(i18n.t('profile.gymReminders'), i18n.t('profile.gymRemindersMsg'));
-            }
-          },
-          {
             icon: 'settings-outline',
             label: i18n.t('profile.settingsTitle'),
             onPress: () => {
