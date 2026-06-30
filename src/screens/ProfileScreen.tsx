@@ -873,6 +873,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   const formatSoundName = (soundKey: string) => {
+    if (soundKey === 'satisfying-click') return i18n.t('extras.soundSatisfyingClick');
     if (soundKey === 'chime') return i18n.t('extras.soundChime');
     if (soundKey === 'beep') return i18n.t('extras.soundDoubleBeep');
     if (soundKey === 'fanfare') return i18n.t('extras.soundFanfare');
@@ -3459,16 +3460,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
 
             <View style={styles.bottomSheetOptions}>
-              {([...(['chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'] as const), ...customSounds.map(s => s.id)]).map((soundKey) => {
+              {([...(['satisfying-click', 'chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'] as const), ...customSounds.map(s => s.id)]).map((soundKey) => {
                 let isSelected = false;
                 if (activeSoundTrigger === 'setChecked' && soundSetCompleted === soundKey) isSelected = true;
                 if (activeSoundTrigger === 'workoutCompleted' && soundWorkoutFinished === soundKey) isSelected = true;
                 if (activeSoundTrigger === 'timerCompleted' && soundTimerCompleted === soundKey) isSelected = true;
 
-                const isCustom = !['chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'].includes(soundKey);
+                const isCustom = !['satisfying-click', 'chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'].includes(soundKey);
 
                 let iconName: any = 'musical-notes-outline';
-                if (soundKey === 'chime') iconName = 'musical-notes-outline';
+                if (soundKey === 'satisfying-click') iconName = 'checkmark-done-circle-outline';
+                else if (soundKey === 'chime') iconName = 'musical-notes-outline';
                 else if (soundKey === 'beep') iconName = 'notifications-outline';
                 else if (soundKey === 'fanfare') iconName = 'trophy-outline';
                 else if (soundKey === 'bell1') iconName = 'notifications-circle-outline';

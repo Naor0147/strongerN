@@ -32,7 +32,7 @@ import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAn
 import { ExerciseSet } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
-import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound, playSatisfyingClickFinishSet, playSatisfyingClickStopTimer } from '../../utils/soundPlayer';
+import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound, playSatisfyingClickFinishSet, playSatisfyingClickStopTimer, playUncheckSetSound } from '../../utils/soundPlayer';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import RestTimerRuler from '../ui/RestTimerRuler';
 import Card from '../ui/Card';
@@ -1334,6 +1334,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         setIsTimerActive(true);
         cancelAndScheduleRestNotification(duration);
       }
+    } else {
+      playUncheckSetSound();
     }
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

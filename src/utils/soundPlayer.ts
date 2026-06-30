@@ -44,7 +44,7 @@ function playWebSynthesizer(notes: { freq: number; duration: number; delay: numb
 }
 
 export const soundConfig = {
-  setChecked: 'chime',       // string
+  setChecked: 'satisfying-click',       // string
   timerCompleted: 'beep',     // string
   workoutCompleted: 'fanfare', // string
   volume: 0.8,               // 0.0 to 1.0
@@ -87,62 +87,69 @@ function playWebSound(soundKey: string) {
   }
 }
 
+// Caching and preloading native audio players to eliminate tap delays
+const NATIVE_SOUND_ASSETS: Record<string, any> = {
+  'chime': require('../../assets/sounds/set_completed.wav'),
+  'beep': require('../../assets/sounds/timer_completed.wav'),
+  'fanfare': require('../../assets/sounds/workout_completed.wav'),
+  'bell1': require('../../assets/sounds/bell1.mp3'),
+  'bell2': require('../../assets/sounds/bell2.mp3'),
+  'boxing-bell': require('../../assets/sounds/boxing-bell.mp3'),
+  'satisfying-click': require('../../sound/00_satisfying_click_v3.wav'),
+  'uncheck-click': require('../../sound/06_click_warm.wav'),
+  'satisfying-click-finish': require('../../sound/00_satisfying_click_v3.wav'),
+  'satisfying-click-timer': require('../../sound/satisfyingClick.wav'),
+};
+
+const playersCache: Record<string, any> = {};
+
+// Configure audio mode once at module startup
+if (!isWeb) {
+  setAudioModeAsync({
+    playsInSilentMode: true,
+  }).catch(err => console.log('[Native Sound Error] Initializing audio mode:', err));
+}
+
+function getOrCreatePlayer(soundKey: string, source: any) {
+  if (!playersCache[soundKey]) {
+    try {
+      playersCache[soundKey] = createAudioPlayer(source);
+    } catch (e) {
+      console.warn(`[Native Sound Error] Failed to create player for ${soundKey}:`, e);
+      return null;
+    }
+  }
+  return playersCache[soundKey];
+}
+
 /**
  * Native audio player using expo-audio. 
  * Loads locally-bundled synthesized sound files for offline reliability.
- * Limits playback to a maximum of 3 seconds.
+ * Cache is used to guarantee zero latency.
  */
-async function playNativeSound(soundKey: string) {
+function playNativeSound(soundKey: string) {
   try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-    });
-
     let player;
-    if (soundKey === 'chime') {
-      player = createAudioPlayer(require('../../assets/sounds/set_completed.wav'));
-    } else if (soundKey === 'beep') {
-      player = createAudioPlayer(require('../../assets/sounds/timer_completed.wav'));
-    } else if (soundKey === 'fanfare') {
-      player = createAudioPlayer(require('../../assets/sounds/workout_completed.wav'));
-    } else if (soundKey === 'bell1') {
-      player = createAudioPlayer(require('../../assets/sounds/bell1.mp3'));
-    } else if (soundKey === 'bell2') {
-      player = createAudioPlayer(require('../../assets/sounds/bell2.mp3'));
-    } else if (soundKey === 'boxing-bell') {
-      player = createAudioPlayer(require('../../assets/sounds/boxing-bell.mp3'));
+    
+    // Check if it is a built-in asset key
+    if (NATIVE_SOUND_ASSETS[soundKey]) {
+      player = getOrCreatePlayer(soundKey, NATIVE_SOUND_ASSETS[soundKey]);
     } else {
       // Check for custom sound
       const custom = soundConfig.customSounds.find(s => s.id === soundKey);
       if (custom) {
-        player = createAudioPlayer({ uri: custom.uri });
-      } else {
-        return;
+        player = getOrCreatePlayer(custom.uri, { uri: custom.uri });
       }
     }
 
     if (player) {
       player.volume = soundConfig.volume ?? 1.0;
+      try {
+        player.seekTo(0);
+      } catch (e) {
+        // seekTo might fail if player is not fully loaded, ignore
+      }
       player.play();
-
-      // Stop playback after 3 seconds max
-      const timeoutId = setTimeout(() => {
-        try {
-          player.pause();
-          player.seekTo(0);
-          player.release();
-        } catch (e) {
-          // Ignore errors if player was already released
-        }
-      }, 3000);
-
-      const listener = player.addListener('playbackStatusUpdate', (status) => {
-        if (status.playbackState === 'ended') {
-          clearTimeout(timeoutId);
-          player.release();
-          listener.remove();
-        }
-      });
     }
   } catch (err) {
     console.log(`[Native Sound Error] Play ${soundKey} audio chimes:`, err);
@@ -201,62 +208,35 @@ export function playSoundByKey(soundKey: string) {
 }
 
 /**
+ * Plays sound configured for unchecking a set.
+ */
+export function playUncheckSetSound() {
+  if (isWeb) {
+    playWebSound('uncheck-click');
+  } else {
+    playNativeSound('uncheck-click');
+  }
+}
+
+/**
  * Plays satisfying click sound when finishing a set.
  */
-export async function playSatisfyingClickFinishSet() {
-  try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-    });
-    const player = createAudioPlayer(require('../../sound/00_satisfying_click_v3.wav'));
-    player.volume = soundConfig.volume ?? 1.0;
-    player.play();
-    const timeoutId = setTimeout(() => {
-      try {
-        player.pause();
-        player.seekTo(0);
-        player.release();
-      } catch (e) {}
-    }, 3000);
-    const listener = player.addListener('playbackStatusUpdate', (status) => {
-      if (status.playbackState === 'ended') {
-        clearTimeout(timeoutId);
-        player.release();
-        listener.remove();
-      }
-    });
-  } catch (err) {
-    console.log('[Native Sound Error] Play satisfying click finish set:', err);
+export function playSatisfyingClickFinishSet() {
+  if (isWeb) {
+    playWebSound('satisfying-click-finish');
+  } else {
+    playNativeSound('satisfying-click-finish');
   }
 }
 
 /**
  * Plays satisfying click sound when stopping the timer.
  */
-export async function playSatisfyingClickStopTimer() {
-  try {
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-    });
-    const player = createAudioPlayer(require('../../sound/satisfyingClick.wav'));
-    player.volume = soundConfig.volume ?? 1.0;
-    player.play();
-    const timeoutId = setTimeout(() => {
-      try {
-        player.pause();
-        player.seekTo(0);
-        player.release();
-      } catch (e) {}
-    }, 3000);
-    const listener = player.addListener('playbackStatusUpdate', (status) => {
-      if (status.playbackState === 'ended') {
-        clearTimeout(timeoutId);
-        player.release();
-        listener.remove();
-      }
-    });
-  } catch (err) {
-    console.log('[Native Sound Error] Play satisfying click stop timer:', err);
+export function playSatisfyingClickStopTimer() {
+  if (isWeb) {
+    playWebSound('satisfying-click-timer');
+  } else {
+    playNativeSound('satisfying-click-timer');
   }
 }
 

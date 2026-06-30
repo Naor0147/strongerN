@@ -286,7 +286,7 @@ function App() {
   const [exerciseNameLanguage, setExerciseNameLanguage] = React.useState<'en' | 'he'>('en');
 
 
-  const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('chime');
+  const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('satisfying-click');
   const [soundWorkoutFinished, setSoundWorkoutFinished] = React.useState<string>('fanfare');
   const [soundTimerCompleted, setSoundTimerCompleted] = React.useState<string>('beep');
   const [customSounds, setCustomSounds] = React.useState<{ id: string; name: string; uri: string }[]>([]);

@@ -67,6 +67,22 @@ export const getNextWorkout = (
       }
     }
     
+    // If we didn't match the last session to a template directly, try to find the template with the most recent lastUsed timestamp
+    if (!matchedTemplate && sessions && sessions.length > 0) {
+      let newestTemplate: Template | null = null;
+      let newestTime = 0;
+      templates.forEach(t => {
+        if (t.lastUsed) {
+          const time = new Date(t.lastUsed).getTime();
+          if (time > newestTime) {
+            newestTime = time;
+            newestTemplate = t;
+          }
+        }
+      });
+      matchedTemplate = newestTemplate;
+    }
+
     let candidateTemplates = [...templates];
     if (matchedTemplate && matchedTemplate.folder) {
       const folderTemplates = templates.filter(t => t.folder === matchedTemplate?.folder);
@@ -75,16 +91,14 @@ export const getNextWorkout = (
       }
     }
     
-    candidateTemplates.sort((a, b) => {
-      const timeA = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
-      const timeB = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
-      if (timeA !== timeB) {
-        return timeA - timeB;
+    let selectedTemplate = candidateTemplates[0];
+    if (matchedTemplate) {
+      const idx = candidateTemplates.findIndex(t => t.id === matchedTemplate?.id);
+      if (idx !== -1) {
+        selectedTemplate = candidateTemplates[(idx + 1) % candidateTemplates.length];
       }
-      return a.name.localeCompare(b.name);
-    });
+    }
     
-    const selectedTemplate = candidateTemplates[0];
     return {
       name: selectedTemplate.name,
       exercises: selectedTemplate.exercises,

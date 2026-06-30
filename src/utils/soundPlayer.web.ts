@@ -43,12 +43,36 @@ function playWebSynthesizer(notes: { freq: number; duration: number; delay: numb
 }
 
 export const soundConfig = {
-  setChecked: 'chime',       // string
+  setChecked: 'satisfying-click',       // string
   timerCompleted: 'beep',     // string
   workoutCompleted: 'fanfare', // string
   volume: 0.8,               // 0.0 to 1.0
   customSounds: [] as { id: string; name: string; uri: string }[],
 };
+
+const webPlayersCache: Record<string, HTMLAudioElement> = {};
+
+const WEB_SOUND_ASSETS: Record<string, any> = {
+  'bell1': require('../../assets/sounds/bell1.mp3'),
+  'bell2': require('../../assets/sounds/bell2.mp3'),
+  'boxing-bell': require('../../assets/sounds/boxing-bell.mp3'),
+  'satisfying-click': require('../../sound/00_satisfying_click_v3.wav'),
+  'uncheck-click': require('../../sound/06_click_warm.wav'),
+  'satisfying-click-finish': require('../../sound/00_satisfying_click_v3.wav'),
+  'satisfying-click-timer': require('../../sound/satisfyingClick.wav'),
+};
+
+function getOrCreateWebPlayer(soundKey: string, source: any): HTMLAudioElement | null {
+  if (!webPlayersCache[soundKey]) {
+    try {
+      webPlayersCache[soundKey] = new Audio(source);
+    } catch (e) {
+      console.warn(`[Web Audio Error] Failed to create player for ${soundKey}:`, e);
+      return null;
+    }
+  }
+  return webPlayersCache[soundKey];
+}
 
 /**
  * Web Audio API helper for specific sound keys on Web
@@ -71,44 +95,25 @@ function playWebSound(soundKey: string) {
       { freq: 783.99, duration: 0.2, delay: 0.16 },
       { freq: 1046.50, duration: 0.4, delay: 0.24 },
     ]);
-  } else if (soundKey === 'bell1') {
-    try {
-      const audio = new Audio(require('../../assets/sounds/bell1.mp3'));
-      audio.volume = soundConfig.volume ?? 1.0;
-      audio.play().catch(err => console.warn('[Web bell1 Audio Play Error]', err));
-      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
-    } catch (err) {
-      console.warn('[Web bell1 Audio Init Error]', err);
-    }
-  } else if (soundKey === 'bell2') {
-    try {
-      const audio = new Audio(require('../../assets/sounds/bell2.mp3'));
-      audio.volume = soundConfig.volume ?? 1.0;
-      audio.play().catch(err => console.warn('[Web bell2 Audio Play Error]', err));
-      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
-    } catch (err) {
-      console.warn('[Web bell2 Audio Init Error]', err);
-    }
-  } else if (soundKey === 'boxing-bell') {
-    try {
-      const audio = new Audio(require('../../assets/sounds/boxing-bell.mp3'));
-      audio.volume = soundConfig.volume ?? 1.0;
-      audio.play().catch(err => console.warn('[Web boxing-bell Audio Play Error]', err));
-      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
-    } catch (err) {
-      console.warn('[Web boxing-bell Audio Init Error]', err);
-    }
   } else {
-    // Check for custom sound
-    const custom = soundConfig.customSounds.find(s => s.id === soundKey);
-    if (custom) {
+    let audio: HTMLAudioElement | null = null;
+    if (WEB_SOUND_ASSETS[soundKey]) {
+      audio = getOrCreateWebPlayer(soundKey, WEB_SOUND_ASSETS[soundKey]);
+    } else {
+      // Check for custom sound
+      const custom = soundConfig.customSounds.find(s => s.id === soundKey);
+      if (custom) {
+        audio = getOrCreateWebPlayer(custom.uri, custom.uri);
+      }
+    }
+
+    if (audio) {
       try {
-        const audio = new Audio(custom.uri);
         audio.volume = soundConfig.volume ?? 1.0;
-        audio.play().catch(err => console.warn('[Web Custom Audio Play Error]', err));
-        setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
+        audio.currentTime = 0;
+        audio.play().catch(err => console.warn(`[Web Audio Play Error] ${soundKey}:`, err));
       } catch (err) {
-        console.warn('[Web Custom Audio Init Error]', err);
+        console.warn(`[Web Audio Run Error] ${soundKey}:`, err);
       }
     }
   }
@@ -150,30 +155,23 @@ export function playSoundByKey(soundKey: string) {
 }
 
 /**
+ * Plays sound configured for unchecking a set.
+ */
+export function playUncheckSetSound() {
+  playWebSound('uncheck-click');
+}
+
+/**
  * Plays satisfying click sound when finishing a set.
  */
 export function playSatisfyingClickFinishSet() {
-  try {
-    const audio = new Audio(require('../../sound/00_satisfying_click_v3.wav'));
-    audio.volume = soundConfig.volume ?? 1.0;
-    audio.play().catch(err => console.warn('[Web Audio Play Error] playSatisfyingClickFinishSet:', err));
-    setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
-  } catch (err) {
-    console.warn('[Web Audio Init Error] playSatisfyingClickFinishSet:', err);
-  }
+  playWebSound('satisfying-click-finish');
 }
 
 /**
  * Plays satisfying click sound when stopping the timer.
  */
 export function playSatisfyingClickStopTimer() {
-  try {
-    const audio = new Audio(require('../../sound/satisfyingClick.wav'));
-    audio.volume = soundConfig.volume ?? 1.0;
-    audio.play().catch(err => console.warn('[Web Audio Play Error] playSatisfyingClickStopTimer:', err));
-    setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 3000);
-  } catch (err) {
-    console.warn('[Web Audio Init Error] playSatisfyingClickStopTimer:', err);
-  }
+  playWebSound('satisfying-click-timer');
 }
 

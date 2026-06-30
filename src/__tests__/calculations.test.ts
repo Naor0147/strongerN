@@ -171,7 +171,7 @@ describe('strongerN Calculation Utilities', () => {
       expect(result.type).toBe('Active Program');
     });
 
-    test('Case 3: Cycle templates by lastUsed ascending (oldest first)', () => {
+    test('Case 3: Cycle templates in order of the templates array', () => {
       const templates = [
         { id: 'tpl-1', name: 'Upper Power', exercises: ['Bench Press'], lastUsed: new Date('2026-05-28T09:00:00'), folder: 'Bulking Splits' },
         { id: 'tpl-2', name: 'Lower Power', exercises: ['Squat'], lastUsed: new Date('2026-05-26T18:30:00'), folder: 'Bulking Splits' },
@@ -182,11 +182,11 @@ describe('strongerN Calculation Utilities', () => {
         { id: 's-1', title: 'Upper Power', datetime: new Date('2026-05-28T09:00:00'), exercises: [] }
       ];
       const result = getNextWorkout(null, sessions, templates, dummyColors);
-      expect(result.name).toBe('Pull Day');
+      expect(result.name).toBe('Lower Power');
       expect(result.type).toBe('Routine Split');
     });
 
-    test('Case 4: Cycle templates with never-used template prioritization', () => {
+    test('Case 4: Cycle templates sequentially in array order', () => {
       const templates = [
         { id: 'tpl-1', name: 'Upper Power', exercises: ['Bench Press'], lastUsed: new Date('2026-05-28T09:00:00'), folder: 'Bulking Splits' },
         { id: 'tpl-2', name: 'New Split', exercises: ['Barbell Row'], lastUsed: (null as any), folder: 'Bulking Splits' },
@@ -226,7 +226,7 @@ describe('strongerN Calculation Utilities', () => {
 
     test('Loads correct default values', () => {
       const { soundConfig } = require('../utils/soundPlayer');
-      expect(soundConfig.setChecked).toBe('chime');
+      expect(soundConfig.setChecked).toBe('satisfying-click');
       expect(soundConfig.timerCompleted).toBe('beep');
       expect(soundConfig.workoutCompleted).toBe('fanfare');
     });
