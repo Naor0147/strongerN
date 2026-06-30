@@ -139,6 +139,8 @@ interface ProfileScreenProps {
   setShowHighlights?:         (val: boolean) => void;
   enableRoutineFolders?:      boolean;
   setEnableRoutineFolders?:   (val: boolean) => void;
+  showHypertrophyGoal?:        boolean;
+  setShowHypertrophyGoal?:    (val: boolean) => void;
   isDeveloperModeEnabled:     boolean;
   setIsDeveloperModeEnabled: (val: boolean) => void;
   authMode?:                  'guest' | 'local' | 'google';
@@ -2644,6 +2646,36 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     >
                       <Text style={[styles.togglePillText, { fontFamily: I18nManager.isRTL ? 'Rubik_700Bold' : font.bold }]}>
                         {I18nManager.isRTL ? i18n.t('settings.english') : i18n.t('settings.hebrew')}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.settingDivider} />
+
+                  {/* Hypertrophy Goal Toggle */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Ionicons name="trending-up-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.settingTitle}>{i18n.t('muscleMap.showHypertrophyGoal', { defaultValue: 'Hypertrophy Goal' })}</Text>
+                        <Text style={styles.settingSubtitle} numberOfLines={2}>
+                          {i18n.t('muscleMap.showHypertrophyGoalDesc', { defaultValue: 'Display hypertrophy focus goal progress bar in Muscle Map' })}
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.togglePill,
+                        showHypertrophyGoal && styles.togglePillActive
+                      ]}
+                      onPress={() => setShowHypertrophyGoal && setShowHypertrophyGoal(!showHypertrophyGoal)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={[
+                        styles.togglePillText,
+                        showHypertrophyGoal && styles.togglePillTextActive
+                      ]}>
+                        {showHypertrophyGoal ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
                       </Text>
                     </Pressable>
                   </View>

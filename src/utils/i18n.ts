@@ -209,6 +209,7 @@ const translations = {
       settingsDesc: 'Configure Muscle Map display preferences',
       showHypertrophyGoal: 'Show Hypertrophy Goal',
       hideHypertrophyGoal: 'Hide Hypertrophy Goal',
+      showHypertrophyGoalDesc: 'Display hypertrophy focus goal progress bar in Muscle Map',
     },
     profile: {
       welcomeTitle: 'WELCOME TO STRONGERN!',
@@ -338,7 +339,7 @@ const translations = {
       routineFolders: 'Routine Folders',
       routineFoldersDesc: 'Group routines into folders',
       about: 'ABOUT',
-      version: 'Version 1.0.0.62  ·  AMOLED Optimized (Tap version to unlock developer tools)',
+      version: 'Version 1.0.0.63  ·  AMOLED Optimized (Tap version to unlock developer tools)',
       developerOptions: 'DEVELOPER OPTIONS',
       developerOptionsSub: 'Testing and demo tools',
       enableDevTools: 'Enable Developer Tools',
@@ -1029,6 +1030,7 @@ const translations = {
       settingsDesc: 'הגדר את העדפות התצוגה של מפת השרירים',
       showHypertrophyGoal: 'הצג מטרת היפרטרופיה',
       hideHypertrophyGoal: 'הסתר מטרת היפרטרופיה',
+      showHypertrophyGoalDesc: 'הצג את מדד מטרת ההיפרטרופיה במסך מפת השרירים',
     },
     profile: {
       welcomeTitle: 'ברוכים הבאים ל-strongerN!',
@@ -1158,7 +1160,7 @@ const translations = {
       routineFolders: 'תיקיות שגרות',
       routineFoldersDesc: 'קבץ שגרות לתיקיות',
       about: 'אודות',
-      version: 'גרסה 1.0.0.62  ·  מותאם ל-AMOLED (גע בגרסה כדי לפתוח כלי מפתחים)',
+      version: 'גרסה 1.0.0.63  ·  מותאם ל-AMOLED (גע בגרסה כדי לפתוח כלי מפתחים)',
       developerOptions: 'אפשרויות מפתחים',
       developerOptionsSub: 'כלי בדיקה ודגימה',
       enableDevTools: 'הפעל כלי מפתחים',

@@ -299,6 +299,7 @@ function App() {
   const [showWeeklyTonnage, setShowWeeklyTonnage] = React.useState(false);
   const [showWorkoutsChart, setShowWorkoutsChart] = React.useState(true);
   const [showHighlights, setShowHighlights] = React.useState(false);
+  const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(false);
 
   // Dynamically calculate weekly chart data based on sessionsList (Monday start to match getWeeklyStreak)
   const dynamicWeeklyChartData = React.useMemo(() => {
@@ -434,6 +435,7 @@ function App() {
             if (parsed.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(parsed.showWeeklyTonnage);
             if (parsed.showWorkoutsChart !== undefined) setShowWorkoutsChart(parsed.showWorkoutsChart);
             if (parsed.showHighlights !== undefined) setShowHighlights(parsed.showHighlights);
+            if (parsed.showHypertrophyGoal !== undefined) setShowHypertrophyGoal(parsed.showHypertrophyGoal);
           } else {
             const { applyTheme } = require('./theme');
             applyTheme('default', '#4F8EF7', parsedOverrides);
@@ -511,6 +513,7 @@ function App() {
         showWeeklyTonnage,
         showWorkoutsChart,
         showHighlights,
+        showHypertrophyGoal,
         enableRoutineFolders,
         isDeveloperModeEnabled,
         isProgressiveOverloadEnabled,
@@ -525,7 +528,7 @@ function App() {
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor, isDataLoaded]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor, isDataLoaded]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -983,6 +986,7 @@ function App() {
       isAutoFinishSetEnabled,
       isKeyboardDismissOnNextEnabled,
       isRpeMode,
+      showHypertrophyGoal,
     };
     const backupData = buildBackupData({
       username: user.name,
@@ -1066,6 +1070,7 @@ function App() {
       if (s.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(s.showWeeklyTonnage);
       if (s.showWorkoutsChart !== undefined) setShowWorkoutsChart(s.showWorkoutsChart);
       if (s.showHighlights !== undefined) setShowHighlights(s.showHighlights);
+      if (s.showHypertrophyGoal !== undefined) setShowHypertrophyGoal(s.showHypertrophyGoal);
       if (s.animationSpeed !== undefined) setAnimationSpeed(s.animationSpeed);
       if (s.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(s.isProgressiveOverloadEnabled);
       if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
@@ -1863,6 +1868,8 @@ function App() {
                   setShowHighlights={setShowHighlights}
                   enableRoutineFolders={enableRoutineFolders}
                   setEnableRoutineFolders={setEnableRoutineFolders}
+                  showHypertrophyGoal={showHypertrophyGoal}
+                  setShowHypertrophyGoal={setShowHypertrophyGoal}
                   isDeveloperModeEnabled={isDeveloperModeEnabled}
                   setIsDeveloperModeEnabled={setIsDeveloperModeEnabled}
                   appTheme={appTheme}
@@ -1966,6 +1973,8 @@ function App() {
                     sessions={sessionsList}
                     exercisesList={exercisesList}
                     exerciseNameLanguage={exerciseNameLanguage}
+                    showHypertrophyGoal={showHypertrophyGoal}
+                    setShowHypertrophyGoal={setShowHypertrophyGoal}
                   />
                 )}
               </Tab.Screen>

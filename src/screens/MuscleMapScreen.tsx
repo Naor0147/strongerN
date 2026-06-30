@@ -28,6 +28,8 @@ interface MuscleMapScreenProps {
   sessions: any[];
   exercisesList: any[];
   exerciseNameLanguage?: 'en' | 'he';
+  showHypertrophyGoal: boolean;
+  setShowHypertrophyGoal: (val: boolean) => void;
 }
 
 // ─── Images ──────────────────────────────────────────────────────────────────
@@ -627,37 +629,11 @@ const timingSheet = (sharedVal: SharedValue<number>, toValue: number, baseDurati
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList, exerciseNameLanguage = 'en' }) => {
+const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList, exerciseNameLanguage = 'en', showHypertrophyGoal, setShowHypertrophyGoal }) => {
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { top } = useSafeAreaInsets();
   
-  const [showHypertrophyGoal, setShowHypertrophyGoal] = useState(false);
 
-  React.useEffect(() => {
-    const loadGoalSetting = async () => {
-      try {
-        const { loadFromDb } = require('../utils/db');
-        const val = await loadFromDb('strongern_show_hypertrophy_goal');
-        if (val !== null) {
-          setShowHypertrophyGoal(!!val);
-        }
-      } catch (e) {
-        console.warn('Error loading hypertrophy goal setting:', e);
-      }
-    };
-    loadGoalSetting();
-  }, []);
-
-  const handleToggleHypertrophyGoal = async () => {
-    const nextVal = !showHypertrophyGoal;
-    setShowHypertrophyGoal(nextVal);
-    try {
-      const { saveToDb } = require('../utils/db');
-      await saveToDb('strongern_show_hypertrophy_goal', nextVal);
-    } catch (e) {
-      console.warn('Error saving hypertrophy goal setting:', e);
-    }
-  };
   
   // Snap points
   const T_EXPANDED = 0;
@@ -968,7 +944,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                     text: showHypertrophyGoal 
                       ? i18n.t('muscleMap.hideHypertrophyGoal', { defaultValue: 'Hide Hypertrophy Goal' }) 
                       : i18n.t('muscleMap.showHypertrophyGoal', { defaultValue: 'Show Hypertrophy Goal' }),
-                    onPress: handleToggleHypertrophyGoal
+                    onPress: () => setShowHypertrophyGoal(!showHypertrophyGoal)
                   },
                   {
                     text: i18n.t('common.cancel'),
@@ -1117,12 +1093,6 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             <View style={styles.dragHandle} />
             <View style={styles.bottomSheetHeaderContent}>
               <Text style={styles.bottomSheetTitle}>{getMuscleDisplayName(selectedMuscle, exerciseNameLanguage).toUpperCase()}</Text>
-              <Pressable
-                onPress={handleClose}
-                style={styles.bottomSheetCloseBtn}
-              >
-                <Text style={styles.bottomSheetCloseText}>{i18n.t('extras.closeBtn')}</Text>
-              </Pressable>
             </View>
             </View>
           </GestureDetector>
