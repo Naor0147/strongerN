@@ -120,7 +120,8 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   }, [sessions]);
 
   const filteredExercises = useMemo(() => {
-    let result = exercises;
+    // Filter out null/undefined or nameless exercises to avoid crashes
+    let result = (exercises || []).filter(ex => ex && typeof ex.name === 'string' && ex.name.trim().length > 0);
 
     if (selectedMuscles.length > 0) {
       result = result.filter(ex => selectedMuscles.includes(ex.muscleGroup));
@@ -134,7 +135,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
       const scored = result
         .map(ex => {
           const nameLower = ex.name.toLowerCase();
-          const muscleLower = ex.muscleGroup.toLowerCase();
+          const muscleLower = (ex.muscleGroup || '').toLowerCase();
           const equipLower = (ex.equipment || '').toLowerCase();
           
           let matchScore = 0;
@@ -142,13 +143,21 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           // Cross-lingual match (English name, Hebrew name, aliases)
           const isCrossLingualMatch = exerciseMatchesQuery(ex.name, q);
           
+          let isWordBoundaryMatch = false;
+          try {
+            const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            isWordBoundaryMatch = new RegExp(`\\b${escapedQ}`).test(nameLower);
+          } catch (e) {
+            isWordBoundaryMatch = nameLower.startsWith(q);
+          }
+          
           if (nameLower === q) {
             matchScore = 10000;
           } else if (nameLower.startsWith(q)) {
             matchScore = 5000;
           } else if (isCrossLingualMatch) {
             matchScore = 3000; // Cross-lingual match gets high priority
-          } else if (new RegExp(`\\b${q}`).test(nameLower)) {
+          } else if (isWordBoundaryMatch) {
             matchScore = 2000;
           } else if (nameLower.includes(q)) {
             matchScore = 1000;

@@ -797,6 +797,7 @@ const exerciseNameMap: Record<string, ExerciseNameEntry> = {
  * Falls back to the English name if no translation exists.
  */
 function getExerciseNameHe(englishName: string): string {
+  if (!englishName || typeof englishName !== 'string') return '';
   return exerciseNameMap[englishName]?.nameHe ?? englishName;
 }
 
@@ -804,6 +805,7 @@ function getExerciseNameHe(englishName: string): string {
  * Get search aliases for an exercise by its English name.
  */
 function getExerciseAliases(englishName: string): string[] {
+  if (!englishName || typeof englishName !== 'string') return [];
   return exerciseNameMap[englishName]?.searchAliases ?? [];
 }
 
@@ -811,6 +813,7 @@ function getExerciseAliases(englishName: string): string[] {
  * Get the display name for an exercise based on the current language preference.
  */
 export function getDisplayName(englishName: string, lang: 'en' | 'he'): string {
+  if (!englishName || typeof englishName !== 'string') return '';
   if (lang === 'he') {
     return getExerciseNameHe(englishName);
   }
@@ -823,6 +826,7 @@ export function getDisplayName(englishName: string, lang: 'en' | 'he'): string {
  * Returns true if the exercise matches the query.
  */
 export function exerciseMatchesQuery(englishName: string, query: string): boolean {
+  if (!englishName || typeof englishName !== 'string') return false;
   if (!query.trim()) return true;
   const q = query.toLowerCase().trim();
 

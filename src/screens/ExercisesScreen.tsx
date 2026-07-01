@@ -467,16 +467,23 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   // 1. Filter exercises based on search query, active muscles, and active equipment
   const filteredExercises = useMemo(() => {
-    let result = enrichedExercises;
+    // Filter out null/undefined or nameless exercises to avoid crashes
+    let result = (enrichedExercises || []).filter(ex => ex && typeof ex.name === 'string' && ex.name.trim().length > 0);
 
     // Search query filter (cross-lingual)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       result = result.filter(
-        ex =>
-          exerciseMatchesQuery(ex.name, query) ||
-          ex.muscleGroup.toLowerCase().includes(query) ||
-          ex.equipment?.toLowerCase().includes(query)
+        ex => {
+          const name = ex.name || '';
+          const muscleGroup = ex.muscleGroup || '';
+          const equipment = ex.equipment || '';
+          return (
+            exerciseMatchesQuery(name, query) ||
+            muscleGroup.toLowerCase().includes(query) ||
+            equipment.toLowerCase().includes(query)
+          );
+        }
       );
     }
 

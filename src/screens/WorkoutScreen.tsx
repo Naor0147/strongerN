@@ -211,6 +211,14 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   // Folder navigation state
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!enableRoutineFolders) {
+      setSelectedFolderFilter('All');
+      setCurrentFolder(null);
+      setIsFilterBarVisible(false);
+    }
+  }, [enableRoutineFolders]);
+
   // New folder state
   const [newFolderName, setNewFolderName] = useState('');
 
@@ -455,7 +463,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const headerActions = useMemo(() => {
     if (activeTab === 'programs') return [];
-    return [
+    const actions = [
       {
         icon: isSearching ? 'close-outline' as const : 'search-outline' as const,
         label: i18n.t('common.search'),
@@ -463,20 +471,26 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
           setIsSearching(!isSearching);
           if (isSearching) setSearchQuery('');
         }
-      },
-      {
+      }
+    ];
+
+    if (enableRoutineFolders) {
+      actions.push({
         icon: 'filter-outline' as const,
         label: i18n.t('common.filter'),
         onPress: () => setIsFilterBarVisible(prev => !prev),
         color: selectedFolderFilter !== 'All' ? colors.accent : colors.textPrimary
-      },
-      {
-        icon: 'download-outline' as const,
-        label: i18n.t('common.import'),
-        onPress: () => setIsImportModalVisible(true)
-      }
-    ];
-  }, [isSearching, activeTab, selectedFolderFilter]);
+      });
+    }
+
+    actions.push({
+      icon: 'download-outline' as const,
+      label: i18n.t('common.import'),
+      onPress: () => setIsImportModalVisible(true)
+    });
+
+    return actions;
+  }, [isSearching, activeTab, selectedFolderFilter, enableRoutineFolders]);
 
   // Calendar days generation
   const calendarDays = useMemo(() => {
@@ -601,9 +615,9 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
           {/* Filter Sub-menu (Popover Overlay) */}
           {isFilterBarVisible && (
-            <View style={styles.popoverWrapper}>
+            <View style={[styles.popoverWrapper, { top: -insets.top, bottom: -100 }]}>
               <Pressable
-                style={styles.popoverBackdrop}
+                style={[styles.popoverBackdrop, { paddingTop: 80 + insets.top }]}
                 onPress={() => setIsFilterBarVisible(false)}
               >
                 <Pressable
@@ -673,18 +687,20 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                       })}
 
                       {/* Add Folder button inside popover */}
-                      <Pressable
-                        onPress={() => {
-                          setIsFilterBarVisible(false);
-                          setIsFolderModalVisible(true);
-                        }}
-                        style={[styles.popoverChip, { borderColor: colors.accent + '30' }]}
-                      >
-                        <Ionicons name="add" size={12} color={colors.accent} />
-                        <Text style={[styles.popoverChipText, { color: colors.accent, fontFamily: font.semibold }]}>
-                          {i18n.t('workout.newFolder')}
-                        </Text>
-                      </Pressable>
+                      {enableRoutineFolders && (
+                        <Pressable
+                          onPress={() => {
+                            setIsFilterBarVisible(false);
+                            setIsFolderModalVisible(true);
+                          }}
+                          style={[styles.popoverChip, { borderColor: colors.accent + '30' }]}
+                        >
+                          <Ionicons name="add" size={12} color={colors.accent} />
+                          <Text style={[styles.popoverChipText, { color: colors.accent, fontFamily: font.semibold }]}>
+                            {i18n.t('workout.newFolder')}
+                          </Text>
+                        </Pressable>
+                      )}
                     </View>
                   </ScrollView>
 
@@ -1002,6 +1018,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         onClose={() => setIsRoutineEditorVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
         exerciseNameLanguage={exerciseNameLanguage}
+        enableRoutineFolders={enableRoutineFolders}
       />
 
       {/* Modal B: Create Folder Modal */}
@@ -2005,19 +2022,16 @@ const styles = StyleSheet.create({
   // Popover / Sub-menu Filters
   popoverWrapper: {
     position: 'absolute',
-    top: 70, // Anchored below the header bar so top nav remains visible
-    bottom: 0,
     left: 0,
     right: 0,
     zIndex: 999, // Render on top of flat list
   },
   popoverBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(5, 7, 10, 0.65)',
+    backgroundColor: 'rgba(5, 7, 10, 0.85)',
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
   },
   popoverContainer: {
     width: '100%',

@@ -67,6 +67,7 @@ interface RoutineEditorModalProps {
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string) => any;
   sessions?:             any[];
   exerciseNameLanguage?: 'en' | 'he';
+  enableRoutineFolders?: boolean;
 }
 
 // Contiguous supersets verification & dissolution helper
@@ -175,6 +176,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   onAddCustomExercise,
   sessions = EMPTY_ANY_ARRAY,
   exerciseNameLanguage = 'en',
+  enableRoutineFolders = false,
 }) => {
   const insets = useSafeAreaInsets();
   const [routineName,  setRoutineName]  = useState(initialName);
@@ -698,21 +700,23 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 scrollEnabled={activeId === null}
               >
                 {/* Folder Selector */}
-                <View style={edStyles.folderRow}>
-                  <Ionicons name="folder-outline" size={14} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
-                  <Pressable
-                    onPress={() => setIsFolderPickerVisible(v => !v)}
-                    style={edStyles.folderPill}
-                  >
-                    <Text style={edStyles.folderPillText}>
-                      {routineFolder || i18n.t('routineEditor.noFolder')}
-                    </Text>
-                    <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
-                  </Pressable>
-                </View>
+                {enableRoutineFolders && (
+                  <View style={edStyles.folderRow}>
+                    <Ionicons name="folder-outline" size={14} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
+                    <Pressable
+                      onPress={() => setIsFolderPickerVisible(v => !v)}
+                      style={edStyles.folderPill}
+                    >
+                      <Text style={edStyles.folderPillText}>
+                        {routineFolder || i18n.t('routineEditor.noFolder')}
+                      </Text>
+                      <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+                    </Pressable>
+                  </View>
+                )}
 
                 {/* Folder Picker Dropdown */}
-                {isFolderPickerVisible && (
+                {enableRoutineFolders && isFolderPickerVisible && (
                   <View style={edStyles.folderDropdown}>
                     {['', ...folders.filter(f => f !== 'All')].map(f => (
                       <Pressable
