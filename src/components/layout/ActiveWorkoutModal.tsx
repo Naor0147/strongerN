@@ -19,7 +19,7 @@ import {
   AppState,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing, cancelAnimation, withDelay } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -1835,6 +1835,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       transparent={false}
       onRequestClose={onClose}
     >
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
@@ -3042,6 +3043,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
     <AddExerciseScreen
       visible={isLibraryVisible}

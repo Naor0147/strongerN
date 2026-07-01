@@ -17,7 +17,7 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -637,6 +637,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         transparent={false}
         onRequestClose={handleCloseAttempt}
       >
+        <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={edStyles.keyboardAvoid}
@@ -1055,6 +1056,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
             />
           </View>
         </KeyboardAvoidingView>
+        </GestureHandlerRootView>
       </Modal>
 
       {/* Global Add Exercise Screen */}
