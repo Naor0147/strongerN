@@ -114,8 +114,8 @@ $selectedDevice = $null
 if ($deviceConnected) {
     Write-Host "   - Connected devices: $($devices.Count)" -ForegroundColor $SuccessColor
     # Auto-select physical device
-    $physical = $devices | Where-Object { $_ -notmatch '^emulator-' -and $_ -notmatch '^127\.' }
-    if ($physical) {
+    $physical = @($devices | Where-Object { $_ -notmatch '^emulator-' -and $_ -notmatch '^127\.' })
+    if ($physical.Count -gt 0) {
         $selectedDevice = $physical[0]
     } else {
         $selectedDevice = $devices[0]
