@@ -271,9 +271,23 @@ function Install-ADB {
     
     $timeout = 90
     $elapsed = 0
-    
-    # Run in background and monitor
-    $p = Start-Process $adb -ArgumentList "-s", $device, "install", "-r", $apkPath -NoNewWindow -PassThru
+    $manufacturer = "Unknown"
+    $model = "Unknown"
+    try {
+        $manufacturer = (& $adb -s $device shell getprop ro.product.manufacturer).Trim().ToUpper()
+        $model = (& $adb -s $device shell getprop ro.product.model).Trim()
+    } catch {}
+
+    if ($manufacturer -match "OPPO|REALME|ONEPLUS|VIVO") {
+        Write-Host "======================================================================" -ForegroundColor $WarningColor
+        Write-Host "ColorOS/Oppo/Realme/Vivo/OnePlus Device Detected: $manufacturer $model" -ForegroundColor $WarningColor
+        Write-Host "These phones require manual confirmation to install apps over USB." -ForegroundColor $WarningColor
+        Write-Host "Please UNLOCK your phone screen now and accept the install prompt!" -ForegroundColor $WarningColor
+        Write-Host "======================================================================" -ForegroundColor $WarningColor
+    }
+
+    # Run in background and monitor (using -r -d to allow version downgrades)
+    $p = Start-Process $adb -ArgumentList "-s", $device, "install", "-r", "-d", $apkPath -NoNewWindow -PassThru
     
     while (-not $p.HasExited -and $elapsed -lt $timeout) {
         Start-Sleep -Seconds 1
