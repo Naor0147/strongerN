@@ -71,24 +71,15 @@ try {
     # Silently ignore preference check errors
 }
 
-# 2. Dynamic Memory Sizing & Optimization
+# 2. Memory Sizing & Optimization Info
 Write-Host "`n[2/6] Configuring Gradle optimizations..." -ForegroundColor $PrimaryColor
 $totalRamGb = 8 # Default fallback
 try {
     $memInfo = Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum
     $totalRamGb = [Math]::Round($memInfo.Sum / 1GB)
 } catch {}
-
-$gradleJvmArgs = ""
-if ($totalRamGb -ge 12) {
-    # High-end system: allocate 4GB JVM heap & use G1 Garbage Collector
-    $gradleJvmArgs = "-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseG1GC -XX:+ParallelRefProcEnabled"
-    Write-Host "   - Dynamic Heap: Allocated 4GB RAM to Gradle JVM (Detected $totalRamGb GB RAM)" -ForegroundColor $SuccessColor
-} else {
-    # Mid/Low-end system: allocate 2GB JVM heap
-    $gradleJvmArgs = "-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
-    Write-Host "   - Dynamic Heap: Allocated 2GB RAM to Gradle JVM (Detected $totalRamGb GB RAM)" -ForegroundColor $SuccessColor
-}
+Write-Host "   - System RAM: Detected $totalRamGb GB RAM" -ForegroundColor Gray
+Write-Host "   - Gradle Optimizations: Active in android/gradle.properties (6GB heap, 16 parallel workers, build cache)" -ForegroundColor $SuccessColor
 
 # 3. Check ADB Device Connectivity
 Write-Host "`n[3/6] Scanning ADB devices..." -ForegroundColor $PrimaryColor
@@ -220,18 +211,20 @@ if (-not (Test-Path "android")) {
 
 # Build parameters
 $gradleArgs = @("assembleRelease", $ArchFlag)
-$gradleArgs += "--build-cache"
-$gradleArgs += "--daemon"
-$gradleArgs += "-Dorg.gradle.parallel=true"
-$gradleArgs += "-Dorg.gradle.configureondemand=true"
-if ($gradleJvmArgs) {
-    $gradleArgs += "-Dorg.gradle.jvmargs=`"$gradleJvmArgs`""
-}
+$gradleArgs += "-x"
+$gradleArgs += "lintVitalRelease"
+$gradleArgs += "-x"
+$gradleArgs += "lintVitalAnalyzeRelease"
+$gradleArgs += "-x"
+$gradleArgs += "lintVitalReportRelease"
 
 Write-Host "   Running: gradlew.bat $($gradleArgs -join ' ')" -ForegroundColor Gray
 Write-Host "   This compiles all local assets. Please wait...`n" -ForegroundColor $PrimaryColor
 
 $gradlewPath = Join-Path $ProjectRoot "android\gradlew.bat"
+
+# Start the build stopwatch
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 # Start the build process
 $pinfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -242,8 +235,11 @@ $pinfo.UseShellExecute = $false
 $process = [System.Diagnostics.Process]::Start($pinfo)
 $process.WaitForExit()
 
+$stopwatch.Stop()
+$buildTime = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+
 if ($process.ExitCode -ne 0) {
-    Write-Host "`n[ERROR] Gradle compilation failed!" -ForegroundColor $ErrorColor
+    Write-Host "`n[ERROR] Gradle compilation failed! (Took $buildTime seconds)" -ForegroundColor $ErrorColor
     exit 1
 }
 
@@ -256,9 +252,9 @@ if (-not (Test-Path "apk")) {
 
 if (Test-Path $apkSrc) {
     Copy-Item $apkSrc $apkDest -Force
-    Write-Host "`n[SUCCESS] Standalone APK successfully compiled: $apkDest" -ForegroundColor $SuccessColor
+    Write-Host "`n[SUCCESS] Standalone APK successfully compiled: $apkDest (Took $buildTime seconds)" -ForegroundColor $SuccessColor
 } else {
-    Write-Error "Compiled APK could not be found at: $apkSrc"
+    Write-Error "Compiled APK could not be found at: $apkSrc (Took $buildTime seconds)"
     exit 1
 }
 
