@@ -36,6 +36,7 @@ import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import RestTimerRuler from '../ui/RestTimerRuler';
 import Card from '../ui/Card';
+import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
 
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
@@ -139,228 +140,7 @@ const AnimatedCheckmark: React.FC<{ completed: boolean }> = ({ completed }) => {
   );
 };
 
-interface SwipeableRowProps {
-  children: React.ReactNode;
-  onDelete: ((confirm: (stateUpdateCb: () => void) => void, cancel: () => void) => void) | (() => void);
-  borderRadius?: number;
-  style?: any;
-}
-
-const SwipeableRow: React.FC<SwipeableRowProps> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
-  const translateX = useSharedValue(0);
-  const isOpen = useSharedValue(false);
-  const width = useSharedValue(0);
-  const hasTriggeredHaptic = useSharedValue(false);
-
-  // ─── Ref pattern: keep onDelete always current without breaking stability
-  // of useCallback/useMemo that depend on it. This stops panGesture from
-  // being recreated every time the parent renders a new inline arrow function.
-  const onDeleteRef = useRef(onDelete);
-  onDeleteRef.current = onDelete;
-
-  useEffect(() => {
-    return () => {
-      cancelAnimation(translateX);
-    };
-  }, []);
-
-  const triggerHaptic = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-  }, []);
-
-  const animateTranslation = useCallback((toVal: number) => {
-    'worklet';
-    if (globalAnimation.speed === 0) {
-      translateX.value = toVal;
-    } else {
-      translateX.value = withSpring(
-        toVal,
-        {
-          stiffness: 140 / (globalAnimation.speed * globalAnimation.speed),
-          damping: 16 / globalAnimation.speed,
-          mass: 0.9,
-        }
-      );
-    }
-  }, []);
-
-  // triggerDeleteFlow reads onDeleteRef.current — no dependency on onDelete prop.
-  // This makes it stable, which in turn makes panGesture stable.
-  const triggerDeleteFlow = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-
-    const currentOnDelete = onDeleteRef.current;
-
-    const performDeleteAnimation = (onCompleted: () => void) => {
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      }
-      const toVal = width.value ? -(width.value + 50) : -500;
-
-      const safeCleanup = () => {
-        cancelAnimation(translateX);
-        translateX.value = 0;
-        isOpen.value = false;
-        hasTriggeredHaptic.value = false;
-
-        setTimeout(() => {
-          onCompleted();
-        }, 0);
-      };
-
-      translateX.value = withTiming(toVal, { duration: getScaledDuration(180) }, () => {
-        runOnJS(safeCleanup)();
-      });
-    };
-
-    if (currentOnDelete.length === 2) {
-      const confirm = (onConfirmedStateUpdate: () => void) => {
-        performDeleteAnimation(onConfirmedStateUpdate);
-      };
-      const cancel = () => {
-        isOpen.value = false;
-        hasTriggeredHaptic.value = false;
-        animateTranslation(0);
-      };
-      (currentOnDelete as (confirm: (cb: () => void) => void, cancel: () => void) => void)(confirm, cancel);
-    } else {
-      performDeleteAnimation(() => {
-        (currentOnDelete as () => void)();
-      });
-    }
-  }, [animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── panGesture is memoized — created ONCE. All shared values are read
-  // via .value on the UI thread. All JS callbacks are stable useCallbacks.
-  const panGesture = useMemo(() => Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .failOffsetY([-8, 8])
-    .onUpdate((e) => {
-      'worklet';
-      let newX = e.translationX;
-      if (isOpen.value) {
-        newX = -70 + e.translationX;
-      }
-      if (newX > 0) newX = 0;
-      translateX.value = newX;
-
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
-      const past = newX < currentThreshold;
-      if (past) {
-        if (!hasTriggeredHaptic.value) {
-          runOnJS(triggerHaptic)();
-          hasTriggeredHaptic.value = true;
-        }
-      } else {
-        if (hasTriggeredHaptic.value && newX > currentThreshold + 15) {
-          hasTriggeredHaptic.value = false;
-        }
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
-      const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
-
-      if (currentX < currentThreshold || e.velocityX < -500) {
-        runOnJS(triggerDeleteFlow)();
-      } else {
-        const threshold = isOpen.value ? -30 : -45;
-        if (e.translationX < threshold) {
-          isOpen.value = true;
-          animateTranslation(-70);
-        } else {
-          isOpen.value = false;
-          animateTranslation(0);
-        }
-        hasTriggeredHaptic.value = false;
-      }
-    }),
-  [triggerDeleteFlow, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const animatedUnderlayStyle = useAnimatedStyle(() => ({
-    opacity: translateX.value < -10 ? 1 : 0,
-  }));
-
-  const animatedTrashStyle = useAnimatedStyle(() => {
-    const thresh = width.value ? -width.value * 0.45 : -150;
-    const scale = translateX.value < thresh
-      ? 1.3
-      : translateX.value < -70
-        ? 1.0
-        : 0.8;
-    return { 
-      transform: [{ scale }],
-      justifyContent: 'center',
-      alignItems: 'center',
-      width: 24,
-      height: 24,
-    };
-  });
-
-  const animatedTrashOutlineStyle = useAnimatedStyle(() => {
-    const thresh = width.value ? -width.value * 0.45 : -150;
-    const isPast = translateX.value < thresh;
-    return {
-      opacity: isPast ? 0 : 1,
-      position: 'absolute',
-    };
-  });
-
-  const animatedTrashFilledStyle = useAnimatedStyle(() => {
-    const thresh = width.value ? -width.value * 0.45 : -150;
-    const isPast = translateX.value < thresh;
-    return {
-      opacity: isPast ? 1 : 0,
-      position: 'absolute',
-    };
-  });
-
-  const animatedContentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  return (
-    <View 
-      style={[styles.swipeContainer, { borderRadius }, style]}
-      onLayout={(e) => { width.value = e.nativeEvent.layout.width; }}
-    >
-      <Animated.View
-        style={[StyleSheet.absoluteFill, animatedUnderlayStyle]}
-      >
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={triggerDeleteFlow}
-        >
-          <View style={[
-            styles.swipeDeleteAction, 
-            { borderRadius },
-          ]}>
-            <Animated.View style={animatedTrashStyle}>
-              <Animated.View style={animatedTrashOutlineStyle}>
-                <Ionicons name="trash-outline" size={20} color="#FFF" />
-              </Animated.View>
-              <Animated.View style={animatedTrashFilledStyle}>
-                <Ionicons name="trash" size={20} color="#FFF" />
-              </Animated.View>
-            </Animated.View>
-          </View>
-        </Pressable>
-      </Animated.View>
-      <GestureDetector gesture={panGesture}>
-        <Animated.View
-          style={animatedContentStyle}
-        >
-          {children}
-        </Animated.View>
-      </GestureDetector>
-    </View>
-  );
-};
+const SwipeableRow = SharedSwipeableRow;
 
 interface SetSuggestion {
   weight: string;
@@ -1509,7 +1289,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Delete a set
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -1751,7 +1530,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             text: 'Remove',
             style: 'destructive',
             onPress: () => {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
               const targetIdx = activeExerciseMenuIndex;
               setActiveExercises(prev => prev.filter((_, idx) => idx !== targetIdx));
               setIsExMenuVisible(false);
@@ -2306,7 +2084,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       inputRefs={inputRefs}
                       isRpeMode={isRpeMode}
                       addSet={addSet}
-                      setActiveExercises={setActiveExercises}
                       tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
                     />
                   );
@@ -3355,8 +3132,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 const nextIdx = (currIdx + 1) % categories.length;
                 updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
               }}
-              onLongPress={() => deleteSet(exIdx, setIdx)}
-              accessibilityLabel={`Cycle set category, long press to delete set ${setIdx + 1}`}
+              accessibilityLabel={`Cycle set category for set ${setIdx + 1}`}
             >
               <View
                 style={[
@@ -3537,8 +3313,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               const nextIdx = (currIdx + 1) % categories.length;
               updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
             }}
-            onLongPress={() => deleteSet(exIdx, setIdx)}
-            accessibilityLabel={`Cycle set category, long press to delete set ${setIdx + 1}`}
+            accessibilityLabel={`Cycle set category for set ${setIdx + 1}`}
           >
             <View
               style={[
@@ -3670,7 +3445,6 @@ interface ActiveExerciseRowProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
-  setActiveExercises: React.Dispatch<React.SetStateAction<any[]>>;
   tempInputValue?: string;
 }
 
@@ -3696,7 +3470,6 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   inputRefs,
   isRpeMode,
   addSet,
-  setActiveExercises,
   tempInputValue,
 }) => {
   const enterScale = useSharedValue(0.95);
@@ -3747,29 +3520,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
       }}
       style={animatedStyle}
     >
-      <SwipeableRow 
-        borderRadius={radius.md}
-        style={{ marginBottom: spacing.lg }}
-        onDelete={(confirm, cancel) => {
-          Alert.alert(
-            'Remove Exercise',
-            `Are you sure you want to remove "${exercise.name}"?`,
-            [
-              { text: 'Cancel', style: 'cancel', onPress: cancel },
-              {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: () => {
-                  confirm(() => {
-                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                    setActiveExercises(prev => prev.filter((_, idx) => idx !== exIdx));
-                  });
-                }
-              }
-            ]
-          );
-        }}
-      >
+      <View style={{ marginBottom: spacing.lg }}>
         <View style={[
           styles.exerciseCard,
           isSuperSet && {
@@ -3874,7 +3625,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             <Text style={styles.addSetText}>ADD SET</Text>
           </Pressable>
         </View>
-      </SwipeableRow>
+      </View>
     </Animated.View>
   );
 });
@@ -4775,23 +4526,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontFamily: font.bold,
     fontSize: font.sizes.sm,
-  },
-
-  // SwipeableRow styles
-  swipeContainer: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  swipeDeleteAction: {
-    position:        'absolute',
-    top:             0,
-    bottom:          0,
-    right:           0,
-    left:            0,
-    backgroundColor: colors.error,
-    justifyContent:  'center',
-    alignItems:      'flex-end',
-    paddingRight:    spacing.lg,
   },
 
   // Reps & RPE Combined block styles

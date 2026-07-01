@@ -27,7 +27,6 @@ import IconButton from '../ui/IconButton';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
 import i18n from '../../utils/i18n';
-import { SwipeableRow } from './SwipeableRow';
 import { SetRow } from './SetRow';
 import { exerciseBlockStyles } from './exerciseBlockStyles';
 import { ExerciseCard } from './ExerciseCard';
@@ -401,7 +400,6 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   }, [exercises]);
 
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEditorExercises(prev => {
       const next = [...prev];
       next[exIdx].sets = next[exIdx].sets.filter((_, i) => i !== setIdx);
@@ -807,26 +805,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                         dragY={dragY}
                         itemLayouts={itemLayouts}
                       >
-                        <SwipeableRow
-                          borderRadius={radius.md}
-                          style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
-                          onDelete={() => {
-                            Alert.alert(
-                              i18n.t('routineEditor.removeExercise'),
-                              i18n.t('routineEditor.removeExerciseMsg', { name: exercise.name }),
-                              [
-                                { text: i18n.t('common.cancel'), style: 'cancel' },
-                                { text: i18n.t('common.remove'), style: 'destructive', onPress: () => {
-                                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                                  setEditorExercises(prev => {
-                                    const filtered = prev.filter((_, i) => i !== exIdx);
-                                    return sanitizeSuperSets(filtered);
-                                  });
-                                }},
-                              ]
-                            );
-                          }}
-                        >
+                        <View style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
                           <ExerciseCard
                             exercise={exercise}
                             exIdx={exIdx}
@@ -845,7 +824,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                             dragHandlers={dragHandlers}
                             tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
                           />
-                        </SwipeableRow>
+                        </View>
                       </DraggableListItem>
                     );
                   });

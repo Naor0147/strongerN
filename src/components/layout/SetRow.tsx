@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, ripple as rippleTokens } from '../../theme';
+import { colors, radius } from '../../theme';
 import { SwipeableRow } from './SwipeableRow';
 import { exerciseBlockStyles as s } from './exerciseBlockStyles';
 
@@ -96,9 +96,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                 const nextIdx = (currIdx + 1) % categories.length;
                 updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
               }}
-              onLongPress={() => deleteSet(exIdx, setIdx)}
               unstable_pressDelay={0}
-  
             >
               <View
                 style={[
@@ -212,26 +210,19 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
             </View>
           </View>
 
-          {/* Last Column: Done (active) or Delete (editor) */}
+          {/* Done (active mode only — sets are deleted by swiping left) */}
           {isActive && toggleSetComplete ? (
             <Pressable
               style={[s.colCheck, s.checkButton]}
               onPress={() => toggleSetComplete(exIdx, setIdx)}
               unstable_pressDelay={0}
-  
             >
               <View style={[s.checkCircle, set.completed && s.checkCircleCompleted]}>
                 {set.completed && <Ionicons name="checkmark" size={14} color="#0D0F14" />}
               </View>
             </Pressable>
           ) : (
-            <Pressable
-              style={s.setDeleteBtn}
-              onPress={() => deleteSet(exIdx, setIdx)}
-              android_ripple={rippleTokens.borderless}
-            >
-              <Ionicons name="close" size={14} color={colors.textMuted} />
-            </Pressable>
+            <View style={s.colCheck} />
           )}
         </View>
       </SwipeableRow>
@@ -266,9 +257,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
               const nextIdx = (currIdx + 1) % categories.length;
               updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
             }}
-            onLongPress={() => deleteSet(exIdx, setIdx)}
-            unstable_pressDelay={0}
-
+unstable_pressDelay={0}
           >
             <View
               style={[
@@ -364,26 +353,19 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
           </View>
         )}
 
-        {/* Last Column: Done (active) or Delete (editor) */}
+        {/* Done (active mode only — sets are deleted by swiping left) */}
         {isActive && toggleSetComplete ? (
           <Pressable
             style={[s.colCheck, s.checkButton]}
             onPress={() => toggleSetComplete(exIdx, setIdx)}
             unstable_pressDelay={0}
-
           >
             <View style={[s.checkCircle, set.completed && s.checkCircleCompleted]}>
               {set.completed && <Ionicons name="checkmark" size={14} color="#0D0F14" />}
             </View>
           </Pressable>
         ) : (
-          <Pressable
-            style={s.setDeleteBtn}
-            onPress={() => deleteSet(exIdx, setIdx)}
-            android_ripple={rippleTokens.borderless}
-          >
-            <Ionicons name="close" size={14} color={colors.textMuted} />
-          </Pressable>
+          <View style={s.colCheck} />
         )}
       </View>
     </SwipeableRow>
