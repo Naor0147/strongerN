@@ -183,7 +183,7 @@ function ReorderableRow<T>({
 
     return {
       transform: [
-        { translateY: withSpring(translateY, { damping: 26, stiffness: 300 }) }
+        { translateY: withSpring(translateY, { damping: 34, stiffness: 550 }) }
       ],
       zIndex: 2,
     };
@@ -218,6 +218,7 @@ export function ReorderableList<T>({
   style,
 }: ReorderableListProps<T>) {
   const activeId = useSharedValue<string | null>(null);
+  const activeOrigIdx = useSharedValue<number>(-1);
   const dragY = useSharedValue(0);
   const activeInitialY = useSharedValue(0);
 
@@ -238,6 +239,7 @@ export function ReorderableList<T>({
     
     // Reset drag state
     activeId.value = null;
+    activeOrigIdx.value = -1;
     dragY.value = 0;
   }, [dataKeysStr]);
 
@@ -274,7 +276,7 @@ export function ReorderableList<T>({
     let accum = 0;
     for (let i = 0; i < N; i++) {
       ys[i] = accum;
-      accum += (heights.value[i] || 0);
+      accum += (heights.value[i] || 80);
     }
     originalYs.value = ys;
     slotTops.value = ys;
@@ -286,27 +288,19 @@ export function ReorderableList<T>({
     }
     positions.value = initPos;
 
+    activeOrigIdx.value = origIdx;
     activeId.value = id;
     dragY.value = 0;
     activeInitialY.value = ys[origIdx] || 0;
-  }, [heights, originalYs, slotTops, positions, activeId, dragY, activeInitialY]);
+  }, [heights, originalYs, slotTops, positions, activeId, activeOrigIdx, dragY, activeInitialY]);
 
   const updateDrag = useCallback((translationY: number) => {
     'worklet';
     if (activeId.value === null) return;
 
     const N = positions.value.length;
-    
-    // Find original index matching activeInitialY
-    let activeOrig = -1;
-    for (let i = 0; i < N; i++) {
-      if (originalYs.value[i] === activeInitialY.value) {
-        activeOrig = i;
-        break;
-      }
-    }
-
-    if (activeOrig === -1) return;
+    const activeOrig = activeOrigIdx.value;
+    if (activeOrig === -1 || activeOrig >= N) return;
 
     dragY.value = translationY;
 
@@ -330,17 +324,18 @@ export function ReorderableList<T>({
       for (let s = 0; s < N; s++) {
         tops[s] = currentTop;
         const orig = slotToOrig[s];
-        currentTop += (heights.value[orig] || 0);
+        const h = heights.value[orig] || 80;
+        currentTop += h;
       }
 
-      const activeHeight = heights.value[activeOrig] || 0;
+      const activeHeight = heights.value[activeOrig] || 80;
       const activeCenter = activeInitialY.value + dragY.value + activeHeight / 2;
 
       // Dragging down: check if active item center crossed the next slot midpoint
       if (activeSlot < N - 1) {
         const nextSlot = activeSlot + 1;
         const nextOrig = slotToOrig[nextSlot];
-        const nextHeight = heights.value[nextOrig] || 0;
+        const nextHeight = heights.value[nextOrig] || 80;
         const nextTop = tops[nextSlot];
         const nextCenter = nextTop + nextHeight / 2;
 
@@ -351,13 +346,20 @@ export function ReorderableList<T>({
           positions.value = newPos;
           activeSlot = nextSlot;
           
-          // Recalculate slot tops
+          // Recalculate slotToOrig with the updated positions
+          const newSlotToOrig = new Array(N);
+          for (let i = 0; i < N; i++) {
+            newSlotToOrig[newPos[i]] = i;
+          }
+
+          // Recalculate slot tops cleanly
           const newTops = new Array(N).fill(0);
           let newAccum = 0;
           for (let s = 0; s < N; s++) {
             newTops[s] = newAccum;
-            const o = s === activeSlot ? activeOrig : (s === nextSlot - 1 ? nextOrig : slotToOrig[s]);
-            newAccum += (heights.value[o] || 0);
+            const o = newSlotToOrig[s];
+            const h = heights.value[o] || 80;
+            newAccum += h;
           }
           slotTops.value = newTops;
 
@@ -371,7 +373,7 @@ export function ReorderableList<T>({
       if (activeSlot > 0) {
         const prevSlot = activeSlot - 1;
         const prevOrig = slotToOrig[prevSlot];
-        const prevHeight = heights.value[prevOrig] || 0;
+        const prevHeight = heights.value[prevOrig] || 80;
         const prevTop = tops[prevSlot];
         const prevCenter = prevTop + prevHeight / 2;
 
@@ -382,13 +384,20 @@ export function ReorderableList<T>({
           positions.value = newPos;
           activeSlot = prevSlot;
 
-          // Recalculate slot tops
+          // Recalculate slotToOrig with the updated positions
+          const newSlotToOrig = new Array(N);
+          for (let i = 0; i < N; i++) {
+            newSlotToOrig[newPos[i]] = i;
+          }
+
+          // Recalculate slot tops cleanly
           const newTops = new Array(N).fill(0);
           let newAccum = 0;
           for (let s = 0; s < N; s++) {
             newTops[s] = newAccum;
-            const o = s === activeSlot ? activeOrig : (s === prevSlot + 1 ? prevOrig : slotToOrig[s]);
-            newAccum += (heights.value[o] || 0);
+            const o = newSlotToOrig[s];
+            const h = heights.value[o] || 80;
+            newAccum += h;
           }
           slotTops.value = newTops;
 
@@ -398,22 +407,15 @@ export function ReorderableList<T>({
         }
       }
     }
-  }, [activeId, positions, heights, originalYs, slotTops, activeInitialY, dragY]);
+  }, [activeId, activeOrigIdx, positions, heights, slotTops, activeInitialY, dragY]);
 
   const endDrag = useCallback(() => {
     'worklet';
     if (activeId.value === null) return;
 
     const N = positions.value.length;
-    let activeOrig = -1;
-    for (let i = 0; i < N; i++) {
-      if (originalYs.value[i] === activeInitialY.value) {
-        activeOrig = i;
-        break;
-      }
-    }
-
-    if (activeOrig === -1) {
+    const activeOrig = activeOrigIdx.value;
+    if (activeOrig === -1 || activeOrig >= N) {
       activeId.value = null;
       dragY.value = 0;
       return;
@@ -432,11 +434,11 @@ export function ReorderableList<T>({
 
     // Spring the active item into its final position on UI thread,
     // then commit the state change to JS thread.
-    dragY.value = withSpring(targetTranslateY, { damping: 26, stiffness: 300 }, () => {
+    dragY.value = withSpring(targetTranslateY, { damping: 34, stiffness: 550 }, () => {
       'worklet';
       runOnJS(commitReorder)(slotToOrig);
     });
-  }, [activeId, positions, originalYs, activeInitialY, slotTops, dragY]);
+  }, [activeId, activeOrigIdx, positions, originalYs, slotTops, dragY]);
 
   return (
     <View style={[styles.container, style]}>
