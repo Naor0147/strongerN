@@ -264,13 +264,7 @@ Write-Host "`n[6/6] Post-Build Actions..." -ForegroundColor $PrimaryColor
 # ADB Installation if connected
 function Install-ADB {
     param([string]$device, [string]$apkPath)
-    Write-Host "`n======================================================================" -ForegroundColor $WarningColor
-    Write-Host "IMPORTANT: Please UNLOCK your phone screen and keep it awake!" -ForegroundColor $WarningColor
-    Write-Host "======================================================================" -ForegroundColor $WarningColor
-    Write-Host "`nInstalling on device $device..." -ForegroundColor $PrimaryColor
     
-    $timeout = 90
-    $elapsed = 0
     $manufacturer = "Unknown"
     $model = "Unknown"
     try {
@@ -278,34 +272,140 @@ function Install-ADB {
         $model = (& $adb -s $device shell getprop ro.product.model).Trim()
     } catch {}
 
+    $apkSizeMb = 0
+    try {
+        $apkSizeMb = [Math]::Round((Get-Item $apkPath).Length / 1MB, 2)
+    } catch {}
+
+    Write-Host "`n======================================================================" -ForegroundColor $PrimaryColor
+    Write-Host "                 ADB Standalone App Installation" -ForegroundColor $PrimaryColor
+    Write-Host "======================================================================" -ForegroundColor $PrimaryColor
+    Write-Host "   - Device Model:  $manufacturer $model ($device)" -ForegroundColor Gray
+    Write-Host "   - APK File:      $apkPath ($apkSizeMb MB)" -ForegroundColor Gray
+    Write-Host "   - Instructions:  Please keep your phone screen UNLOCKED and awake." -ForegroundColor Gray
+    Write-Host "                    Press 'C' at any time to cancel/abort installation." -ForegroundColor $WarningColor
+    Write-Host "======================================================================" -ForegroundColor $PrimaryColor
+
     if ($manufacturer -match "OPPO|REALME|ONEPLUS|VIVO") {
-        Write-Host "======================================================================" -ForegroundColor $WarningColor
-        Write-Host "ColorOS/Oppo/Realme/Vivo/OnePlus Device Detected: $manufacturer $model" -ForegroundColor $WarningColor
-        Write-Host "These phones require manual confirmation to install apps over USB." -ForegroundColor $WarningColor
-        Write-Host "Please UNLOCK your phone screen now and accept the install prompt!" -ForegroundColor $WarningColor
-        Write-Host "======================================================================" -ForegroundColor $WarningColor
+        Write-Host "`n[ColorOS/FuntouchOS Warning]" -ForegroundColor $WarningColor
+        Write-Host "Oppo/Realme/OnePlus/Vivo require you to manually authorize USB installs." -ForegroundColor $WarningColor
+        Write-Host "Please check your phone screen and tap 'Install' when prompted!" -ForegroundColor $WarningColor
     }
 
-    # Run in background and monitor (using -r -d to allow version downgrades)
+    Write-Host "`n   [ADB] Starting standard stream installation..." -ForegroundColor $PrimaryColor
+    
+    # Run in background (using -r -d to allow version downgrades)
     $p = Start-Process $adb -ArgumentList "-s", $device, "install", "-r", "-d", $apkPath -NoNewWindow -PassThru
     
-    while (-not $p.HasExited -and $elapsed -lt $timeout) {
-        Start-Sleep -Seconds 1
+    $elapsed = 0
+    $aborted = $false
+    
+    while (-not $p.HasExited) {
+        # Check key presses in a 1-second interval split into 10 checks
+        for ($k = 0; $k -lt 10; $k++) {
+            if ($p.HasExited) { break }
+            try {
+                if ([Console]::KeyAvailable) {
+                    $key = [Console]::ReadKey($true)
+                    if ($key.KeyChar -eq 'c' -or $key.KeyChar -eq 'C') {
+                        $aborted = $true
+                        break
+                    }
+                }
+            } catch {}
+            Start-Sleep -Milliseconds 100
+        }
+        
+        if ($aborted -or $p.HasExited) { break }
+        
         $elapsed++
-        Write-Progress -Activity "ADB Installing APK" -Status "Uploading and installing... ($elapsed seconds)" -PercentComplete ([Math]::Min(($elapsed/$timeout)*100, 100))
+        Write-Host -NoNewline "`r   [ADB] Status: Installing... ($($elapsed)s elapsed) [Press 'C' to Cancel]" -ForegroundColor $AccentColor
     }
     
-    Write-Progress -Activity "ADB Installing APK" -Completed
-    
-    if (-not $p.HasExited) {
-        $p | Stop-Process -Force
-        Write-Host "[ERROR] Installation timed out after $timeout seconds. Make sure phone screen is unlocked." -ForegroundColor $ErrorColor
+    # Clear line
+    Write-Host "`r                                                                                `r" -NoNewline
+
+    if ($aborted) {
+        try {
+            $p | Stop-Process -Force
+        } catch {}
+        Write-Host "❌ Installation aborted/cancelled by user." -ForegroundColor $ErrorColor
         return $false
     }
     
+    try { $p.Refresh() } catch {}
+    $needFallback = $false
     if ($p.ExitCode -ne 0) {
-        Write-Host "[ERROR] ADB Installation failed (Exit Code: $($p.ExitCode))." -ForegroundColor $ErrorColor
-        return $false
+        Write-Host "[WARN] Standard installation failed (Exit Code: $($p.ExitCode))." -ForegroundColor $WarningColor
+        $needFallback = $true
+    }
+
+    if ($needFallback) {
+        try {
+            Write-Host "`n======================================================================" -ForegroundColor $WarningColor
+            Write-Host "           Attempting Fallback Installation (Push + Local Install)" -ForegroundColor $WarningColor
+            Write-Host "======================================================================" -ForegroundColor $WarningColor
+            Write-Host "   1/3 Pushing APK to device /data/local/tmp/..." -ForegroundColor $PrimaryColor
+            $pushArgs = @("-s", $device, "push", $apkPath, "/data/local/tmp/strongerN.apk")
+            $pPush = Start-Process $adb -ArgumentList $pushArgs -NoNewWindow -PassThru -Wait
+            if ($pPush.ExitCode -ne 0) {
+                Write-Host "❌ Fallback push failed. Check USB connection mode (must be Transfer Files/MTP)." -ForegroundColor $ErrorColor
+                return $false
+            }
+
+            Write-Host "   2/3 Running package manager installer on device..." -ForegroundColor $PrimaryColor
+            Write-Host "       Check phone screen for the install authorization popup!" -ForegroundColor $WarningColor
+            $installArgs = @("-s", $device, "shell", "pm", "install", "-r", "-d", "/data/local/tmp/strongerN.apk")
+            
+            # Start pm install in background to make it cancelable by C key as well!
+            $pShell = Start-Process $adb -ArgumentList $installArgs -NoNewWindow -PassThru
+            $elapsedFallback = 0
+            $abortedFallback = $false
+            while (-not $pShell.HasExited) {
+                for ($k = 0; $k -lt 10; $k++) {
+                    if ($pShell.HasExited) { break }
+                    try {
+                        if ([Console]::KeyAvailable) {
+                            $key = [Console]::ReadKey($true)
+                            if ($key.KeyChar -eq 'c' -or $key.KeyChar -eq 'C') {
+                                $abortedFallback = $true
+                                break
+                            }
+                        }
+                    } catch {}
+                    Start-Sleep -Milliseconds 100
+                }
+                if ($abortedFallback -or $pShell.HasExited) { break }
+                $elapsedFallback++
+                Write-Host -NoNewline "`r   [ADB] Status: Local Installing... ($($elapsedFallback)s elapsed) [Press 'C' to Cancel]" -ForegroundColor $AccentColor
+            }
+            Write-Host "`r                                                                                `r" -NoNewline
+            
+            if ($abortedFallback) {
+                try { $pShell | Stop-Process -Force } catch {}
+                # Clean up
+                $cleanArgs = @("-s", $device, "shell", "rm", "/data/local/tmp/strongerN.apk")
+                Start-Process $adb -ArgumentList $cleanArgs -NoNewWindow -PassThru -Wait | Out-Null
+                Write-Host "❌ Fallback installation aborted by user." -ForegroundColor $ErrorColor
+                return $false
+            }
+
+            Write-Host "   3/3 Cleaning up temporary file..." -ForegroundColor $PrimaryColor
+            $cleanArgs = @("-s", $device, "shell", "rm", "/data/local/tmp/strongerN.apk")
+            Start-Process $adb -ArgumentList $cleanArgs -NoNewWindow -PassThru -Wait | Out-Null
+            
+            try { $pShell.Refresh() } catch {}
+            if ($pShell.ExitCode -ne 0) {
+                Write-Host "❌ Fallback installation failed (Exit Code: $($pShell.ExitCode))." -ForegroundColor $ErrorColor
+                return $false
+            }
+            
+            Write-Host "[SUCCESS] Fallback installation completed successfully!" -ForegroundColor $SuccessColor
+            return $true
+        } catch {
+            Write-Host "[ERROR] Fallback installation encountered an error: $_" -ForegroundColor $ErrorColor
+            return $false
+        }
     }
     
     Write-Host "[SUCCESS] App successfully installed on $device!" -ForegroundColor $SuccessColor
