@@ -243,8 +243,8 @@ echo IMPORTANT: Please UNLOCK your phone screen and keep it awake!
 echo Accept any "Install via USB" or "Play Protect" prompts on your phone.
 echo ======================================================================
 echo.
-echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE% (30s timeout)...
-call powershell -NonInteractive -ExecutionPolicy Bypass -Command "$p = Start-Process adb.exe -ArgumentList '-s %SELECTED_DEVICE% install -r \"%APK_DEST%\"' -NoNewWindow -PassThru; if ($p) { if (-not $p.WaitForExit(30000)) { $p | Stop-Process -Force; Write-Host '[ERROR] Installation timed out! Please unlock your phone screen and allow install via USB.' -ForegroundColor Red; exit 1 } else { exit $p.ExitCode } }" <nul
+echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE% (90s timeout)...
+call powershell -NonInteractive -ExecutionPolicy Bypass -Command "$p = Start-Process adb.exe -ArgumentList '-s %SELECTED_DEVICE% install -r \"%APK_DEST%\"' -NoNewWindow -PassThru; if ($p) { if (-not $p.WaitForExit(90000)) { $p | Stop-Process -Force; Write-Host '[ERROR] Installation timed out! Please unlock your phone screen and allow install via USB.' -ForegroundColor Red; exit 1 } else { exit $p.ExitCode } }" <nul
 if %ERRORLEVEL% neq 0 (
     color 0C
     echo.
