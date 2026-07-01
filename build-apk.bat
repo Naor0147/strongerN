@@ -244,7 +244,7 @@ echo Accept any "Install via USB" or "Play Protect" prompts on your phone.
 echo ======================================================================
 echo.
 echo [ADB] Installing "%APK_DEST%" on device %SELECTED_DEVICE% (90s timeout)...
-call powershell -NonInteractive -ExecutionPolicy Bypass -Command "$p = Start-Process adb.exe -ArgumentList '-s %SELECTED_DEVICE% install -r \"%APK_DEST%\"' -NoNewWindow -PassThru; if ($p) { if (-not $p.WaitForExit(90000)) { $p | Stop-Process -Force; Write-Host '[ERROR] Installation timed out! Please unlock your phone screen and allow install via USB.' -ForegroundColor Red; exit 1 } else { exit $p.ExitCode } }" <nul
+call powershell -NonInteractive -ExecutionPolicy Bypass -Command "$out = [System.IO.Path]::GetTempFileName(); $err = [System.IO.Path]::GetTempFileName(); $p = Start-Process adb.exe -ArgumentList '-s %SELECTED_DEVICE% install -r \"%APK_DEST%\"' -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $sec = 0; while (-not $p.HasExited -and $sec -lt 90) { Start-Sleep -Seconds 1; $sec++ }; if (-not $p.HasExited) { $p | Stop-Process -Force; Write-Host '[ERROR] Installation timed out! Please unlock your phone screen and allow install via USB.' -ForegroundColor Red; Remove-Item $out, $err -ErrorAction SilentlyContinue; exit 1 } else { if (Test-Path $out) { Get-Content $out }; if (Test-Path $err) { Get-Content $err }; $code = $p.ExitCode; Remove-Item $out, $err -ErrorAction SilentlyContinue; exit $code }" <nul
 if %ERRORLEVEL% neq 0 (
     color 0C
     echo.
