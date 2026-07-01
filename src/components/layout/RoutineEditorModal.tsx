@@ -30,6 +30,8 @@ import i18n from '../../utils/i18n';
 import { SetRow } from './SetRow';
 import { exerciseBlockStyles } from './exerciseBlockStyles';
 import { ExerciseCard } from './ExerciseCard';
+import { ReorderableList } from '../ui/ReorderableList';
+import { SwipeableRow } from './SwipeableRow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SetRecord {
@@ -109,52 +111,7 @@ function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
   });
 }
 
-// ─── DraggableListItem Component ──────────────────────────────────────────────
-interface DraggableListItemProps {
-  itemKey: string;
-  isActive: boolean;
-  dragY: SharedValue<number>;
-  children: React.ReactNode;
-  itemLayouts: React.MutableRefObject<Record<string, { y: number; height: number }>>;
-}
-
-const DraggableListItem: React.FC<DraggableListItemProps> = ({
-  itemKey,
-  isActive,
-  dragY,
-  children,
-  itemLayouts,
-}) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: isActive ? dragY.value : 0 }],
-      zIndex: isActive ? 999 : undefined,
-      opacity: isActive ? 0.85 : undefined,
-      backgroundColor: isActive ? colors.surface2 : undefined,
-      shadowColor: isActive ? '#000' : undefined,
-      shadowOffset: isActive ? { width: 0, height: 4 } : undefined,
-      shadowOpacity: isActive ? 0.45 : undefined,
-      shadowRadius: isActive ? 10 : undefined,
-      elevation: isActive ? 8 : undefined,
-    };
-  });
-
-  return (
-    <Animated.View
-      onLayout={e => {
-        if (!isActive) {
-          itemLayouts.current[itemKey] = {
-            y: e.nativeEvent.layout.y,
-            height: e.nativeEvent.layout.height,
-          };
-        }
-      }}
-      style={animatedStyle}
-    >
-      {children}
-    </Animated.View>
-  );
-};
+// DraggableListItem has been removed in favor of ReorderableList
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const EMPTY_STRING_ARRAY: string[] = [];
@@ -208,11 +165,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const initialRef = useRef<{ name: string; folder: string; exercisesStr: string } | null>(null);
 
   // Drag state
-  const dragY = useSharedValue(0);
-  const dragIdx       = useRef(-1);
-  const hoverIdx      = useRef(-1);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const itemLayouts   = useRef<{ [key: string]: { y: number; height: number } }>({});
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Exercise context menu
   const [exMenuIdx,     setExMenuIdx]     = useState<number | null>(null);
@@ -269,7 +222,6 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         });
       }
       setEditorExercises(initialComputed);
-      setActiveId(null);
     }
   }
 
@@ -336,7 +288,6 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         }))),
       };
 
-      dragY.value = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -485,79 +436,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     handleCloseKeyboard();
   }, [activeInput, editorExercises, updateSetField, handleCloseKeyboard]);
 
-  // ── Drag helpers (long-press handle) ─────────────────────────────────────────
-  const handleMove = useCallback((gestureStateY: number) => {
-    if (dragIdx.current === -1 || !activeId) return;
-    const currentLayout = itemLayouts.current[activeId];
-    if (!currentLayout) return;
-
-    const currentCenterY = currentLayout.y + currentLayout.height / 2 + gestureStateY;
-    let targetIndex = dragIdx.current;
-
-    setEditorExercises(current => {
-      for (let i = 0; i < current.length; i++) {
-        const key = current[i].id;
-        const layout = itemLayouts.current[key];
-        if (layout && key !== activeId) {
-          if (i < dragIdx.current && currentCenterY < layout.y + layout.height) {
-            targetIndex = i;
-            break;
-          }
-          if (i > dragIdx.current && currentCenterY > layout.y) {
-            targetIndex = i;
-          }
-        }
-      }
-
-      if (targetIndex !== hoverIdx.current) {
-        hoverIdx.current = targetIndex;
-        const reordered = [...current];
-        const [movedItem] = reordered.splice(dragIdx.current, 1);
-        reordered.splice(targetIndex, 0, movedItem);
-        dragIdx.current = targetIndex;
-        if (Platform.OS !== 'web') Vibration.vibrate(10);
-        return reordered;
-      }
-      return current;
-    });
-  }, [activeId]);
-
-  const gestureMap = useRef<{ [id: string]: any }>({});
-  const getDragHandlers = useCallback((itemKey: string, index: number) => {
-    if (!gestureMap.current[itemKey]) {
-      const panGesture = Gesture.Pan()
-        .activateAfterLongPress(250)
-        .runOnJS(true)
-        .onStart(() => {
-          setActiveId(itemKey);
-          const currentIdx = editorExercisesRef.current.findIndex(e => e.id === itemKey);
-          dragIdx.current   = currentIdx !== -1 ? currentIdx : index;
-          hoverIdx.current  = dragIdx.current;
-          dragY.value = 0;
-          if (Platform.OS !== 'web') Vibration.vibrate(20);
-        })
-        .onUpdate((e) => {
-          dragY.value = e.translationY;
-          handleMove(e.translationY);
-        })
-        .onEnd(() => {
-          setActiveId(null);
-          dragIdx.current  = -1;
-          hoverIdx.current = -1;
-          dragY.value = 0;
-          setEditorExercises(prev => sanitizeSuperSets(prev));
-        })
-        .onFinalize(() => {
-          setActiveId(null);
-          dragIdx.current  = -1;
-          hoverIdx.current = -1;
-          dragY.value = 0;
-          setEditorExercises(prev => sanitizeSuperSets(prev));
-        });
-      gestureMap.current[itemKey] = panGesture;
-    }
-    return gestureMap.current[itemKey];
-  }, [handleMove]);
+  // Legacy drag helpers removed in favor of ReorderableList
 
   // ── Add exercises callback ────────────────────────────────────────────────────
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
@@ -696,7 +575,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 showsVerticalScrollIndicator={false}
                 overScrollMode="never"
                 keyboardShouldPersistTaps="handled"
-                scrollEnabled={activeId === null}
+                scrollEnabled={scrollEnabled}
               >
                 {/* Folder Selector */}
                 {enableRoutineFolders && (
@@ -788,47 +667,55 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     }
                   });
 
-                  return editorExercises.map((exercise, exIdx) => {
-                    const itemKey = exercise.id;
-                    const isActive = activeId === itemKey;
-                    const dragHandlers = getDragHandlers(itemKey, exIdx);
-                    
-                    const isSuperSet = !!exercise.superSetGroupId;
-                    const nextIsSameSuperSet = isSuperSet && exIdx < editorExercises.length - 1 && editorExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
-                    const prevIsSameSuperSet = isSuperSet && exIdx > 0 && editorExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
-                    const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
+                  return (
+                    <ReorderableList
+                      data={editorExercises}
+                      keyExtractor={(item) => item.id}
+                      onReorder={(newData) => {
+                        setEditorExercises(sanitizeSuperSets(newData));
+                      }}
+                      onDragStart={() => setScrollEnabled(false)}
+                      onDragEnd={() => setScrollEnabled(true)}
+                      renderItem={({ item: exercise, index: exIdx, dragGesture }) => {
+                        const isSuperSet = !!exercise.superSetGroupId;
+                        const nextIsSameSuperSet = isSuperSet && exIdx < editorExercises.length - 1 && editorExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
+                        const prevIsSameSuperSet = isSuperSet && exIdx > 0 && editorExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
+                        const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
-                    return (
-                      <DraggableListItem
-                        key={itemKey}
-                        itemKey={itemKey}
-                        isActive={isActive}
-                        dragY={dragY}
-                        itemLayouts={itemLayouts}
-                      >
-                        <View style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
-                          <ExerciseCard
-                            exercise={exercise}
-                            exIdx={exIdx}
-                            activeInput={activeInput}
-                            onFocus={handleSetFocus}
-                            updateSetField={updateSetField}
-                            deleteSet={deleteSet}
-                            inputRefs={inputRefs}
-                            mode="editor"
-                            superSetColor={superSetColor}
-                            isSuperSet={isSuperSet}
-                            nextIsSameSuperSet={nextIsSameSuperSet}
-                            prevIsSameSuperSet={prevIsSameSuperSet}
-                            onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
-                            onAddSet={addSet}
-                            dragHandlers={dragHandlers}
-                            tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                          />
-                        </View>
-                      </DraggableListItem>
-                    );
-                  });
+                        return (
+                          <SwipeableRow
+                            onDelete={() => {
+                              setEditorExercises(prev => {
+                                const filtered = prev.filter((_, i) => i !== exIdx);
+                                return sanitizeSuperSets(filtered);
+                              });
+                            }}
+                            activeOffsetX={[-30, 30]}
+                            style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
+                          >
+                            <ExerciseCard
+                              exercise={exercise}
+                              exIdx={exIdx}
+                              activeInput={activeInput}
+                              onFocus={handleSetFocus}
+                              updateSetField={updateSetField}
+                              deleteSet={deleteSet}
+                              inputRefs={inputRefs}
+                              mode="editor"
+                              superSetColor={superSetColor}
+                              isSuperSet={isSuperSet}
+                              nextIsSameSuperSet={nextIsSameSuperSet}
+                              prevIsSameSuperSet={prevIsSameSuperSet}
+                              onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
+                              onAddSet={addSet}
+                              dragHandlers={dragGesture}
+                              tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                            />
+                          </SwipeableRow>
+                        );
+                      }}
+                    />
+                  );
                 })()}
 
                 {/* Add Exercise Button */}
@@ -964,29 +851,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                       );
                     })()}
 
-                    <Pressable
-                      style={edStyles.sheetItem}
-                      onPress={() => {
-                        Alert.alert(
-                           i18n.t('routineEditor.removeExercise'),
-                           i18n.t('routineEditor.removeExerciseMsg', { name: editorExercises[exMenuIdx]?.name }),
-                           [
-                             { text: i18n.t('common.cancel'), style: 'cancel' },
-                             { text: i18n.t('common.remove'), style: 'destructive', onPress: () => {
-                               setEditorExercises(prev => {
-                                 const filtered = prev.filter((_, i) => i !== exMenuIdx);
-                                 return sanitizeSuperSets(filtered);
-                               });
-                               setIsExMenuVisible(false);
-                             }},
-                           ]
-                        );
-                      }}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Ionicons name="trash-outline" size={20} color={colors.error} />
-                      <Text style={[edStyles.sheetItemText, { color: colors.error }]}>{i18n.t('routineEditor.removeExercise')}</Text>
-                    </Pressable>
+                    {/* Remove Exercise menu item has been removed in favor of direct swipe-to-delete */}
 
                     <Pressable
                       style={[edStyles.sheetItem, edStyles.sheetCancel]}

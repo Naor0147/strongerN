@@ -29,7 +29,8 @@ import IconButton    from '../components/ui/IconButton';
 import SectionLabel  from '../components/ui/SectionLabel';
 import PressableRow  from '../components/ui/PressableRow';
 import { RoutineSharingModal } from '../components/ui/RoutineSharingModal';
-import { DraggableList } from '../components/ui/DraggableList';
+import { ReorderableList } from '../components/ui/ReorderableList';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RoutineEditorModal from '../components/layout/RoutineEditorModal';
 
 interface WorkoutScreenProps {
@@ -69,10 +70,10 @@ interface TemplateCardProps {
   template: Template;
   onStart?: (name: string, exercises: string[], exercisesDetails?: any[]) => void;
   onMenuPress: (template: Template) => void;
-  dragHandlers?: any;
+  dragGesture?: any;
 }
 
-const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStart, onMenuPress, dragHandlers }) => (
+const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStart, onMenuPress, dragGesture }) => (
   <Card style={styles.tplCard} padding={0} testID={`workout.template.${template.id}`}>
     <PressableRow
       onPress={() => onStart && onStart(template.name, template.exercises, template.exercisesDetails)}
@@ -125,16 +126,12 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
       >
         <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
       </Pressable>
-      {dragHandlers && dragHandlers.panGesture ? (
-        <GestureDetector gesture={dragHandlers.panGesture}>
+      {dragGesture ? (
+        <GestureDetector gesture={dragGesture}>
           <View style={styles.tplDragHandle} accessibilityLabel="Drag to reorder template">
             <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
           </View>
         </GestureDetector>
-      ) : dragHandlers ? (
-        <View {...dragHandlers} style={styles.tplDragHandle}>
-          <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-        </View>
       ) : null}
     </View>
   </Card>
@@ -205,6 +202,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [isFolderModalVisible, setIsFolderModalVisible] = useState(false);
   const [selectedFolderFilter, setSelectedFolderFilter] = useState('All');
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   
   // Filter popover state
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
@@ -554,7 +552,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   ), [folderPressHandlers]);
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScreenHeader
         title={i18n.t('workout.title')}
         actions={headerActions}
@@ -762,6 +761,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               contentContainerStyle={styles.list}
               overScrollMode="never"
               keyboardShouldPersistTaps="handled"
+              scrollEnabled={scrollEnabled}
             >
               {/* ListHeaderComponent Content */}
               <View>
@@ -828,21 +828,23 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               </View>
 
               {/* Reorderable Draggable List */}
-              <DraggableList
+              <ReorderableList
                 data={filteredTemplates}
                 keyExtractor={(item) => item.id}
-                onDragEnd={(newData) => {
+                onReorder={(newData) => {
                   if (onReorderTemplates) {
                     onReorderTemplates(newData);
                   }
                 }}
-                renderItem={({ item, dragHandlers }) => (
+                onDragStart={() => setScrollEnabled(false)}
+                onDragEnd={() => setScrollEnabled(true)}
+                renderItem={({ item, dragGesture }) => (
                   <View style={styles.templateCardWrap}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
                       onMenuPress={handleMenuPress}
-                      dragHandlers={dragHandlers}
+                      dragGesture={dragGesture}
                     />
                   </View>
                 )}
@@ -1214,8 +1216,9 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 };
 

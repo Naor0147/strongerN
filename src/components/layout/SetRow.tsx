@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../../theme';
 import { SwipeableRow } from './SwipeableRow';
 import { exerciseBlockStyles as s } from './exerciseBlockStyles';
+import { useExerciseRowGestures } from './exerciseRowGestures';
 
 export interface SetRowActiveInput {
   exIdx: number;
@@ -51,6 +52,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
   const isCompleted = isActive && set.completed;
   const showPrevConnected = isCompleted && isPrevCompleted;
   const showNextConnected = isCompleted && isNextCompleted;
+  const { swipeGesture } = useExerciseRowGestures();
 
   const rowStyle = isActive ? {
     borderTopLeftRadius: showPrevConnected ? 0 : radius.xs,
@@ -76,6 +78,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
           marginBottom: isActive ? (showNextConnected ? 0 : 4) : 4,
           ...rowStyle,
         }}
+        blocksExternalGesture={swipeGesture}
       >
         <View
           style={[
@@ -238,6 +241,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
         marginBottom: isActive ? (showNextConnected ? 0 : 4) : 4,
         ...rowStyle,
       }}
+      blocksExternalGesture={swipeGesture}
     >
       <View
         style={[

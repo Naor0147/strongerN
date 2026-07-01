@@ -13,6 +13,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
+import { ExerciseRowGesturesContext } from './exerciseRowGestures';
 
 /**
  * SwipeableRow — slide a row left to reveal a delete underlay, then swipe
@@ -40,7 +41,16 @@ export const SwipeableRow: React.FC<{
   onDelete: SwipeableRowOnDelete;
   borderRadius?: number;
   style?: any;
-}> = ({ children, onDelete, borderRadius = radius.xs, style }) => {
+  blocksExternalGesture?: any | any[];
+  activeOffsetX?: [number, number];
+}> = ({
+  children,
+  onDelete,
+  borderRadius = radius.xs,
+  style,
+  blocksExternalGesture,
+  activeOffsetX = [-15, 15],
+}) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
   const width = useSharedValue(0);
@@ -139,51 +149,65 @@ export const SwipeableRow: React.FC<{
 
   // ─── panGesture is memoized with stable deps — created ONCE and never
   // replaced while a gesture is active. All referenced functions are stable.
-  const panGesture = useMemo(() => Gesture.Pan()
-    // Tighter vertical fail so the parent ScrollView wins quickly on Android;
-    // slightly larger horizontal activation so taps/inputs don't misfire.
-    .activeOffsetX([-15, 15])
-    .failOffsetY([-6, 6])
-    .onUpdate((e) => {
-      'worklet';
-      let newX = e.translationX;
-      if (isOpen.value) {
-        newX = -70 + e.translationX;
-      }
-      if (newX > 0) newX = 0;
-      translateX.value = newX;
+  const panGesture = useMemo(() => {
+    let g = Gesture.Pan()
+      // Tighter vertical fail so the parent ScrollView wins quickly on Android;
+      // slightly larger horizontal activation so taps/inputs don't misfire.
+      .activeOffsetX(activeOffsetX)
+      .failOffsetY([-6, 6]);
 
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
-      const past = newX < currentThreshold;
-      if (past) {
-        if (!hasTriggeredHaptic.value) {
-          runOnJS(triggerHaptic)();
-          hasTriggeredHaptic.value = true;
+    if (blocksExternalGesture) {
+      if (Array.isArray(blocksExternalGesture)) {
+        const valid = blocksExternalGesture.filter(Boolean);
+        if (valid.length > 0) {
+          g = g.blocksExternalGesture(...valid);
         }
-      } else if (hasTriggeredHaptic.value && newX > currentThreshold + 15) {
-        hasTriggeredHaptic.value = false;
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      const currentThreshold = width.value ? -width.value * 0.45 : -150;
-      const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
-
-      if (currentX < currentThreshold || e.velocityX < -500) {
-        runOnJS(handleDeletePress)();
       } else {
-        const threshold = isOpen.value ? -30 : -45;
-        if (e.translationX < threshold) {
-          isOpen.value = true;
-          animateTranslation(-70);
-        } else {
-          isOpen.value = false;
-          animateTranslation(0);
-        }
-        hasTriggeredHaptic.value = false;
+        g = g.blocksExternalGesture(blocksExternalGesture);
       }
-    }),
-  [handleDeletePress, triggerHaptic, animateTranslation]); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+
+    return g
+      .onUpdate((e) => {
+        'worklet';
+        let newX = e.translationX;
+        if (isOpen.value) {
+          newX = -70 + e.translationX;
+        }
+        if (newX > 0) newX = 0;
+        translateX.value = newX;
+
+        const currentThreshold = width.value ? -width.value * 0.45 : -150;
+        const past = newX < currentThreshold;
+        if (past) {
+          if (!hasTriggeredHaptic.value) {
+            runOnJS(triggerHaptic)();
+            hasTriggeredHaptic.value = true;
+          }
+        } else if (hasTriggeredHaptic.value && newX > currentThreshold + 15) {
+          hasTriggeredHaptic.value = false;
+        }
+      })
+      .onEnd((e) => {
+        'worklet';
+        const currentThreshold = width.value ? -width.value * 0.45 : -150;
+        const currentX = isOpen.value ? -70 + e.translationX : e.translationX;
+
+        if (currentX < currentThreshold || e.velocityX < -500) {
+          runOnJS(handleDeletePress)();
+        } else {
+          const threshold = isOpen.value ? -30 : -45;
+          if (e.translationX < threshold) {
+            isOpen.value = true;
+            animateTranslation(-70);
+          } else {
+            isOpen.value = false;
+            animateTranslation(0);
+          }
+          hasTriggeredHaptic.value = false;
+        }
+      });
+  }, [handleDeletePress, triggerHaptic, animateTranslation, blocksExternalGesture, activeOffsetX]);
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,
@@ -268,7 +292,9 @@ export const SwipeableRow: React.FC<{
       </Animated.View>
       <GestureDetector gesture={panGesture}>
         <Animated.View style={animatedContentStyle}>
-          {children}
+          <ExerciseRowGesturesContext.Provider value={{ swipeGesture: panGesture }}>
+            {children}
+          </ExerciseRowGesturesContext.Provider>
         </Animated.View>
       </GestureDetector>
     </Animated.View>

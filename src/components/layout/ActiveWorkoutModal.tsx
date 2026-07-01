@@ -37,6 +37,8 @@ import AddExerciseScreen from '../../screens/AddExerciseScreen';
 import RestTimerRuler from '../ui/RestTimerRuler';
 import Card from '../ui/Card';
 import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
+import { ReorderableList, useReorder } from '../ui/ReorderableList';
+import { useExerciseRowGestures } from './exerciseRowGestures';
 
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
@@ -699,17 +701,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [customEquipment, setCustomEquipment] = useState('Barbell');
 
   // Drag-and-drop reorder state for exercises
-  const exDragY = useSharedValue(0);
-  const exDragIdx     = useRef(-1);
-  const exHoverIdx    = useRef(-1);
-  const [exActiveKey, setExActiveKey] = useState<string | null>(null);
-  const exItemLayouts = useRef<{ [key: string]: { y: number; height: number } }>({});
-
-  // Static refs for tracking target exercise details
-  const exSlotYRef    = useRef<number[]>([]);
-  const exInitialYRef = useRef<number>(0);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const exIndicesRef  = useRef<{ [id: string]: number }>({});
-  const exPanRespondersRef = useRef<{ [id: string]: any }>({});
 
   const activeExercisesRef = useRef(activeExercises);
   useEffect(() => {
@@ -1702,93 +1695,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     handleConfirmExercisesFromPicker([exName]);
   };
 
-  // ── Exercise Drag Helpers ────────────────────────────────────────────────────
-  const handleExerciseDragMove = useCallback((gestureStateY: number) => {
-    if (exDragIdx.current === -1 || !exActiveKey) return;
-    const currentLayout = exItemLayouts.current[exActiveKey];
-    if (!currentLayout) return;
-    const currentCenterY = currentLayout.y + currentLayout.height / 2 + gestureStateY;
-    let targetIndex = exDragIdx.current;
-    setActiveExercises(current => {
-      for (let i = 0; i < current.length; i++) {
-        const key = current[i].id;
-        const layout = exItemLayouts.current[key];
-        if (layout && key !== exActiveKey) {
-          if (i < exDragIdx.current && currentCenterY < layout.y + layout.height) { targetIndex = i; break; }
-          if (i > exDragIdx.current && currentCenterY > layout.y) { targetIndex = i; }
-        }
-      }
-      if (targetIndex !== exHoverIdx.current) {
-        exHoverIdx.current = targetIndex;
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        const reordered = [...current];
-        const [moved] = reordered.splice(exDragIdx.current, 1);
-        reordered.splice(targetIndex, 0, moved);
-        exDragIdx.current = targetIndex;
-        if (Platform.OS !== 'web') Vibration.vibrate(10);
-        return reordered;
-      }
-      return current;
-    });
-  }, [exActiveKey]);
-
-  // Ref to hold the latest drag move callback to avoid stale closure in PanResponder
-  const handleExerciseDragMoveRef = useRef(handleExerciseDragMove);
-  useEffect(() => {
-    handleExerciseDragMoveRef.current = handleExerciseDragMove;
-  }, [handleExerciseDragMove]);
-
-  // Static gesture map for reordering exercises (cached per item ID)
-  const exGestureMap = useRef<{ [id: string]: any }>({});
-  const getExerciseDragHandlers = useCallback((itemKey: string) => {
-    if (!exGestureMap.current[itemKey]) {
-      const panGesture = Gesture.Pan()
-        .activateAfterLongPress(250)
-        .runOnJS(true)
-        .onStart(() => {
-          const currentIndex = exIndicesRef.current[itemKey];
-          if (currentIndex !== undefined && currentIndex !== -1) {
-            const initialSlots: number[] = [];
-            activeExercisesRef.current.forEach((ex) => {
-              const layout = exItemLayouts.current[ex.id];
-              initialSlots.push(layout ? layout.y : 0);
-            });
-            exSlotYRef.current = initialSlots;
-            exInitialYRef.current = exItemLayouts.current[itemKey]?.y || 0;
-
-            setExActiveKey(itemKey);
-            exDragIdx.current  = currentIndex;
-            exHoverIdx.current = currentIndex;
-            exDragY.value = 0;
-            if (Platform.OS !== 'web') Vibration.vibrate(20);
-          }
-        })
-        .onUpdate((e) => {
-          const yInitial = exInitialYRef.current;
-          const currentIdx = exDragIdx.current;
-          const yCurrent = exSlotYRef.current[currentIdx] !== undefined ? exSlotYRef.current[currentIdx] : yInitial;
-          const translation = e.translationY + (yInitial - yCurrent);
-          exDragY.value = translation;
-          handleExerciseDragMoveRef.current(e.translationY);
-        })
-        .onEnd(() => {
-          setExActiveKey(null);
-          exDragIdx.current  = -1;
-          exHoverIdx.current = -1;
-          exDragY.value = 0;
-          setActiveExercises(prev => sanitizeSuperSets(prev));
-        })
-        .onFinalize(() => {
-          setExActiveKey(null);
-          exDragIdx.current  = -1;
-          exHoverIdx.current = -1;
-          exDragY.value = 0;
-          setActiveExercises(prev => sanitizeSuperSets(prev));
-        });
-      exGestureMap.current[itemKey] = panGesture;
-    }
-    return exGestureMap.current[itemKey];
-  }, []);
+  // Legacy exercise drag helpers removed in favor of ReorderableList
 
   const handleSaveCustomExercise = () => {
     if (!customExerciseName.trim()) {
@@ -1981,7 +1888,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
             <ScrollView
-              scrollEnabled={exActiveKey === null}
+              scrollEnabled={scrollEnabled}
               style={styles.scroll}
               contentContainerStyle={[
                 styles.scrollContent,
@@ -2052,43 +1959,57 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <Text style={styles.emptyText}>No exercises added yet.</Text>
                 </View>
               ) : (
-                activeExercises.map((exercise, exIdx) => {
+              <ReorderableList
+                data={activeExercises}
+                keyExtractor={(item) => item.id}
+                onReorder={(newData) => {
+                  setActiveExercises(sanitizeSuperSets(newData));
+                }}
+                onDragStart={() => setScrollEnabled(false)}
+                onDragEnd={() => setScrollEnabled(true)}
+                renderItem={({ item: exercise, index: exIdx }) => {
                   exIndicesRef.current[exercise.id] = exIdx;
                   const isSuperSet = !!exercise.superSetGroupId;
                   const nextIsSameSuperSet = isSuperSet && exIdx < activeExercises.length - 1 && activeExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
                   const prevIsSameSuperSet = isSuperSet && exIdx > 0 && activeExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
                   const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
                   const exItemKey = exercise.id;
-                  const isExActive = exActiveKey === exItemKey;
 
                   return (
-                    <ActiveExerciseRow
-                      key={exItemKey}
-                      exercise={exercise}
-                      exIdx={exIdx}
-                      exItemKey={exItemKey}
-                      isExActive={isExActive}
-                      exDragY={exDragY}
-                      exItemLayouts={exItemLayouts}
-                      isSuperSet={isSuperSet}
-                      nextIsSameSuperSet={nextIsSameSuperSet}
-                      prevIsSameSuperSet={prevIsSameSuperSet}
-                      superSetColor={superSetColor}
-                      handleExerciseMenuPress={handleExerciseMenuPress}
-                      getExerciseDragHandlers={getExerciseDragHandlers}
-                      exerciseLibrary={exerciseLibrary}
-                      activeInput={activeInput}
-                      handleSetFocus={handleSetFocus}
-                      updateSetField={updateSetField}
-                      deleteSet={deleteSet}
-                      toggleSetComplete={toggleSetComplete}
-                      inputRefs={inputRefs}
-                      isRpeMode={isRpeMode}
-                      addSet={addSet}
-                      tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                    />
+                    <SharedSwipeableRow
+                      onDelete={() => {
+                        setActiveExercises(prev => {
+                          const filtered = prev.filter((_, idx) => idx !== exIdx);
+                          return sanitizeSuperSets(filtered);
+                        });
+                      }}
+                      activeOffsetX={[-30, 30]}
+                      style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
+                    >
+                      <ActiveExerciseRow
+                        exercise={exercise}
+                        exIdx={exIdx}
+                        exItemKey={exItemKey}
+                        isSuperSet={isSuperSet}
+                        nextIsSameSuperSet={nextIsSameSuperSet}
+                        prevIsSameSuperSet={prevIsSameSuperSet}
+                        superSetColor={superSetColor}
+                        handleExerciseMenuPress={handleExerciseMenuPress}
+                        exerciseLibrary={exerciseLibrary}
+                        activeInput={activeInput}
+                        handleSetFocus={handleSetFocus}
+                        updateSetField={updateSetField}
+                        deleteSet={deleteSet}
+                        toggleSetComplete={toggleSetComplete}
+                        inputRefs={inputRefs}
+                        isRpeMode={isRpeMode}
+                        addSet={addSet}
+                        tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                      />
+                    </SharedSwipeableRow>
                   );
-                })
+                }}
+              />
               )}
 
               {/* Discard Workout button */}
@@ -2277,14 +2198,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       <Text style={styles.sheetItemText}>Replace Exercise</Text>
                     </Pressable>
 
-                    <Pressable
-                      style={styles.sheetItem}
-                      onPress={handleRemoveExercise}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Ionicons name="trash-outline" size={20} color={colors.error} />
-                      <Text style={[styles.sheetItemText, { color: colors.error }]}>Remove Exercise</Text>
-                    </Pressable>
+                    {/* Remove Exercise menu item removed in favor of direct swipe-to-delete */}
                   </RN.Animated.View>
                 </Pressable>
               </Modal>
@@ -3089,6 +3003,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   isRpeMode = true,
   tempInputValue,
 }) => {
+  const { swipeGesture } = useExerciseRowGestures();
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
 
@@ -3107,10 +3022,11 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   if (set.isUnilateral) {
     return (
       <View style={{ marginBottom: showNextConnected ? 0 : 4 }}>
-        <SwipeableRow
+        <SharedSwipeableRow
           onDelete={() => deleteSet(exIdx, setIdx)}
           borderRadius={radius.xs}
           style={rowStyle}
+          blocksExternalGesture={swipeGesture}
         >
           <View
             style={[
@@ -3278,7 +3194,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               </View>
             </Pressable>
           </View>
-        </SwipeableRow>
+        </SharedSwipeableRow>
         {showNextConnected && (
           <View style={{ height: 4, backgroundColor: '#111A2E' }} />
         )}
@@ -3289,10 +3205,11 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   // Standard bilateral set rendering
   return (
     <View style={{ marginBottom: showNextConnected ? 0 : 4 }}>
-      <SwipeableRow
+      <SharedSwipeableRow
         onDelete={() => deleteSet(exIdx, setIdx)}
         borderRadius={radius.xs}
         style={rowStyle}
+        blocksExternalGesture={swipeGesture}
       >
         <View
           style={[
@@ -3416,7 +3333,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
             </View>
           </Pressable>
         </View>
-      </SwipeableRow>
+      </SharedSwipeableRow>
       {showNextConnected && (
         <View style={{ height: 4, backgroundColor: '#111A2E' }} />
       )}
@@ -3429,15 +3346,11 @@ interface ActiveExerciseRowProps {
   exercise: any;
   exIdx: number;
   exItemKey: string;
-  isExActive: boolean;
-  exDragY: any;
-  exItemLayouts: any;
   isSuperSet: boolean;
   nextIsSameSuperSet: boolean;
   prevIsSameSuperSet: boolean;
   superSetColor: string | undefined;
   handleExerciseMenuPress: (idx: number) => void;
-  getExerciseDragHandlers: (key: string) => any;
   exerciseLibrary: any;
   activeInput: any;
   handleSetFocus: any;
@@ -3454,15 +3367,11 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   exercise,
   exIdx,
   exItemKey,
-  isExActive,
-  exDragY,
-  exItemLayouts,
   isSuperSet,
   nextIsSameSuperSet,
   prevIsSameSuperSet,
   superSetColor,
   handleExerciseMenuPress,
-  getExerciseDragHandlers,
   exerciseLibrary,
   activeInput,
   handleSetFocus,
@@ -3478,7 +3387,11 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   const enterOpacity = useSharedValue(0);
   const enterTranslateY = useSharedValue(20);
 
+  const hasEnteredRef = useRef(false);
   useEffect(() => {
+    if (hasEnteredRef.current) return;
+    hasEnteredRef.current = true;
+
     enterScale.value = withDelay(
       exIdx * 75,
       withTiming(1, { duration: 350, easing: Easing.out(Easing.quad) })
@@ -3491,37 +3404,22 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
       exIdx * 75,
       withTiming(0, { duration: 350, easing: Easing.out(Easing.quad) })
     );
-  }, [exIdx]);
+  }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
-    const dragY = isExActive ? exDragY.value : 0;
     return {
       transform: [
-        { translateY: dragY + enterTranslateY.value },
-        { scale: isExActive ? 1.02 : enterScale.value }
+        { translateY: enterTranslateY.value },
+        { scale: enterScale.value }
       ],
-      zIndex: isExActive ? 999 : 1,
-      opacity: isExActive ? 0.88 : enterOpacity.value,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: isExActive ? 8 : 0 },
-      shadowOpacity: isExActive ? 0.55 : 0,
-      shadowRadius: isExActive ? 16 : 0,
-      elevation: isExActive ? 14 : 0,
+      opacity: enterOpacity.value,
     };
   });
 
+  const { dragGesture } = useReorder();
+
   return (
-    <Animated.View
-      onLayout={e => {
-        if (!isExActive) {
-          exItemLayouts.current[exItemKey] = {
-            y: e.nativeEvent.layout.y,
-            height: e.nativeEvent.layout.height,
-          };
-        }
-      }}
-      style={animatedStyle}
-    >
+    <Animated.View style={animatedStyle}>
       <View style={{ marginBottom: spacing.lg }}>
         <View style={[
           styles.exerciseCard,
@@ -3552,15 +3450,16 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               >
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
               </Pressable>
-              {/* Drag handle — press-and-hold to reorder */}
-              <GestureDetector gesture={getExerciseDragHandlers(exItemKey)}>
-                <View
-                  style={styles.dragHandle}
-                  accessibilityLabel="Drag to reorder exercise"
-                >
-                  <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                </View>
-              </GestureDetector>
+              {dragGesture ? (
+                <GestureDetector gesture={dragGesture}>
+                  <View
+                    style={styles.dragHandle}
+                    accessibilityLabel="Drag to reorder exercise"
+                  >
+                    <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+                  </View>
+                </GestureDetector>
+              ) : null}
             </View>
           </View>
 
