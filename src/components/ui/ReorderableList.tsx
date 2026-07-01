@@ -160,7 +160,6 @@ function ReorderableRow<T>({
           { translateY: activeInitialY.value + dragY.value }
         ],
         zIndex: 999,
-        backgroundColor: colors.surface2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.35,
@@ -184,7 +183,7 @@ function ReorderableRow<T>({
 
     return {
       transform: [
-        { translateY: withSpring(translateY, { damping: 18, stiffness: 120 }) }
+        { translateY: withSpring(translateY, { damping: 24, stiffness: 240 }) }
       ],
       zIndex: 2,
     };
@@ -433,7 +432,7 @@ export function ReorderableList<T>({
 
     // Spring the active item into its final position on UI thread,
     // then commit the state change to JS thread.
-    dragY.value = withSpring(targetTranslateY - activeInitialY.value, { damping: 15 }, () => {
+    dragY.value = withSpring(targetTranslateY, { damping: 24, stiffness: 240 }, () => {
       'worklet';
       runOnJS(commitReorder)(slotToOrig);
     });
