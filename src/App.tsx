@@ -484,7 +484,6 @@ function App() {
               if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
               if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
               setWorkoutExercises(savedWorkout.workoutExercises);
-              if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
               if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
             } else {
               console.log('[RESTORE] No workout exercises found in saved state');
@@ -1423,17 +1422,7 @@ function App() {
     } catch {}
     return [];
   });
-  const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('strongern_active_workout_state');
-        if (saved) {
-          return JSON.parse(saved).isWorkoutModalVisible ?? false;
-        }
-      }
-    } catch {}
-    return false;
-  });
+  const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(false);
   const [activeWorkoutComment, setActiveWorkoutComment] = React.useState(() => {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
