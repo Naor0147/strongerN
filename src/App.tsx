@@ -32,7 +32,8 @@ import { colors, spacing, radius, font, shadow, ripple as rippleTokens, globalAn
 import BottomTabBar      from './components/layout/BottomTabBar';
 import ActiveWorkoutBar  from './components/layout/ActiveWorkoutBar';
 import ActiveWorkoutModal from './components/layout/ActiveWorkoutModal';
-import { soundConfig } from './utils/soundPlayer';
+import { soundConfig, initSounds } from './utils/soundPlayer';
+import { initNotifications, getLastNotificationResponse, onNotificationTapped, isWorkoutNotificationResponse } from './utils/notifications';
 
 // Simulators
 import { WatchCompanionSimulator } from './components/ui/WatchCompanionSimulator';
@@ -176,6 +177,34 @@ function App() {
         setAuthState({ hasCompletedOnboarding: false, authMode: 'guest', localUsername: '' });
       }
     })();
+  }, []);
+
+  // Initialize sounds and notifications on mount
+  React.useEffect(() => {
+    initSounds();
+    initNotifications();
+  }, []);
+
+  // Handle notification taps & cold starts
+  React.useEffect(() => {
+    const unsubscribe = onNotificationTapped((response) => {
+      if (isWorkoutNotificationResponse(response)) {
+        setIsWorkoutModalVisible(true);
+      }
+    });
+
+    let active = true;
+    (async () => {
+      const last = await getLastNotificationResponse();
+      if (active && last && isWorkoutNotificationResponse(last)) {
+        setIsWorkoutModalVisible(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleAuthComplete = async (authMode: AuthMode, username: string) => {
@@ -2006,6 +2035,9 @@ function App() {
             exerciseLibrary={exercisesList}
             onUpdateActiveExercises={setWorkoutExercises}
             onUpdateExerciseNotes={handleUpdateExerciseNotes}
+            onUpdateExerciseInsightsNotes={(exId, insightsNotes) => {
+              setExercisesList(prev => prev.map(ex => ex.id === exId ? { ...ex, insightsNotes } : ex));
+            }}
             onAddCustomExercise={handleAddExercise}
             isLiveHeartRateEnabled={isLiveHeartRateEnabled}
             isPlateCalculatorEnabled={isPlateCalculatorEnabled}
