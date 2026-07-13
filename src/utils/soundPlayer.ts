@@ -99,15 +99,29 @@ const NATIVE_SOUND_ASSETS: Record<string, any> = {
   'uncheck-click': require('../../sound/06_click_warm.wav'),
   'satisfying-click-finish': require('../../sound/00_satisfying_click_v3.wav'),
   'satisfying-click-timer': require('../../sound/satisfyingClick.wav'),
+  'timer-complete': require('../../sound/timer_complete.wav'),
 };
 
 const playersCache: Record<string, any> = {};
 
-// Configure audio mode once at module startup
-if (!isWeb) {
-  setAudioModeAsync({
-    playsInSilentMode: true,
-  }).catch(err => console.log('[Native Sound Error] Initializing audio mode:', err));
+let _audioModeActivated = false;
+async function ensureAudioModeActivated() {
+  if (_audioModeActivated || isWeb) return;
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+      allowsRecording: false,
+      shouldPlayInBackground: false,
+    });
+    _audioModeActivated = true;
+  } catch (e) {
+    console.warn('[Native Sound Error] Failed to set audio mode:', e);
+  }
+}
+
+export async function initSounds() {
+  await ensureAudioModeActivated();
 }
 
 function getOrCreatePlayer(soundKey: string, source: any) {
@@ -127,8 +141,9 @@ function getOrCreatePlayer(soundKey: string, source: any) {
  * Loads locally-bundled synthesized sound files for offline reliability.
  * Cache is used to guarantee zero latency.
  */
-function playNativeSound(soundKey: string) {
+async function playNativeSound(soundKey: string) {
   try {
+    await ensureAudioModeActivated();
     let player;
     
     // Check if it is a built-in asset key
