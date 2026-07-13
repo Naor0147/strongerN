@@ -151,5 +151,5 @@ export function isWorkoutNotificationResponse(response: any): boolean {
 
   if (content?.title && content.title.toLowerCase().includes('timer')) return false;
 
-  return true;
+  return false;
 }

@@ -191,27 +191,7 @@ function App() {
     initNotifications();
   }, []);
 
-  // Handle notification taps & cold starts
-  React.useEffect(() => {
-    const unsubscribe = onNotificationTapped((response) => {
-      if (isWorkoutNotificationResponse(response)) {
-        setIsWorkoutModalVisible(true);
-      }
-    });
 
-    let active = true;
-    (async () => {
-      const last = await getLastNotificationResponse();
-      if (active && last && isWorkoutNotificationResponse(last)) {
-        setIsWorkoutModalVisible(true);
-      }
-    })();
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
 
   const handleAuthComplete = async (authMode: AuthMode, username: string) => {
     if (authMode !== 'google') {
@@ -491,6 +471,8 @@ function App() {
               if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
             } else {
               console.log('[RESTORE] No valid non-empty workout found in saved state, purging');
+              setIsWorkoutActive(false);
+              setIsWorkoutModalVisible(false);
               deleteFromDb('strongern_active_workout_state');
             }
           } catch (e) {
@@ -1398,6 +1380,28 @@ function App() {
     durationMin: number;
     name: string;
   } | null>(null);
+
+  // Handle notification taps & cold starts
+  React.useEffect(() => {
+    const unsubscribe = onNotificationTapped((response) => {
+      if (isWorkoutNotificationResponse(response) && isWorkoutActive) {
+        setIsWorkoutModalVisible(true);
+      }
+    });
+
+    let active = true;
+    (async () => {
+      const last = await getLastNotificationResponse();
+      if (active && last && isWorkoutNotificationResponse(last) && isWorkoutActive) {
+        setIsWorkoutModalVisible(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [isWorkoutActive]);
 
   // Stable refs for state stabilization
   const templatesListRef = React.useRef(templatesList);
