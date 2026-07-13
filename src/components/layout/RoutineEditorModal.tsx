@@ -15,6 +15,7 @@ import {
   Vibration,
   Alert,
   LayoutAnimation,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, type SharedValue, useAnimatedRef } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -113,6 +114,83 @@ function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
 
 // DraggableListItem has been removed in favor of ReorderableList
 
+interface RoutineEditorItemProps {
+  exercise: RoutineExercise;
+  exIdx: number;
+  activeInput: any;
+  onFocus: any;
+  updateSetField: any;
+  deleteSet: any;
+  inputRefs: any;
+  superSetColor?: string;
+  isSuperSet: boolean;
+  nextIsSameSuperSet: boolean;
+  prevIsSameSuperSet: boolean;
+  onDelete: (idx: number) => void;
+  onMenuPress: (idx: number) => void;
+  onAddSet: (idx: number) => void;
+  tempInputValue?: string;
+  listWidth: number;
+}
+
+const RoutineEditorItem = React.memo<RoutineEditorItemProps>(({
+  exercise,
+  exIdx,
+  activeInput,
+  onFocus,
+  updateSetField,
+  deleteSet,
+  inputRefs,
+  superSetColor,
+  isSuperSet,
+  nextIsSameSuperSet,
+  prevIsSameSuperSet,
+  onDelete,
+  onMenuPress,
+  onAddSet,
+  tempInputValue,
+  listWidth,
+}) => {
+  const handleDelete = useCallback(() => {
+    onDelete(exIdx);
+  }, [onDelete, exIdx]);
+
+  const handleMenu = useCallback(() => {
+    onMenuPress(exIdx);
+  }, [onMenuPress, exIdx]);
+
+  const handleAddSet = useCallback(() => {
+    onAddSet(exIdx);
+  }, [onAddSet, exIdx]);
+
+  return (
+    <View style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg, width: listWidth }}>
+      <SwipeableRow
+        onDelete={handleDelete}
+        activeOffsetX={[-30, 30] as [number, number]}
+      >
+        <ExerciseCard
+          exercise={exercise}
+          exIdx={exIdx}
+          activeInput={activeInput}
+          onFocus={onFocus}
+          updateSetField={updateSetField}
+          deleteSet={deleteSet}
+          inputRefs={inputRefs}
+          mode="editor"
+          superSetColor={superSetColor}
+          isSuperSet={isSuperSet}
+          nextIsSameSuperSet={nextIsSameSuperSet}
+          prevIsSameSuperSet={prevIsSameSuperSet}
+          onMenuPress={handleMenu}
+          onAddSet={handleAddSet}
+          tempInputValue={tempInputValue}
+        />
+      </SwipeableRow>
+    </View>
+  );
+});
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const EMPTY_STRING_ARRAY: string[] = [];
 const EMPTY_ANY_ARRAY: any[] = [];
@@ -135,6 +213,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   enableRoutineFolders = false,
 }) => {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const listWidth = windowWidth - spacing.lg * 2;
   const [routineName,  setRoutineName]  = useState(initialName);
   const [routineFolder, setRoutineFolder] = useState(initialFolder);
   const [routineNotes, setRoutineNotes] = useState(initialNotes);
@@ -716,30 +796,25 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
                     return (
-                      <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
-                        <SwipeableRow
-                          onDelete={() => handleDeleteExercise(exIdx)}
-                          activeOffsetX={[-30, 30]}
-                        >
-                          <ExerciseCard
-                            exercise={exercise}
-                            exIdx={exIdx}
-                            activeInput={activeInput}
-                            onFocus={handleSetFocus}
-                            updateSetField={updateSetField}
-                            deleteSet={deleteSet}
-                            inputRefs={inputRefs}
-                            mode="editor"
-                            superSetColor={superSetColor}
-                            isSuperSet={isSuperSet}
-                            nextIsSameSuperSet={nextIsSameSuperSet}
-                            prevIsSameSuperSet={prevIsSameSuperSet}
-                            onMenuPress={handleExerciseMenuPress}
-                            onAddSet={addSet}
-                            tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                          />
-                        </SwipeableRow>
-                      </View>
+                      <RoutineEditorItem
+                        key={exercise.id}
+                        exercise={exercise}
+                        exIdx={exIdx}
+                        activeInput={activeInput}
+                        onFocus={handleSetFocus}
+                        updateSetField={updateSetField}
+                        deleteSet={deleteSet}
+                        inputRefs={inputRefs}
+                        superSetColor={superSetColor}
+                        isSuperSet={isSuperSet}
+                        nextIsSameSuperSet={nextIsSameSuperSet}
+                        prevIsSameSuperSet={prevIsSameSuperSet}
+                        onDelete={handleDeleteExercise}
+                        onMenuPress={handleExerciseMenuPress}
+                        onAddSet={addSet}
+                        tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                        listWidth={listWidth}
+                      />
                     );
                   })}
                 </Sortable.Flex>

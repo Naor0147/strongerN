@@ -1443,7 +1443,6 @@ const styles = StyleSheet.create({
 
   // Template card
   tplCard: {
-    flex:     1,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -2147,4 +2146,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default WorkoutScreen;
+export default React.memo(WorkoutScreen);
