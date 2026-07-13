@@ -69,7 +69,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   onClose,
   onAddCustomExercise,
   singleSelect = false,
-  title = i18n.t('extras.addExercisePlural', { count: 0, plural: '' }),
+  title = i18n.t('extras.addExercisePlural', { plural: 's' }),
   sessions = EMPTY_ARRAY,
   exerciseNameLanguage = 'en',
 }) => {
@@ -124,7 +124,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     let result = (exercises || []).filter(ex => ex && typeof ex.name === 'string' && ex.name.trim().length > 0);
 
     if (selectedMuscles.length > 0) {
-      result = result.filter(ex => selectedMuscles.includes(ex.muscleGroup));
+      result = result.filter(ex => ex.muscleGroup !== undefined && ex.muscleGroup !== null && selectedMuscles.includes(ex.muscleGroup));
     }
     if (selectedEquipment.length > 0) {
       result = result.filter(ex => selectedEquipment.includes(ex.equipment || 'Other'));
@@ -144,11 +144,21 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           const isCrossLingualMatch = exerciseMatchesQuery(ex.name, q);
           
           let isWordBoundaryMatch = false;
-          try {
-            const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            isWordBoundaryMatch = new RegExp(`\\b${escapedQ}`).test(nameLower);
-          } catch (e) {
-            isWordBoundaryMatch = nameLower.startsWith(q);
+          const isHebrew = /[\u0590-\u05FF]/.test(q);
+          if (isHebrew) {
+            try {
+              const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              isWordBoundaryMatch = nameLower.startsWith(q) || new RegExp(`(?:^|\\s)${escapedQ}`).test(nameLower);
+            } catch (e) {
+              isWordBoundaryMatch = nameLower.startsWith(q);
+            }
+          } else {
+            try {
+              const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              isWordBoundaryMatch = new RegExp(`\\b${escapedQ}`).test(nameLower);
+            } catch (e) {
+              isWordBoundaryMatch = nameLower.startsWith(q);
+            }
           }
           
           if (nameLower === q) {
@@ -208,7 +218,9 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     let newExName = customName.trim();
     if (onAddCustomExercise) {
       const newEx = onAddCustomExercise(newExName, customMuscle, customEquip, isUnilateral);
-      if (newEx) newExName = newEx.name;
+      if (newEx && typeof newEx === 'object' && 'name' in newEx && typeof newEx.name === 'string') {
+        newExName = newEx.name;
+      }
     }
     if (singleSelect) {
       onConfirm([newExName]);
@@ -566,7 +578,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   >
                     <Ionicons name="checkmark" size={16} color={colors.bg} style={{ marginRight: spacing.xs }} />
                     <Text style={styles.confirmBtnText}>
-                      {i18n.t('extras.addExercisePlural', { count: selectedNames.length, plural: selectedNames.length !== 1 ? 'S' : '' })}
+                      {i18n.t('extras.addExercisePlural', { plural: selectedNames.length !== 1 ? 's' : '' })}
                     </Text>
                   </Pressable>
                 </View>
