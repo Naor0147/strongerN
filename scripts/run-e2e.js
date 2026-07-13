@@ -100,6 +100,7 @@ async function main() {
         stdio: 'pipe',
         shell: true,
         cwd: path.resolve(__dirname, '..'),
+        env: { ...process.env, EXPO_PUBLIC_E2E: 'true' }
       });
 
       expoProcess.stdout.pipe(logStream);

@@ -46,6 +46,7 @@ import WorkoutScreen   from './screens/WorkoutScreen';
 import ExercisesScreen from './screens/ExercisesScreen';
 import MeasureScreen   from './screens/MeasureScreen';
 import MuscleMapScreen from './screens/MuscleMapScreen';
+import E2EAppHarness from './screens/E2EAppHarness';
 
 // Mock data
 import {
@@ -1800,6 +1801,10 @@ function App() {
       <BottomTabBar {...props} />
     </>
   ), [isWorkoutActive, workoutName, startTime]);
+
+  if (process.env.EXPO_PUBLIC_E2E === 'true') {
+    return <E2EAppHarness />;
+  }
 
   if (!fontsLoaded) {
     return (
