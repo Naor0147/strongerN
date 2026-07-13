@@ -13,6 +13,7 @@ import {
   Clipboard,
   Platform,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -188,6 +189,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const cardListWidth = windowWidth - spacing.lg * 2;
   const [activeTab, setActiveTab] = useState<'routines' | 'programs'>('routines');
 
   const prevIsProgramsEnabledRef = useRef(isProgramsEnabled);
@@ -860,7 +863,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 itemExiting={null}
               >
                 {filteredTemplates.map((item) => (
-                  <View key={item.id} style={styles.templateCardWrap}>
+                  <View key={item.id} style={[styles.templateCardWrap, { width: cardListWidth }]}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
