@@ -195,13 +195,7 @@ export default function E2EAppHarness() {
     return newEx;
   };
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
+
 
   return (
     <SafeAreaProvider>
