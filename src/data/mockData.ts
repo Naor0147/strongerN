@@ -258,6 +258,23 @@ export const mockTemplates: Template[] = [
     id: 'tpl-1',
     name: 'Upper Power',
     exercises: ['Bench Press', 'Overhead Press', 'Pull-ups', 'Barbell Row', 'Face Pull'],
+    exercisesDetails: [
+      {
+        name: 'Bench Press',
+        sets: [
+          { weight: '70', reps: '10', category: 'S' },
+          { weight: '70', reps: '10', category: 'S' },
+          { weight: '70', reps: '10', category: 'S' },
+        ],
+      },
+      {
+        name: 'Pull-ups',
+        sets: [
+          { weight: '0', reps: '8', category: 'S' },
+          { weight: '0', reps: '8', category: 'S' },
+        ],
+      },
+    ],
     lastUsed: getRelativeDate(9, 9, 0),
     folder: 'Bulking Splits',
   },
