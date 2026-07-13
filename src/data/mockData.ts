@@ -24,6 +24,11 @@ export interface SetDetail {
   completed: boolean;
   rpe?: number;
   category?: 'W' | 'S' | 'D' | 'F';
+  isUnilateral?: boolean;
+  leftWeight?: number;
+  leftReps?: number;
+  rightWeight?: number;
+  rightReps?: number;
 }
 
 export interface ExerciseSet {
@@ -76,11 +81,13 @@ export interface Exercise {
   imageUri?: string;
   allTimeSets: number;
   notes?: string;
+  insightsNotes?: string;
   equipment?: string;
   isUnilateral?: boolean;
   weeklySets?: number;
   nameHe?: string;
   searchAliases?: string[];
+  instructions?: string;
 }
 
 export interface MeasureHistoryEntry {
