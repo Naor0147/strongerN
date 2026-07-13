@@ -80,6 +80,8 @@ function playWebSound(soundKey: string) {
         const audio = new Audio(custom.uri);
         audio.volume = soundConfig.volume ?? 1.0;
         audio.play().catch(err => console.warn('[Web Custom Audio Play Error]', err));
+        // Cap playback at 1 second
+        setTimeout(() => { try { audio.pause(); audio.currentTime = 0; } catch {} }, 1000);
       } catch (err) {
         console.warn('[Web Custom Audio Init Error]', err);
       }
@@ -89,17 +91,11 @@ function playWebSound(soundKey: string) {
 
 // Caching and preloading native audio players to eliminate tap delays
 const NATIVE_SOUND_ASSETS: Record<string, any> = {
-  'chime': require('../../assets/sounds/set_completed.wav'),
-  'beep': require('../../assets/sounds/timer_completed.wav'),
-  'fanfare': require('../../assets/sounds/workout_completed.wav'),
-  'bell1': require('../../assets/sounds/bell1.mp3'),
-  'bell2': require('../../assets/sounds/bell2.mp3'),
-  'boxing-bell': require('../../assets/sounds/boxing-bell.mp3'),
-  'satisfying-click': require('../../sound/00_satisfying_click_v3.wav'),
-  'uncheck-click': require('../../sound/06_click_warm.wav'),
-  'satisfying-click-finish': require('../../sound/00_satisfying_click_v3.wav'),
-  'satisfying-click-timer': require('../../sound/satisfyingClick.wav'),
-  'timer-complete': require('../../sound/timer_complete.wav'),
+  'chime':                    require('../../assets/sounds/set_completed.wav'),
+  'beep':                     require('../../assets/sounds/timer_completed.wav'),
+  'fanfare':                  require('../../assets/sounds/workout_completed.wav'),
+  'satisfying-click':         require('../../sound/00_satisfying_click_v3.wav'),
+  'satisfying-click-finish':  require('../../sound/00_satisfying_click_v3.wav'),
 };
 
 const playersCache: Record<string, any> = {};
@@ -165,6 +161,8 @@ async function playNativeSound(soundKey: string) {
         // seekTo might fail if player is not fully loaded, ignore
       }
       player.play();
+      // Hard cap: stop audio after 1 second
+      setTimeout(() => { try { player.stop?.(); } catch {} }, 1000);
     }
   } catch (err) {
     console.log(`[Native Sound Error] Play ${soundKey} audio chimes:`, err);
@@ -249,9 +247,9 @@ export function playSatisfyingClickFinishSet() {
  */
 export function playSatisfyingClickStopTimer() {
   if (isWeb) {
-    playWebSound('satisfying-click-timer');
+    playWebSound('satisfying-click');
   } else {
-    playNativeSound('satisfying-click-timer');
+    playNativeSound('satisfying-click');
   }
 }
 

@@ -279,7 +279,7 @@ function App() {
   }, []);
 
   // Modular Toggles and Custom Sound Settings
-  const [isPlateCalculatorEnabled, setIsPlateCalculatorEnabled] = React.useState(false);
+
   const [isProgramsEnabled, setIsProgramsEnabled] = React.useState(false);
   const [isHistoryEnabled, setIsHistoryEnabled] = React.useState(true);
   const [isMusclesEnabled, setIsMusclesEnabled] = React.useState(true);
@@ -288,15 +288,15 @@ function App() {
   const [appTheme, setAppThemeState] = React.useState<string>('default');
   const [customAccentColor, setCustomAccentColor] = React.useState('#4F8EF7');
   const [themeVersion, setThemeVersion] = React.useState(0);
-  const [themeOverrides, setThemeOverrides] = React.useState<any>({});
+
   const [languageVersion, setLanguageVersion] = React.useState(0); // Increment to trigger re-render on language change
 
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
   const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
-  const [isKeyboardDismissOnNextEnabled, setIsKeyboardDismissOnNextEnabled] = React.useState(true);
+
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [isRpeMode, setIsRpeMode] = React.useState(true); // true = RPE, false = RIR
-  const [exerciseNameLanguage, setExerciseNameLanguage] = React.useState<'en' | 'he'>('en');
+  const exerciseNameLanguage = i18n.locale.startsWith('he') ? 'he' as const : 'en' as const;
 
 
   const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('satisfying-click');
@@ -419,7 +419,7 @@ function App() {
             if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
             if (parsed.isHealthSyncEnabled !== undefined) setIsHealthSyncEnabled(parsed.isHealthSyncEnabled);
             if (parsed.isLiveHeartRateEnabled !== undefined) setIsLiveHeartRateEnabled(parsed.isLiveHeartRateEnabled);
-            if (parsed.isPlateCalculatorEnabled !== undefined) setIsPlateCalculatorEnabled(parsed.isPlateCalculatorEnabled);
+
             if (parsed.isProgramsEnabled !== undefined) setIsProgramsEnabled(parsed.isProgramsEnabled);
             if (parsed.isHistoryEnabled !== undefined) setIsHistoryEnabled(parsed.isHistoryEnabled);
             if (parsed.isMusclesEnabled !== undefined) setIsMusclesEnabled(parsed.isMusclesEnabled);
@@ -436,7 +436,7 @@ function App() {
             }
             if (parsed.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(parsed.isProgressiveOverloadEnabled);
             if (parsed.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(parsed.isAutoFinishSetEnabled);
-            if (parsed.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(parsed.isKeyboardDismissOnNextEnabled);
+
             if (parsed.isRpeMode !== undefined) setIsRpeMode(parsed.isRpeMode);
             if (parsed.soundSetCompleted !== undefined) setSoundSetCompleted(parsed.soundSetCompleted);
             if (parsed.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(parsed.soundWorkoutFinished);
@@ -515,7 +515,7 @@ function App() {
         programStartDate,
         isHealthSyncEnabled,
         isLiveHeartRateEnabled,
-        isPlateCalculatorEnabled,
+
         isProgramsEnabled,
         isHistoryEnabled,
         isMusclesEnabled,
@@ -535,9 +535,7 @@ function App() {
         isDeveloperModeEnabled,
         isProgressiveOverloadEnabled,
         isAutoFinishSetEnabled,
-        isKeyboardDismissOnNextEnabled,
         isRpeMode,
-        exerciseNameLanguage,
         appTheme,
         customAccentColor,
       };
@@ -545,7 +543,7 @@ function App() {
     } catch (e) {
       console.warn('Error saving state to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isPlateCalculatorEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isRpeMode, exerciseNameLanguage, appTheme, customAccentColor, isDataLoaded]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isRpeMode, appTheme, customAccentColor, isDataLoaded]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -988,7 +986,7 @@ function App() {
       soundWorkoutFinished,
       soundTimerCompleted,
       soundVolume,
-      isPlateCalculatorEnabled,
+
       isProgramsEnabled,
       isHistoryEnabled,
       isMusclesEnabled,
@@ -1001,7 +999,7 @@ function App() {
       animationSpeed,
       isProgressiveOverloadEnabled,
       isAutoFinishSetEnabled,
-      isKeyboardDismissOnNextEnabled,
+
       isRpeMode,
       showHypertrophyGoal,
     };
@@ -1077,7 +1075,7 @@ function App() {
       if (s.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(s.soundWorkoutFinished);
       if (s.soundTimerCompleted !== undefined) setSoundTimerCompleted(s.soundTimerCompleted);
       if (s.soundVolume !== undefined) setSoundVolume(s.soundVolume);
-      if (s.isPlateCalculatorEnabled !== undefined) setIsPlateCalculatorEnabled(s.isPlateCalculatorEnabled);
+
       if (s.isProgramsEnabled !== undefined) setIsProgramsEnabled(s.isProgramsEnabled);
       if (s.isHistoryEnabled !== undefined) setIsHistoryEnabled(s.isHistoryEnabled);
       if (s.isMusclesEnabled !== undefined) setIsMusclesEnabled(s.isMusclesEnabled);
@@ -1091,9 +1089,8 @@ function App() {
       if (s.animationSpeed !== undefined) setAnimationSpeed(s.animationSpeed);
       if (s.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(s.isProgressiveOverloadEnabled);
       if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
-      if (s.isKeyboardDismissOnNextEnabled !== undefined) setIsKeyboardDismissOnNextEnabled(s.isKeyboardDismissOnNextEnabled);
+      if (s.isKeyboardDismissOnNextEnabled !== undefined) { /* always-on, ignored */ }
       if (s.isRpeMode !== undefined) setIsRpeMode(s.isRpeMode);
-      if (s.exerciseNameLanguage !== undefined) setExerciseNameLanguage(s.exerciseNameLanguage);
       return true;
     } catch (e) {
       console.warn('Error applying backup data', e);
@@ -1842,8 +1839,7 @@ function App() {
     isProgramsEnabled,
     enableRoutineFolders,
     handleAddExercise,
-    sessionsList,
-    exerciseNameLanguage
+    sessionsList
   ]);
 
   const exercisesScreenElement = React.useMemo(() => {
@@ -1864,8 +1860,7 @@ function App() {
     handleDeleteExercise,
     handleUpdateExerciseNotes,
     handleUpdateExercise,
-    sessionsList,
-    exerciseNameLanguage
+    sessionsList
   ]);
 
   const muscleMapScreenElement = React.useMemo(() => {
@@ -1883,12 +1878,11 @@ function App() {
     weeklyMuscleSets,
     sessionsList,
     exercisesList,
-    exerciseNameLanguage,
     showHypertrophyGoal,
     setShowHypertrophyGoal
   ]);
 
-  console.log('[App] EXPO_PUBLIC_E2E is:', process.env.EXPO_PUBLIC_E2E);
+
   if (process.env.EXPO_PUBLIC_E2E === 'true') {
     return <E2EAppHarness />;
   }
@@ -1957,14 +1951,10 @@ function App() {
                   onStartWorkout={handleStartWorkout}
                   templates={templatesList}
                   activeProgramId={activeProgramId}
-                  isPlateCalculatorEnabled={isPlateCalculatorEnabled}
-                  setIsPlateCalculatorEnabled={setIsPlateCalculatorEnabled}
+
                   isProgramsEnabled={isProgramsEnabled}
                   setIsProgramsEnabled={setIsProgramsEnabled}
-                  isHistoryEnabled={isHistoryEnabled}
-                  setIsHistoryEnabled={setIsHistoryEnabled}
-                  isMusclesEnabled={isMusclesEnabled}
-                  setIsMusclesEnabled={setIsMusclesEnabled}
+
                   soundSetCompleted={soundSetCompleted}
                   setSoundSetCompleted={setSoundSetCompleted}
                   soundWorkoutFinished={soundWorkoutFinished}
@@ -1997,46 +1987,25 @@ function App() {
                   setAppTheme={(theme: any) => {
                     setAppThemeState(theme);
                     const { applyTheme } = require('./theme');
-                    applyTheme(theme, customAccentColor, themeOverrides);
+                    applyTheme(theme, customAccentColor);
                     setThemeVersion(v => v + 1);
                   }}
                   customAccentColor={customAccentColor}
                   setCustomAccentColor={(color: string) => {
                     setCustomAccentColor(color);
                     const { applyTheme } = require('./theme');
-                    applyTheme(appTheme, color, themeOverrides);
+                    applyTheme(appTheme, color);
                     setThemeVersion(v => v + 1);
                   }}
-                  themeOverrides={themeOverrides}
-                  onUpdateThemeOverrides={async (newOverrides: any) => {
-                    const merged = { ...themeOverrides, ...newOverrides };
-                    setThemeOverrides(merged);
-                    await setSecureItem('theme_overrides', JSON.stringify(merged));
-                    const { applyTheme } = require('./theme');
-                    applyTheme(appTheme, customAccentColor, merged);
-                    setThemeVersion(v => v + 1);
-                  }}
-                  onResetTheme={async () => {
-                    setThemeOverrides({});
-                    setCustomAccentColor('#4F8EF7');
-                    setAppThemeState('default');
-                    await deleteSecureItem('theme_overrides');
-                    const { applyTheme, DEFAULT_THEME } = require('./theme');
-                    applyTheme('default', '#4F8EF7', DEFAULT_THEME);
-                    setThemeVersion(v => v + 1);
-                  }}
+
                   authMode={authState.authMode}
                   onAppLogout={handleAppLogout}
                   isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
                   setIsProgressiveOverloadEnabled={setIsProgressiveOverloadEnabled}
                   isAutoFinishSetEnabled={isAutoFinishSetEnabled}
                   setIsAutoFinishSetEnabled={setIsAutoFinishSetEnabled}
-                  isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
-                  setIsKeyboardDismissOnNextEnabled={setIsKeyboardDismissOnNextEnabled}
                   isRpeMode={isRpeMode}
                   setIsRpeMode={setIsRpeMode}
-                  exerciseNameLanguage={exerciseNameLanguage}
-                  setExerciseNameLanguage={setExerciseNameLanguage}
                 />
               )}
             </Tab.Screen>
@@ -2091,13 +2060,13 @@ function App() {
               onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
               onAddCustomExercise={handleAddExercise}
               isLiveHeartRateEnabled={isLiveHeartRateEnabled}
-              isPlateCalculatorEnabled={isPlateCalculatorEnabled}
+
               defaultRestDuration={defaultRestDuration}
               onRenameWorkout={setWorkoutName}
               sessions={sessionsList}
               isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
               isAutoFinishSetEnabled={isAutoFinishSetEnabled}
-              isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+
               isRpeMode={isRpeMode}
               exerciseNameLanguage={exerciseNameLanguage}
               isEditing={!!editingSessionId}

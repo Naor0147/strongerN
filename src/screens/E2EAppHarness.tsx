@@ -89,10 +89,10 @@ export default function E2EAppHarness() {
   // Settings
   const [isAutoTimerEnabled, setIsAutoTimerEnabled] = useState(true);
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = useState(true);
-  const [isPlateCalculatorEnabled, setIsPlateCalculatorEnabled] = useState(true);
+
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = useState(true);
   const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = useState(false);
-  const [isKeyboardDismissOnNextEnabled, setIsKeyboardDismissOnNextEnabled] = useState(true);
+
   const [isRpeMode, setIsRpeMode] = useState(true);
   const [exerciseNameLanguage, setExerciseNameLanguage] = useState<'en' | 'he'>('en');
 
@@ -287,13 +287,13 @@ export default function E2EAppHarness() {
               }}
               onAddCustomExercise={handleAddCustomExercise}
               isLiveHeartRateEnabled={isLiveHeartRateEnabled}
-              isPlateCalculatorEnabled={isPlateCalculatorEnabled}
+
               defaultRestDuration={defaultRestDuration}
               onRenameWorkout={setWorkoutName}
               sessions={sessionsList}
               isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
               isAutoFinishSetEnabled={isAutoFinishSetEnabled}
-              isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+
               isRpeMode={isRpeMode}
               exerciseNameLanguage={exerciseNameLanguage}
               isEditing={false}

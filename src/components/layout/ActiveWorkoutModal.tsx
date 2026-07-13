@@ -125,13 +125,13 @@ interface ActiveWorkoutModalProps {
   onUpdateExerciseInsightsNotes?: (exerciseId: string, insightsNotes?: string) => void;
   onAddCustomExercise?:   (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => any;
   isLiveHeartRateEnabled?: boolean;
-  isPlateCalculatorEnabled?: boolean;
+
   defaultRestDuration?: number;
   onRenameWorkout?: (name: string) => void;
   sessions?:          any[];
   isProgressiveOverloadEnabled?: boolean;
   isAutoFinishSetEnabled?: boolean;
-  isKeyboardDismissOnNextEnabled?: boolean;
+
   isRpeMode?: boolean;
   exerciseNameLanguage?: 'en' | 'he';
   isEditing?:         boolean;
@@ -653,13 +653,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateExerciseInsightsNotes,
   onAddCustomExercise,
   isLiveHeartRateEnabled = false,
-  isPlateCalculatorEnabled = true,
+
   defaultRestDuration = 90,
   onRenameWorkout,
   sessions = EMPTY_ARRAY,
   isProgressiveOverloadEnabled = false,
   isAutoFinishSetEnabled = true,
-  isKeyboardDismissOnNextEnabled = true,
+
   isRpeMode = true,
   exerciseNameLanguage,
   isEditing = false,
@@ -1475,7 +1475,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
 
     // 2. Keyboard Dismiss on Next: When pressing "Next" inside Reps box (bilateral) or rightReps (unilateral)
-    if ((fieldName === 'reps' || fieldName === 'rightReps') && isKeyboardDismissOnNextEnabled) {
+    if (fieldName === 'reps' || fieldName === 'rightReps') {
       handleCloseKeyboard();
       return;
     }
@@ -1537,7 +1537,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     // 6. Otherwise, close/blur
     handleCloseKeyboard();
-  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isKeyboardDismissOnNextEnabled, isAutoTimerEnabled, defaultRestDuration, updateSetField, handleCloseKeyboard]);
+  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isAutoTimerEnabled, defaultRestDuration, updateSetField, handleCloseKeyboard]);
 
   // Calculate volume & sets for summary
   const handleFinishPress = () => {

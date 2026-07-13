@@ -296,7 +296,7 @@ describe('strongerN Calculation Utilities', () => {
       playSatisfyingClickStopTimer();
       await new Promise(resolve => setTimeout(resolve, 5));
       expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(
-        require('../../sound/satisfyingClick.wav')
+        require('../../sound/00_satisfying_click_v3.wav')
       );
     });
   });

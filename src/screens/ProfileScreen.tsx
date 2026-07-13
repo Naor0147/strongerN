@@ -78,12 +78,9 @@ interface ProfileScreenProps {
   setIsProgressiveOverloadEnabled?: (val: boolean) => void;
   isAutoFinishSetEnabled?: boolean;
   setIsAutoFinishSetEnabled?: (val: boolean) => void;
-  isKeyboardDismissOnNextEnabled?: boolean;
-  setIsKeyboardDismissOnNextEnabled?: (val: boolean) => void;
   isRpeMode?: boolean;
   setIsRpeMode?: (val: boolean) => void;
-  exerciseNameLanguage?: 'en' | 'he';
-  setExerciseNameLanguage?: (val: 'en' | 'he') => void;
+
   onGoogleLogin:         (email: string, name: string, accessToken?: string, fileId?: string, avatarUri?: string) => Promise<boolean> | boolean;
   onGoogleLogout:        () => void;
   onCloudSync:           () => Promise<boolean> | boolean;
@@ -107,14 +104,8 @@ interface ProfileScreenProps {
   onStartWorkout?:            (name: string, exerciseNames: string[], exercisesDetails?: any[]) => void;
   templates?:                 Template[];
   activeProgramId?:           string | null;
-  isPlateCalculatorEnabled?:  boolean;
-  setIsPlateCalculatorEnabled?: (val: boolean) => void;
   isProgramsEnabled?:          boolean;
   setIsProgramsEnabled?:      (val: boolean) => void;
-  isHistoryEnabled?:           boolean;
-  setIsHistoryEnabled?:       (val: boolean) => void;
-  isMusclesEnabled?:           boolean;
-  setIsMusclesEnabled?:       (val: boolean) => void;
   soundSetCompleted?:          string;
   setSoundSetCompleted?:      (val: string) => void;
   soundWorkoutFinished?:       string;
@@ -149,9 +140,7 @@ interface ProfileScreenProps {
   setAppTheme?:               (theme: string) => void;
   customAccentColor?:         string;
   setCustomAccentColor?:     (color: string) => void;
-  themeOverrides?:            any;
-  onUpdateThemeOverrides?:    (overrides: any) => void;
-  onResetTheme?:              () => void;
+
 }
 
 const formatLastSynced = (isoString: string | null): string => {
@@ -251,8 +240,8 @@ const VolumeSlider: React.FC<VolumeSliderProps> = ({
   sliderWidthRef.current = sliderWidth;
 
   const panGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .failOffsetY([-8, 8])
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-15, 15])
     .runOnJS(true)
     .onStart((e) => {
       const initialTouchX = e.x;
@@ -328,8 +317,8 @@ const AnimationSpeedSlider: React.FC<AnimationSpeedSliderProps> = ({
   sliderWidthRef.current = sliderWidth;
 
   const animPanGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .failOffsetY([-8, 8])
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-15, 15])
     .runOnJS(true)
     .onStart((e) => {
       const initialTouchX = e.x;
@@ -677,12 +666,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setIsProgressiveOverloadEnabled,
   isAutoFinishSetEnabled = true,
   setIsAutoFinishSetEnabled,
-  isKeyboardDismissOnNextEnabled = true,
-  setIsKeyboardDismissOnNextEnabled,
   isRpeMode = true,
   setIsRpeMode,
-  exerciseNameLanguage = 'en',
-  setExerciseNameLanguage,
   onGoogleLogin,
   onGoogleLogout,
   onCloudSync,
@@ -706,15 +691,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onStartWorkout,
   templates = EMPTY_ARRAY,
   activeProgramId = null,
-  isPlateCalculatorEnabled = false,
-  setIsPlateCalculatorEnabled,
   isProgramsEnabled = false,
   setIsProgramsEnabled,
-  isHistoryEnabled = true,
-  setIsHistoryEnabled,
-  isMusclesEnabled = true,
-  setIsMusclesEnabled,
-  soundSetCompleted = 'chime',
+  soundSetCompleted = 'satisfying-click',
   setSoundSetCompleted,
   soundWorkoutFinished = 'fanfare',
   setSoundWorkoutFinished,
@@ -748,9 +727,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setAppTheme,
   customAccentColor = '#4F8EF7',
   setCustomAccentColor,
-  themeOverrides,
-  onUpdateThemeOverrides,
-  onResetTheme,
+
 }) => {
   const insets = useSafeAreaInsets();
   // Modals state
@@ -2372,35 +2349,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     </Pressable>
                   </View>
 
-                  <View style={styles.settingDivider} />
 
-                  {/* Keyboard Dismiss on Next */}
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Ionicons name="keypad-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.settingTitle}>{i18n.t('profile.keyboardDismiss')}</Text>
-                        <Text style={styles.settingSubtitle} numberOfLines={2}>
-                          {i18n.t('profile.keyboardDismissDesc')}
-                        </Text>
-                      </View>
-                    </View>
-                    <Pressable
-                      style={[
-                        styles.togglePill,
-                        isKeyboardDismissOnNextEnabled && styles.togglePillActive
-                      ]}
-                      onPress={() => setIsKeyboardDismissOnNextEnabled && setIsKeyboardDismissOnNextEnabled(!isKeyboardDismissOnNextEnabled)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={[
-                        styles.togglePillText,
-                        isKeyboardDismissOnNextEnabled && styles.togglePillTextActive
-                      ]}>
-                        {isKeyboardDismissOnNextEnabled ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
-                      </Text>
-                    </Pressable>
-                  </View>
 
                   <View style={styles.settingDivider} />
 
@@ -2448,80 +2397,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     </Pressable>
                   </View>
 
-                  <View style={styles.settingDivider} />
 
-                  {/* Exercise Display Language Toggle */}
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Ionicons name="language-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.settingTitle}>{i18n.t('extras.exerciseDisplayLang')}</Text>
-                        <Text style={styles.settingSubtitle} numberOfLines={2}>
-                          {i18n.t('extras.exerciseDisplayLangDesc')}
-                        </Text>
-                      </View>
-                    </View>
-                    <Pressable
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: colors.surface2,
-                        borderRadius: radius.xs,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        paddingVertical: spacing.xs + 2,
-                        paddingHorizontal: spacing.md,
-                        columnGap: spacing.xs,
-                        marginLeft: spacing.md,
-                      }}
-                      onPress={() => setExerciseNameLanguage && setExerciseNameLanguage(exerciseNameLanguage === 'en' ? 'he' : 'en')}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={{
-                        color: colors.accent,
-                        fontSize: font.sizes.sm,
-                        fontFamily: font.bold,
-                        letterSpacing: 0.5,
-                      }}>
-                        {exerciseNameLanguage === 'en' ? 'ENG' : 'HEB'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-                    </Pressable>
-                  </View>
-
-                  <View style={styles.settingDivider} />
 
                   {/* Features & Modules Toggles */}
                   <View style={{ marginTop: spacing.md }}>
                     <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginBottom: spacing.xs, color: colors.textSecondary }]}>{i18n.t('profile.enabledModules')}</Text>
                     
-                    {/* Plate Calculator */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Ionicons name="disc-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.settingTitle}>{i18n.t('profile.plateCalculator')}</Text>
-                          <Text style={styles.settingSubtitle}>{i18n.t('profile.plateCalculatorDesc')}</Text>
-                        </View>
-                      </View>
-                      <Pressable
-                        style={[
-                          styles.togglePill,
-                          isPlateCalculatorEnabled && styles.togglePillActive
-                        ]}
-                        onPress={() => setIsPlateCalculatorEnabled && setIsPlateCalculatorEnabled(!isPlateCalculatorEnabled)}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Text style={[
-                          styles.togglePillText,
-                          isPlateCalculatorEnabled && styles.togglePillTextActive
-                        ]}>
-                          {isPlateCalculatorEnabled ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
-                        </Text>
-                      </Pressable>
-                    </View>
 
-                    <View style={styles.settingDivider} />
 
                     {/* Training Programs */}
                     <View style={styles.settingRow}>
@@ -2549,61 +2431,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       </Pressable>
                     </View>
 
-                    <View style={styles.settingDivider} />
 
-                    {/* Workout History Tab */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Ionicons name="time-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.settingTitle}>{i18n.t('profile.workoutHistoryTab')}</Text>
-                          <Text style={styles.settingSubtitle}>{i18n.t('profile.workoutHistoryTabDesc')}</Text>
-                        </View>
-                      </View>
-                      <Pressable
-                        style={[
-                          styles.togglePill,
-                          isHistoryEnabled && styles.togglePillActive
-                        ]}
-                        onPress={() => setIsHistoryEnabled && setIsHistoryEnabled(!isHistoryEnabled)}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Text style={[
-                          styles.togglePillText,
-                          isHistoryEnabled && styles.togglePillTextActive
-                        ]}>
-                          {isHistoryEnabled ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
-                        </Text>
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.settingDivider} />
-
-                    {/* Muscle Map Tab */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Ionicons name="body-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.settingTitle}>{i18n.t('profile.muscleMapTab')}</Text>
-                          <Text style={styles.settingSubtitle}>{i18n.t('profile.muscleMapTabDesc')}</Text>
-                        </View>
-                      </View>
-                      <Pressable
-                        style={[
-                          styles.togglePill,
-                          isMusclesEnabled && styles.togglePillActive
-                        ]}
-                        onPress={() => setIsMusclesEnabled && setIsMusclesEnabled(!isMusclesEnabled)}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Text style={[
-                          styles.togglePillText,
-                          isMusclesEnabled && styles.togglePillTextActive
-                        ]}>
-                          {isMusclesEnabled ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
-                        </Text>
-                      </Pressable>
-                    </View>
                   </View>
                 </Card>
               </>
@@ -3162,125 +2990,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             </View>
                           )}
 
-                          {/* Advanced Theme Overrides */}
-                          <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginTop: spacing.md, marginBottom: spacing.xs, color: colors.textSecondary }]}>
-                            {i18n.t('profile.advancedColorCustomization')}
-                          </Text>
-                          <Text style={[styles.settingSubtitle, { marginBottom: spacing.md }]}>
-                            {i18n.t('profile.advancedColorDesc')}
-                          </Text>
 
-                          <View style={{ gap: spacing.md, marginBottom: spacing.md }}>
-                            {[
-                              { label: i18n.t('profile.backgroundColor'), key: 'bg', defaultVal: '#0D0F14', presets: ['#0D0F14', '#000000', '#0A0E17', '#121212'] },
-                              { label: i18n.t('profile.cardSurfaceColor'), key: 'surface', defaultVal: '#161B24', presets: ['#161B24', '#1F2937', '#080808', '#1A1A1A'] },
-                              { label: i18n.t('profile.borderColor'), key: 'border', defaultVal: '#252D3A', presets: ['#252D3A', '#334155', '#1C2330', '#2E2E2E'] },
-                              { label: i18n.t('profile.primaryTextColor'), key: 'textPrimary', defaultVal: '#EEF1F6', presets: ['#EEF1F6', '#FFFFFF', '#D0D5DD', '#E0E0E0'] },
-                              { label: i18n.t('profile.secondaryTextColor'), key: 'textSecondary', defaultVal: '#8B95A5', presets: ['#8B95A5', '#94A3B8', '#4E5A6E', '#64748B'] },
-                            ].map((overrideItem) => {
-                              const currentVal = (themeOverrides && themeOverrides[overrideItem.key]) || overrideItem.defaultVal;
-                              return (
-                                <View key={overrideItem.key} style={{ backgroundColor: colors.surfaceHigh, padding: spacing.sm, borderRadius: radius.md }}>
-                                  <Text style={{ color: colors.textPrimary, fontSize: font.sizes.sm, fontFamily: font.semibold, marginBottom: 6 }}>
-                                    {overrideItem.label}
-                                  </Text>
-                                  
-                                  {/* Quick Presets */}
-                                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                                    {overrideItem.presets.map((presetColor) => (
-                                      <Pressable
-                                        key={presetColor}
-                                        style={{
-                                          width: 24,
-                                          height: 24,
-                                          borderRadius: 12,
-                                          backgroundColor: presetColor,
-                                          borderWidth: 1.5,
-                                          borderColor: currentVal.toLowerCase() === presetColor.toLowerCase() ? colors.accent : colors.border,
-                                        }}
-                                        onPress={() => {
-                                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                          if (onUpdateThemeOverrides) {
-                                            onUpdateThemeOverrides({ [overrideItem.key]: presetColor });
-                                          }
-                                        }}
-                                        android_ripple={rippleTokens.surface}
-                                      />
-                                    ))}
-                                  </View>
-
-                                  {/* Manual Input */}
-                                  <ThemeOverrideInput overrideKey={overrideItem.key} defaultVal={overrideItem.defaultVal} themeOverrides={themeOverrides} onUpdateThemeOverrides={onUpdateThemeOverrides} />
-                                  <View style={{ display: 'none' }}>
-                                    <TextInput
-                                      style={styles.hexInputSmall}
-                                      placeholder={i18n.t('profile.hexCodePlaceholder', { code: overrideItem.defaultVal })}
-                                      placeholderTextColor={colors.textMuted}
-                                      value={themeOverrides && themeOverrides[overrideItem.key] ? themeOverrides[overrideItem.key] : ''}
-                                      onChangeText={(text) => {
-                                        const cleanHex = text.replace(/[^#0-9A-Fa-f]/g, '');
-                                        if (onUpdateThemeOverrides) {
-                                          onUpdateThemeOverrides({ [overrideItem.key]: cleanHex });
-                                        }
-                                      }}
-                                      maxLength={7}
-                                    />
-                                    <View
-                                      style={{
-                                        width: 28,
-                                        height: 28,
-                                        borderRadius: 14,
-                                        backgroundColor: currentVal.startsWith('#') && currentVal.length === 7 ? currentVal : overrideItem.defaultVal,
-                                        borderColor: colors.border,
-                                        borderWidth: 1,
-                                      }}
-                                    />
-                                  </View>
-                                </View>
-                              );
-                            })}
-                          </View>
-
-                          {/* Reset Theme Button */}
-                          <Pressable
-                            style={({ pressed }) => [
-                              {
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor: colors.error + '15',
-                                borderColor: colors.error + '44',
-                                borderWidth: 1,
-                                paddingVertical: spacing.md,
-                                borderRadius: radius.md,
-                                marginTop: spacing.md,
-                                opacity: pressed ? 0.8 : 1,
-                              }
-                            ]}
-                            onPress={() => {
-                              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                              Alert.alert(
-                                i18n.t('profile.resetTheme'),
-                                i18n.t('profile.resetThemeMsg'),
-                                [
-                                  { text: i18n.t('common.cancel'), style: 'cancel' },
-                                  {
-                                    text: i18n.t('common.reset'),
-                                    style: 'destructive',
-                                    onPress: () => {
-                                      if (onResetTheme) onResetTheme();
-                                    },
-                                  },
-                                ]
-                              );
-                            }}
-                            android_ripple={{ color: colors.error + '25', borderless: false }}
-                          >
-                            <Ionicons name="refresh-outline" size={18} color={colors.error} style={{ marginRight: spacing.sm }} />
-                            <Text style={{ color: colors.error, fontFamily: font.bold, fontSize: font.sizes.base }}>
-                              {i18n.t('profile.resetThemeToDefault')}
-                            </Text>
-                          </Pressable>
                         </>
                       )}
                     </Card>
@@ -3476,25 +3186,31 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </Text>
             </View>
 
-            <View style={styles.bottomSheetOptions}>
-              {([...(['satisfying-click', 'chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'] as const), ...customSounds.map(s => s.id)]).map((soundKey) => {
-                let isSelected = false;
-                if (activeSoundTrigger === 'setChecked' && soundSetCompleted === soundKey) isSelected = true;
-                if (activeSoundTrigger === 'workoutCompleted' && soundWorkoutFinished === soundKey) isSelected = true;
-                if (activeSoundTrigger === 'timerCompleted' && soundTimerCompleted === soundKey) isSelected = true;
+            <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ paddingBottom: spacing.md }} persistentScrollbar={false}>
+              <View style={styles.bottomSheetOptions}>
+                {([
+                  ...(activeSoundTrigger === 'setChecked'
+                    ? ['satisfying-click', 'chime', 'mute']
+                    : activeSoundTrigger === 'workoutCompleted'
+                    ? ['fanfare', 'chime', 'mute']
+                    : ['beep', 'satisfying-click', 'mute']
+                  ),
+                  ...customSounds.map(s => s.id)
+                ] as string[]).map((soundKey) => {
+                  let isSelected = false;
+                  if (activeSoundTrigger === 'setChecked' && soundSetCompleted === soundKey) isSelected = true;
+                  if (activeSoundTrigger === 'workoutCompleted' && soundWorkoutFinished === soundKey) isSelected = true;
+                  if (activeSoundTrigger === 'timerCompleted' && soundTimerCompleted === soundKey) isSelected = true;
 
-                const isCustom = !['satisfying-click', 'chime', 'beep', 'fanfare', 'bell1', 'bell2', 'boxing-bell', 'mute'].includes(soundKey);
+                  const isCustom = !['satisfying-click', 'chime', 'beep', 'fanfare', 'mute'].includes(soundKey);
 
-                let iconName: any = 'musical-notes-outline';
-                if (soundKey === 'satisfying-click') iconName = 'checkmark-done-circle-outline';
-                else if (soundKey === 'chime') iconName = 'musical-notes-outline';
-                else if (soundKey === 'beep') iconName = 'notifications-outline';
-                else if (soundKey === 'fanfare') iconName = 'trophy-outline';
-                else if (soundKey === 'bell1') iconName = 'notifications-circle-outline';
-                else if (soundKey === 'bell2') iconName = 'notifications-circle-outline';
-                else if (soundKey === 'boxing-bell') iconName = 'alarm-outline';
-                else if (soundKey === 'mute') iconName = 'volume-mute-outline';
-                else iconName = 'document-attach-outline';
+                  let iconName: any = 'musical-notes-outline';
+                  if (soundKey === 'satisfying-click') iconName = 'checkmark-done-circle-outline';
+                  else if (soundKey === 'chime') iconName = 'musical-notes-outline';
+                  else if (soundKey === 'beep') iconName = 'notifications-outline';
+                  else if (soundKey === 'fanfare') iconName = 'trophy-outline';
+                  else if (soundKey === 'mute') iconName = 'volume-mute-outline';
+                  else iconName = 'document-attach-outline';
 
                 return (
                   <Pressable
@@ -3559,6 +3275,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </View>
               </Pressable>
             </View>
+          </ScrollView>
 
             <Pressable
               style={styles.bottomSheetCloseBtn}
