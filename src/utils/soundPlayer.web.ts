@@ -175,3 +175,10 @@ export function playSatisfyingClickStopTimer() {
   playWebSound('satisfying-click-timer');
 }
 
+/**
+ * Initialize sounds (no-op on web)
+ */
+export async function initSounds() {
+  // No-op on web
+}
+
