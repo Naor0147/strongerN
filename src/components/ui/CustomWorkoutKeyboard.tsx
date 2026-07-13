@@ -1,5 +1,5 @@
 // components/ui/CustomWorkoutKeyboard.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,33 +21,32 @@ interface CustomWorkoutKeyboardProps {
   onChangeRpe?: (newRpe: string) => void;
   onNext?: () => void;
   onClose: () => void;
-  placeholder?: string;
   title?: string;
   fieldName?: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
   inputKey?: string;
   isRpeMode?: boolean;
+  maxLength?: number;
 }
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
 const RIR_OPTIONS = ['0', '1', '2', '3', '4', '5'];
-const KEYBOARD_KEYS = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
-  ['.', '0', '⌫'],
-];
+const REPEAT_START_MS = 350;
+const REPEAT_INTERVAL_MS = 55;
+const KEY_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 };
+const PRESS_RETENTION = { top: 64, bottom: 64, left: 64, right: 64 };
 
 const playFeedback = (type: 'tap' | 'heavy' = 'tap') => {
-  if (Platform.OS !== 'web') {
-    if (type === 'heavy') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-  }
+  if (Platform.OS === 'web') return;
+  try {
+    Haptics.impactAsync(
+      type === 'heavy'
+        ? Haptics.ImpactFeedbackStyle.Medium
+        : Haptics.ImpactFeedbackStyle.Light
+    );
+  } catch {}
 };
 
-export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
+export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React.memo(({
   visible,
   value,
   onChange,
@@ -59,74 +58,114 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
   fieldName = 'weight',
   inputKey,
   isRpeMode = true,
+  maxLength = 6,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
-  const lastInputKeyRef = useRef<string | undefined>(undefined);
-  const lastVisibleRef = useRef<boolean>(false);
   const isFirstKeyRef = useRef(true);
+  const valueRef = useRef(value);
+  const repeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  if (inputKey !== lastInputKeyRef.current || visible !== lastVisibleRef.current) {
-    lastInputKeyRef.current = inputKey;
-    lastVisibleRef.current = visible;
+  // Keep valueRef in sync with prop (external changes, e.g. field switch).
+  useEffect(() => { valueRef.current = value; }, [value]);
+
+  // Reset per-field/per-visibility state + clear any running hold timers.
+  useEffect(() => {
     if (visible) {
+      setShowRpeBar(false);
       isFirstKeyRef.current = true;
     }
-  }
+    if (repeatTimer.current) { clearTimeout(repeatTimer.current); repeatTimer.current = null; }
+    if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null; }
+  }, [inputKey, visible]);
+
+  // Unmount safety.
+  useEffect(() => {
+    return () => {
+      if (repeatTimer.current) clearTimeout(repeatTimer.current);
+      if (repeatInterval.current) clearInterval(repeatInterval.current);
+    };
+  }, []);
 
   if (!visible) return null;
 
-  const handleKeyPress = (key: string) => {
-    playFeedback('tap');
+  const isRepsField = fieldName?.toLowerCase().includes('reps');
+  const keyboardKeys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    [isRepsField ? '' : '.', '0', '⌫'],
+  ];
 
+
+  const computeNext = (key: string, current: string): string => {
     if (isFirstKeyRef.current) {
       isFirstKeyRef.current = false;
       if (key === '⌫') {
-        onChange('');
-      } else if (key === '.') {
-        onChange('0.');
-      } else {
-        onChange(key);
+        const nextVal = current.length > 0 ? current.slice(0, -1) : '';
+        return nextVal.slice(0, maxLength);
       }
-      return;
+      if (key === '.') return '0.'.slice(0, maxLength);
+      return key.slice(0, maxLength);
     }
-
     if (key === '⌫') {
-      if (value.length > 0) {
-        onChange(value.slice(0, -1));
-      }
-    } else if (key === '.') {
-      if (!value.includes('.')) {
-        onChange(value + '.');
-      }
-    } else {
-      // Prevent leading multiple zeros
-      if (value === '0') {
-        onChange(key);
-      } else {
-        onChange(value + key);
-      }
+      const nextVal = current.length > 0 ? current.slice(0, -1) : '';
+      return nextVal.slice(0, maxLength);
+    }
+    if (key === '.') {
+      if (current === '') return '0.'.slice(0, maxLength);
+      if (current.includes('.')) return current.slice(0, maxLength);
+      return (current + '.').slice(0, maxLength);
+    }
+    // digit
+    if (current === '0') return key.slice(0, maxLength);
+    if (current.length >= maxLength) return current;
+    return (current + key).slice(0, maxLength);
+  };
+
+  const handleKeyPress = (key: string) => {
+    playFeedback('tap');
+    const next = computeNext(key, valueRef.current);
+    valueRef.current = next;
+    onChange(next);
+  };
+
+  const handleBackspaceRepeat = () => {
+    const cur = valueRef.current;
+    if (cur.length > 0) {
+      const next = cur.slice(0, -1);
+      valueRef.current = next;
+      onChange(next);
     }
   };
 
-  const handleRpeSelect = (rpe: string) => {
-    playFeedback('heavy');
-    if (onChangeRpe) {
-      onChangeRpe(rpe);
-    }
+  const handleBackspacePressIn = () => {
+    handleKeyPress('⌫');
+    repeatTimer.current = setTimeout(() => {
+      let tick = 0;
+      repeatInterval.current = setInterval(() => {
+        tick++;
+        if (tick % 4 === 0) playFeedback('tap');
+        handleBackspaceRepeat();
+      }, REPEAT_INTERVAL_MS);
+    }, REPEAT_START_MS);
   };
 
-  const handleRpeClear = () => {
-    playFeedback('heavy');
-    if (onChangeRpe) {
-      onChangeRpe('');
-    }
+  const clearRepeatTimers = () => {
+    if (repeatTimer.current) { clearTimeout(repeatTimer.current); repeatTimer.current = null; }
+    if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null; }
   };
+
+  const handleBackspacePressOut = () => clearRepeatTimers();
+
+
+  const handleRpeSelect = (rpe: string) => { playFeedback('heavy'); onChangeRpe?.(rpe); };
+  const handleRpeClear = () => { playFeedback('heavy'); onChangeRpe?.(''); };
 
   return (
     <View style={styles.container}>
-      {/* ── Top Bar / Header ── */}
       <View style={styles.topBar}>
-        <Text style={styles.titleText}>
+        <Text style={styles.titleText} numberOfLines={1}>
           {title ? `${title.toUpperCase()}` : ''}
           {fieldName && (
             <Text style={styles.fieldTypeText}>
@@ -135,61 +174,43 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
           )}
         </Text>
         <Pressable
-          style={({ pressed }) => [
-            styles.closeBtn,
-            pressed && { transform: [{ scale: 0.9 }] }
-          ]}
-          onPress={() => {
-            playFeedback('tap');
-            onClose();
-          }}
+          style={({ pressed }) => [styles.closeBtn, pressed && { transform: [{ scale: 0.9 }] }]}
+          onPress={() => { playFeedback('tap'); onClose(); }}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           android_ripple={rippleTokens.borderless}
+          {...({ delayPressIn: 0 } as any)}
+          accessibilityRole="button"
           accessibilityLabel={i18n.t('extras.hideKeyboardA11y')}
         >
           <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
         </Pressable>
       </View>
 
-      {/* ── RPE/RIR Selector Bar (Expands above key pad) ── */}
       {showRpeBar && (
         <View style={styles.rpeBar}>
-          <Text style={styles.rpeBarLabel}>{isRpeMode ? i18n.t('customKeyboard.selectRpe') : i18n.t('customKeyboard.selectRir')}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rpeScroll}
-          >
+          <Text style={styles.rpeBarLabel}>
+            {isRpeMode ? i18n.t('customKeyboard.selectRpe') : i18n.t('customKeyboard.selectRir')}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rpeScroll}>
             <Pressable
-              style={({ pressed }) => [
-                styles.rpeChip,
-                rpeValue === '' && styles.rpeChipActive,
-                pressed && { transform: [{ scale: 0.95 }] }
-              ]}
+              style={({ pressed }) => [styles.rpeChip, rpeValue === '' && styles.rpeChipActive, pressed && { transform: [{ scale: 0.95 }] }]}
               onPress={handleRpeClear}
-              unstable_pressDelay={0}
               android_ripple={rippleTokens.surface}
+              {...({ delayPressIn: 0 } as any)}
             >
-              <Text style={[styles.rpeChipText, rpeValue === '' && styles.rpeChipTextActive]}>
-                {i18n.t('extras.noneRpe')}
-              </Text>
+              <Text style={[styles.rpeChipText, rpeValue === '' && styles.rpeChipTextActive]}>{i18n.t('extras.noneRpe')}</Text>
             </Pressable>
             {(isRpeMode ? RPE_OPTIONS : RIR_OPTIONS).map((val) => {
               const isActive = rpeValue === val;
               return (
                 <Pressable
                   key={val}
-                  style={({ pressed }) => [
-                    styles.rpeChip,
-                    isActive && styles.rpeChipActive,
-                    pressed && { transform: [{ scale: 0.95 }] }
-                  ]}
+                  style={({ pressed }) => [styles.rpeChip, isActive && styles.rpeChipActive, pressed && { transform: [{ scale: 0.95 }] }]}
                   onPress={() => handleRpeSelect(val)}
-                  unstable_pressDelay={0}
                   android_ripple={rippleTokens.surface}
+                  {...({ delayPressIn: 0 } as any)}
                 >
-                  <Text style={[styles.rpeChipText, isActive && styles.rpeChipTextActive]}>
-                    {val}
-                  </Text>
+                  <Text style={[styles.rpeChipText, isActive && styles.rpeChipTextActive]}>{val}</Text>
                 </Pressable>
               );
             })}
@@ -197,33 +218,45 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
         </View>
       )}
 
-      {/* ── Main Keyboard Layout ── */}
       <View style={styles.keyboardBody}>
-        {/* Left Side: Number Pad */}
         <View style={styles.numPad}>
-          {KEYBOARD_KEYS.map((row, rowIndex) => (
+          {keyboardKeys.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
-              {row.map((key) => {
-                const isBackspace = key === '⌫';
+              {row.map((key, keyIndex) => {
+                if (key === '') {
+                  return <View key={`empty-${rowIndex}-${keyIndex}`} style={[styles.key, { backgroundColor: 'transparent', borderColor: 'transparent' }]} />;
+                }
+                if (key === '⌫') {
+                  return (
+                    <Pressable
+                      key={key}
+                      style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.surface2, transform: [{ scale: 0.95 }] }]}
+                      onPressIn={handleBackspacePressIn}
+                      onPressOut={handleBackspacePressOut}
+                      {...({ delayPressIn: 0 } as any)}
+                      hitSlop={KEY_HIT_SLOP}
+                      pressRetentionOffset={PRESS_RETENTION}
+                      android_ripple={rippleTokens.surface}
+                      accessibilityRole="button"
+                      accessibilityLabel="Delete last digit"
+                    >
+                      <Ionicons name="backspace-outline" size={26} color={colors.textPrimary} />
+                    </Pressable>
+                  );
+                }
                 return (
                   <Pressable
                     key={key}
-                    style={({ pressed }) => [
-                      styles.key,
-                      pressed && { 
-                        backgroundColor: colors.surface2, 
-                        transform: [{ scale: 0.95 }] 
-                      }
-                    ]}
+                    style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.surface2, transform: [{ scale: 0.95 }] }]}
                     onPress={() => handleKeyPress(key)}
-                    unstable_pressDelay={0}
+                    {...({ delayPressIn: 0 } as any)}
+                    hitSlop={KEY_HIT_SLOP}
+                    pressRetentionOffset={PRESS_RETENTION}
                     android_ripple={rippleTokens.surface}
+                    accessibilityRole="button"
+                    accessibilityLabel={key === '.' ? 'Decimal point' : `Digit ${key}`}
                   >
-                    {isBackspace ? (
-                      <Ionicons name="backspace-outline" size={22} color={colors.textPrimary} />
-                    ) : (
-                      <Text style={styles.keyText}>{key}</Text>
-                    )}
+                    <Text style={styles.keyText}>{key}</Text>
                   </Pressable>
                 );
               })}
@@ -231,28 +264,18 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
           ))}
         </View>
 
-        {/* Right Side: Quick Action Columns */}
         <View style={styles.actionColumn}>
-          {/* RPE/RIR Toggle Button */}
           {onChangeRpe ? (
             <Pressable
-              style={({ pressed }) => [
-                styles.actionKey,
-                showRpeBar && styles.rpeKeyActive,
-                pressed && { transform: [{ scale: 0.95 }] }
-              ]}
-              onPress={() => {
-                playFeedback('tap');
-                setShowRpeBar(!showRpeBar);
-              }}
-              unstable_pressDelay={0}
+              style={({ pressed }) => [styles.actionKey, showRpeBar && styles.rpeKeyActive, pressed && { transform: [{ scale: 0.95 }] }]}
+              onPress={() => { playFeedback('tap'); setShowRpeBar(v => !v); }}
+              {...({ delayPressIn: 0 } as any)}
+              hitSlop={KEY_HIT_SLOP}
               android_ripple={rippleTokens.surface}
+              accessibilityRole="button"
+              accessibilityLabel={isRpeMode ? 'Select rating of perceived exertion' : 'Select repetitions in reserve'}
             >
-              <Ionicons
-                name={showRpeBar ? 'star' : 'star-outline'}
-                size={20}
-                color={showRpeBar ? colors.violet : colors.textSecondary}
-              />
+              <Ionicons name={showRpeBar ? 'star' : 'star-outline'} size={20} color={showRpeBar ? colors.violet : colors.textSecondary} />
               <Text style={[styles.actionKeyText, showRpeBar && { color: colors.violet }]}>
                 {isRpeMode ? i18n.t('customKeyboard.selectRpe').replace('SELECT ', '') : i18n.t('customKeyboard.selectRir').replace('SELECT ', '')}
               </Text>
@@ -261,39 +284,30 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
             <View style={[styles.actionKey, { backgroundColor: 'transparent', borderColor: 'transparent' }]} />
           )}
 
-          {/* Next Button */}
           {onNext ? (
             <Pressable
-              style={({ pressed }) => [
-                styles.actionKey,
-                styles.nextKey,
-                pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }
-              ]}
-              onPress={() => {
-                playFeedback('heavy');
-                onNext();
-              }}
-              unstable_pressDelay={0}
+              style={({ pressed }) => [styles.actionKey, styles.nextKey, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+              onPress={() => { playFeedback('heavy'); onNext(); }}
+              {...({ delayPressIn: 0 } as any)}
+              hitSlop={KEY_HIT_SLOP}
               android_ripple={rippleTokens.accent}
+              accessibilityRole="button"
+              accessibilityLabel="Next field"
             >
-              <Ionicons name="arrow-forward" size={20} color="#0D0F14" />
+              <Ionicons name="arrow-forward" size={20} color={colors.bg} />
               <Text style={styles.nextKeyText}>{i18n.t('customKeyboard.next')}</Text>
             </Pressable>
           ) : (
             <Pressable
-              style={({ pressed }) => [
-                styles.actionKey,
-                styles.doneKey,
-                pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }
-              ]}
-              onPress={() => {
-                playFeedback('heavy');
-                onClose();
-              }}
-              unstable_pressDelay={0}
+              style={({ pressed }) => [styles.actionKey, styles.doneKey, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+              onPress={() => { playFeedback('heavy'); onClose(); }}
+              {...({ delayPressIn: 0 } as any)}
+              hitSlop={KEY_HIT_SLOP}
               android_ripple={rippleTokens.accent}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
             >
-              <Ionicons name="checkmark" size={20} color="#0D0F14" />
+              <Ionicons name="checkmark" size={20} color={colors.bg} />
               <Text style={styles.doneKeyText}>{i18n.t('customKeyboard.done')}</Text>
             </Pressable>
           )}
@@ -301,11 +315,14 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = ({
       </View>
     </View>
   );
-};
+});
+
+const KEY_HEIGHT = 56;
+const ACTION_KEY_HEIGHT = 120; // 120 with gap 6
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0D0F14',
+    backgroundColor: colors.bg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
@@ -317,78 +334,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 38,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: colors.border,
   },
-  titleText: {
-    color: colors.textMuted,
-    fontSize: 9,
-    fontFamily: font.bold,
-    letterSpacing: 1,
-  },
-  fieldTypeText: {
-    color: colors.accent,
-  },
-  closeBtn: {
-    padding: spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  titleText: { color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.bold, letterSpacing: 1, flexShrink: 1 },
+  fieldTypeText: { color: colors.accent },
+  closeBtn: { padding: spacing.xs, justifyContent: 'center', alignItems: 'center' },
   rpeBar: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: colors.border,
     paddingVertical: spacing.sm,
     backgroundColor: 'rgba(124, 92, 252, 0.03)',
   },
-  rpeBarLabel: {
-    color: colors.violet,
-    fontSize: 8,
-    fontFamily: font.bold,
-    letterSpacing: 1,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  rpeScroll: {
-    paddingHorizontal: spacing.md,
-    columnGap: spacing.xs,
-  },
-  rpeChip: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.xs,
-    paddingVertical: 5,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rpeChipActive: {
-    backgroundColor: colors.violet,
-    borderColor: colors.violet,
-  },
-  rpeChipText: {
-    color: colors.textSecondary,
-    fontSize: font.sizes.xs,
-    fontFamily: font.bold,
-  },
-  rpeChipTextActive: {
-    color: '#0D0F14',
-  },
-  keyboardBody: {
-    flexDirection: 'row',
-    padding: spacing.sm,
-    gap: spacing.sm,
-  },
-  numPad: {
-    flex: 3,
-    rowGap: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  rpeBarLabel: { color: colors.violet, fontSize: font.sizes.xs, fontFamily: font.bold, letterSpacing: 1, paddingHorizontal: spacing.md, marginBottom: spacing.xs },
+  rpeScroll: { paddingHorizontal: spacing.md, columnGap: spacing.xs },
+  rpeChip: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.xs, paddingVertical: 5, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  rpeChipActive: { backgroundColor: colors.violet, borderColor: colors.violet },
+  rpeChipText: { color: colors.textSecondary, fontSize: font.sizes.xs, fontFamily: font.bold },
+  rpeChipTextActive: { color: colors.bg },
+  keyboardBody: { flexDirection: 'row', padding: spacing.sm, gap: 6 },
+  numPad: { flex: 3, rowGap: 6 },
+  row: { flexDirection: 'row', gap: 6 },
   key: {
     flex: 1,
-    height: 48,
+    height: KEY_HEIGHT,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
@@ -396,18 +364,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyText: {
-    color: colors.textPrimary,
-    fontSize: font.sizes.lg,
-    fontFamily: font.semibold,
-  },
-  actionColumn: {
-    flex: 1,
-    rowGap: spacing.sm,
-  },
+  keyText: { color: colors.textPrimary, fontSize: 24, fontFamily: font.semibold },
+  actionColumn: { flex: 1, rowGap: 6 },
   actionKey: {
     flex: 1,
-    height: 104, // Height matching 2 rows
+    height: ACTION_KEY_HEIGHT,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
@@ -422,7 +383,7 @@ const styles = StyleSheet.create({
   },
   actionKeyText: {
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: font.sizes.xs,
     fontFamily: font.bold,
   },
   nextKey: {
@@ -430,8 +391,8 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   nextKeyText: {
-    color: '#0D0F14',
-    fontSize: 10,
+    color: colors.bg,
+    fontSize: font.sizes.xs,
     fontFamily: font.bold,
   },
   doneKey: {
@@ -439,8 +400,8 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   doneKeyText: {
-    color: '#0D0F14',
-    fontSize: 10,
+    color: colors.bg,
+    fontSize: font.sizes.xs,
     fontFamily: font.bold,
   },
 });
