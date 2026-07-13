@@ -4412,4 +4412,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ActiveWorkoutModal;
+export default React.memo(ActiveWorkoutModal);

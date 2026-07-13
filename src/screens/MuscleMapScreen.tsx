@@ -1658,4 +1658,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MuscleMapScreen;
+export default React.memo(MuscleMapScreen);

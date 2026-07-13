@@ -170,4 +170,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BottomTabBar;
+export default React.memo(BottomTabBar);

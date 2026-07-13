@@ -33,7 +33,7 @@ const AnimatedLine = Animated.createAnimatedComponent(Line);
 const AnimatedG = Animated.createAnimatedComponent(G);
 
 // Helper component for animating individual bars to avoid calling hooks inside a loop
-const BarItem = ({
+const BarItem = React.memo(({
   idx,
   xPos,
   barHPixels,
@@ -153,7 +153,7 @@ const BarItem = ({
       )}
     </G>
   );
-};
+});
 
 const DistributionChart: React.FC<DistributionChartProps> = ({
   percentile,
@@ -557,4 +557,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DistributionChart;
+export default React.memo(DistributionChart);

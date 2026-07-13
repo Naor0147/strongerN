@@ -2203,4 +2203,4 @@ const skeletonStyles = StyleSheet.create({
   },
 });
 
-export default ExercisesScreen;
+export default React.memo(ExercisesScreen);

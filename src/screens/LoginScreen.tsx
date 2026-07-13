@@ -692,7 +692,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   );
 };
 
-export default LoginScreen;
+export default React.memo(LoginScreen);
 
 // ─────────────────────────────────────────────────────────────────
 // STYLES

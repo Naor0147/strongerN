@@ -181,4 +181,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BarChart;
+export default React.memo(BarChart);

@@ -1029,4 +1029,4 @@ const histSkeletonStyles = StyleSheet.create({
   },
 });
 
-export default HistoryScreen;
+export default React.memo(HistoryScreen);
