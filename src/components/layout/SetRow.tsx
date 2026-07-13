@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../../theme';
 import { SwipeableRow } from './SwipeableRow';
 import { exerciseBlockStyles as s } from './exerciseBlockStyles';
-import { useExerciseRowGestures } from './exerciseRowGestures';
+import { useExerciseRowGestures } from '../ui/gestureCoexistence';
 
 export interface SetRowActiveInput {
   exIdx: number;

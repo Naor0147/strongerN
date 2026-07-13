@@ -30,7 +30,7 @@ import i18n from '../../utils/i18n';
 import { SetRow } from './SetRow';
 import { exerciseBlockStyles } from './exerciseBlockStyles';
 import { ExerciseCard } from './ExerciseCard';
-import { ReorderableList } from '../ui/ReorderableList';
+import Sortable from 'react-native-sortables';
 import { SwipeableRow } from './SwipeableRow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -166,6 +166,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // Drag state
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const scrollRef = useRef<RN.ScrollView>(null);
 
   // Exercise context menu
   const [exMenuIdx,     setExMenuIdx]     = useState<number | null>(null);
@@ -567,6 +568,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
               {/* ── Scrollable Body ── */}
               <ScrollView
+                ref={scrollRef}
                 style={edStyles.scroll}
                 contentContainerStyle={[
                   edStyles.scrollContent,
@@ -668,53 +670,71 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   });
 
                   return (
-                    <ReorderableList
-                      data={editorExercises}
-                      keyExtractor={(item) => item.id}
-                      onReorder={(newData) => {
-                        setEditorExercises(sanitizeSuperSets(newData));
-                      }}
+                    <Sortable.Flex
+                      flexDirection="column"
+                      gap={0}
+                      width="fill"
+                      customHandle
+                      dragActivationDelay={0}
+                      dragActivationFailOffset={5}
+                      activeItemScale={1.02}
+                      activeItemOpacity={1}
+                      activeItemShadowOpacity={0.45}
+                      inactiveItemOpacity={1}
+                      inactiveItemScale={1}
+                      enableActiveItemSnap={false}
+                      dimensionsAnimationType="layout"
+                      itemsLayoutTransitionMode="reorder"
+                      dropAnimationDuration={250}
+                      strategy="insert"
+                      reorderTriggerOrigin="center"
+                      overDrag="vertical"
+                      hapticsEnabled
+                      scrollableRef={scrollRef}
                       onDragStart={() => setScrollEnabled(false)}
-                      onDragEnd={() => setScrollEnabled(true)}
-                      renderItem={({ item: exercise, index: exIdx, dragGesture }) => {
+                      onDragEnd={({ order }) => setEditorExercises(sanitizeSuperSets(order(editorExercises)))}
+                      onActiveItemDropped={() => setScrollEnabled(true)}
+                      itemExiting={null}
+                    >
+                      {editorExercises.map((exercise, exIdx) => {
                         const isSuperSet = !!exercise.superSetGroupId;
                         const nextIsSameSuperSet = isSuperSet && exIdx < editorExercises.length - 1 && editorExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
                         const prevIsSameSuperSet = isSuperSet && exIdx > 0 && editorExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
                         const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
                         return (
-                          <SwipeableRow
-                            onDelete={() => {
-                              setEditorExercises(prev => {
-                                const filtered = prev.filter((_, i) => i !== exIdx);
-                                return sanitizeSuperSets(filtered);
-                              });
-                            }}
-                            activeOffsetX={[-30, 30]}
-                            style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
-                          >
-                            <ExerciseCard
-                              exercise={exercise}
-                              exIdx={exIdx}
-                              activeInput={activeInput}
-                              onFocus={handleSetFocus}
-                              updateSetField={updateSetField}
-                              deleteSet={deleteSet}
-                              inputRefs={inputRefs}
-                              mode="editor"
-                              superSetColor={superSetColor}
-                              isSuperSet={isSuperSet}
-                              nextIsSameSuperSet={nextIsSameSuperSet}
-                              prevIsSameSuperSet={prevIsSameSuperSet}
-                              onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
-                              onAddSet={addSet}
-                              dragHandlers={dragGesture}
-                              tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                            />
-                          </SwipeableRow>
+                          <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
+                            <SwipeableRow
+                              onDelete={() => {
+                                setEditorExercises(prev => {
+                                  const filtered = prev.filter((_, i) => i !== exIdx);
+                                  return sanitizeSuperSets(filtered);
+                                });
+                              }}
+                              activeOffsetX={[-30, 30]}
+                            >
+                              <ExerciseCard
+                                exercise={exercise}
+                                exIdx={exIdx}
+                                activeInput={activeInput}
+                                onFocus={handleSetFocus}
+                                updateSetField={updateSetField}
+                                deleteSet={deleteSet}
+                                inputRefs={inputRefs}
+                                mode="editor"
+                                superSetColor={superSetColor}
+                                isSuperSet={isSuperSet}
+                                nextIsSameSuperSet={nextIsSameSuperSet}
+                                prevIsSameSuperSet={prevIsSameSuperSet}
+                                onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
+                                onAddSet={addSet}
+                                tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                              />
+                            </SwipeableRow>
+                          </View>
                         );
-                      }}
-                    />
+                      })}
+                    </Sortable.Flex>
                   );
                 })()}
 

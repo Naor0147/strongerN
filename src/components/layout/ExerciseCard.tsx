@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import Sortable from 'react-native-sortables';
 import { colors, spacing, ripple as rippleTokens } from '../../theme';
 import { SetRow, SetRowInputField } from './SetRow';
 import { exerciseBlockStyles as s } from './exerciseBlockStyles';
@@ -83,23 +83,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
           </Pressable>
-          {dragHandlers ? (
-            <GestureDetector gesture={dragHandlers}>
-              <View
-                style={s.dragHandle}
-                accessibilityLabel="Drag to reorder exercise"
-              >
-                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-              </View>
-            </GestureDetector>
-          ) : (
-            <View
-              style={s.dragHandle}
-              accessibilityLabel="Drag to reorder exercise"
-            >
-              <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-            </View>
-          )}
+          <Sortable.Handle style={s.dragHandle}>
+            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} accessibilityLabel="Drag to reorder exercise" />
+          </Sortable.Handle>
         </View>
       </View>
 

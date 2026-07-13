@@ -17,28 +17,58 @@ import {
   LayoutAnimation,
   UIManager,
   AppState,
+  useWindowDimensions,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing, cancelAnimation, withDelay } from 'react-native-reanimated';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing, cancelAnimation, withDelay, useAnimatedRef } from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Notifications from 'expo-notifications';
+import {
+  setForegroundSuppression,
+  scheduleRestTimerNotification,
+  cancelRestTimerNotification,
+  showWorkoutBackgroundNotification,
+  dismissWorkoutBackgroundNotification,
+} from '../../utils/notifications';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
+import { SetInputCell } from '../ui/SetInputCell';
 import { playSetCheckedSound, playTimerCompletedSound, playWorkoutCompletedSound, playSatisfyingClickFinishSet, playSatisfyingClickStopTimer, playUncheckSetSound } from '../../utils/soundPlayer';
 import AddExerciseScreen from '../../screens/AddExerciseScreen';
+import ExerciseInsightsModal from '../../screens/ExerciseInsightsModal';
 import RestTimerRuler from '../ui/RestTimerRuler';
+import RestTimerPicker from '../ui/RestTimerPicker';
 import Card from '../ui/Card';
 import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
-import { ReorderableList, useReorder } from '../ui/ReorderableList';
-import { useExerciseRowGestures } from './exerciseRowGestures';
+import Sortable from 'react-native-sortables';
+import { useExerciseRowGestures } from '../ui/gestureCoexistence';
+import { ElapsedTimeText } from '../ui/ElapsedTimeText';
+
+const WebSafeAlert = {
+  alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: string }[]) => {
+    if (Platform.OS === 'web') {
+      const combinedMsg = message ? `${title}\n\n${message}` : title;
+      if (buttons && buttons.length > 0) {
+        const primaryBtn = buttons.find(b => b.text !== 'Cancel' && b.style !== 'cancel') || buttons[0];
+        const confirmed = window.confirm(combinedMsg);
+        if (confirmed && primaryBtn.onPress) {
+          primaryBtn.onPress();
+        }
+      } else {
+        window.alert(combinedMsg);
+      }
+    } else {
+      Alert.alert(title, message, buttons as any);
+    }
+  }
+};
 
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
@@ -83,7 +113,8 @@ interface ActiveWorkoutModalProps {
   exerciseLibrary?:   any[];
   onUpdateActiveExercises?: (exercises: any[]) => void;
   onUpdateExerciseNotes?: (exerciseId: string, notes?: string) => void;
-  onAddCustomExercise?: (name: string, muscleGroup: string, equipment?: string) => any;
+  onUpdateExerciseInsightsNotes?: (exerciseId: string, insightsNotes?: string) => void;
+  onAddCustomExercise?:   (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => any;
   isLiveHeartRateEnabled?: boolean;
   isPlateCalculatorEnabled?: boolean;
   defaultRestDuration?: number;
@@ -153,12 +184,24 @@ interface SetSuggestion {
   rightReps?: string;
 }
 
-const getProgressiveOverloadSuggestionForSet = (
+const getBestPerformanceSuggestionForSet = (
   exName: string,
-  setIdx: number,
+  category: string,
+  positionInCategory: number,
   sessions: any[],
-  templateSet?: any
+  isUnilateral: boolean
 ): SetSuggestion => {
+  const parseWeight = (val: any): number => {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = typeof val === 'number' ? val : parseFloat(val);
+    return isNaN(num) ? 0 : num;
+  };
+  const parseReps = (val: any): number => {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = typeof val === 'number' ? val : parseInt(val, 10);
+    return isNaN(num) ? 0 : num;
+  };
+
   const matchingSessions = (sessions || [])
     .reduce<any[]>((acc, s) => {
       if (s.exercises) {
@@ -169,234 +212,359 @@ const getProgressiveOverloadSuggestionForSet = (
       }
       return acc;
     }, [])
-    .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+    .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime()); // descending (most recent first)
 
-  if (matchingSessions.length === 0) {
+  const last5Sessions = matchingSessions.slice(0, 5);
+
+  if (last5Sessions.length === 0) {
     return {
-      weight: templateSet?.weight?.toString() || '60',
-      reps: templateSet?.reps?.toString() || '10',
-      leftWeight: templateSet?.leftWeight?.toString() || templateSet?.weight?.toString() || '60',
-      leftReps: templateSet?.leftReps?.toString() || templateSet?.reps?.toString() || '10',
-      rightWeight: templateSet?.rightWeight?.toString() || templateSet?.weight?.toString() || '60',
-      rightReps: templateSet?.rightReps?.toString() || templateSet?.reps?.toString() || '10',
+      weight: '',
+      reps: '',
+      leftWeight: '',
+      leftReps: '',
+      rightWeight: '',
+      rightReps: '',
     };
   }
 
-  // Build history of this specific set index across sessions (oldest to newest)
-  const history: any[] = [];
-  for (const item of matchingSessions) {
-    const setsDetails = item.ex.setsDetails || [];
-    const s = setsDetails[setIdx] || setsDetails[setsDetails.length - 1];
-    if (s) {
-      history.push(s);
+  const leftSideCandidates: any[] = [];
+  const rightSideCandidates: any[] = [];
+  const bilateralCandidates: any[] = [];
+
+  for (const session of last5Sessions) {
+    const histEx = session.ex;
+    const sets = histEx.setsDetails || [];
+    const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
+    const matchedSet = matchingSets[positionInCategory];
+
+    if (matchedSet) {
+      // Left side extraction with fallbacks
+      let lw = matchedSet.leftWeight;
+      let lr = matchedSet.leftReps;
+      if (lw === undefined || lw === null) {
+        lw = matchedSet.rightWeight;
+        lr = matchedSet.rightReps;
+      }
+      if (lw === undefined || lw === null) {
+        lw = matchedSet.weight;
+        lr = matchedSet.reps;
+      }
+
+      if (lw !== undefined && lw !== null) {
+        leftSideCandidates.push({
+          weight: parseWeight(lw),
+          reps: parseReps(lr),
+          originalWeight: lw,
+          originalReps: lr,
+          datetime: session.datetime,
+        });
+      }
+
+      // Right side extraction with fallbacks
+      let rw = matchedSet.rightWeight;
+      let rr = matchedSet.rightReps;
+      if (rw === undefined || rw === null) {
+        rw = matchedSet.leftWeight;
+        rr = matchedSet.leftReps;
+      }
+      if (rw === undefined || rw === null) {
+        rw = matchedSet.weight;
+        rr = matchedSet.reps;
+      }
+
+      if (rw !== undefined && rw !== null) {
+        rightSideCandidates.push({
+          weight: parseWeight(rw),
+          reps: parseReps(rr),
+          originalWeight: rw,
+          originalReps: rr,
+          datetime: session.datetime,
+        });
+      }
+
+      // Bilateral extraction
+      if (matchedSet.weight !== undefined && matchedSet.weight !== null) {
+        bilateralCandidates.push({
+          weight: parseWeight(matchedSet.weight),
+          reps: parseReps(matchedSet.reps),
+          originalWeight: matchedSet.weight,
+          originalReps: matchedSet.reps,
+          datetime: session.datetime,
+        });
+      }
     }
   }
 
-  const lastSet = history[history.length - 1];
-  if (!lastSet) {
+  const findBestForSide = (
+    sideCandidates: { weight: number; reps: number; originalWeight: any; originalReps: any; datetime: string }[]
+  ): { weight: string; reps: string } | null => {
+    if (sideCandidates.length === 0) return null;
+
+    const allWeightsZero = sideCandidates.every(c => c.weight === 0);
+
+    let bestIndex = 0;
+    for (let i = 1; i < sideCandidates.length; i++) {
+      const current = sideCandidates[i];
+      const best = sideCandidates[bestIndex];
+
+      if (allWeightsZero) {
+        if (current.reps > best.reps) {
+          bestIndex = i;
+        }
+      } else {
+        const current1RM = current.weight * (1 + current.reps / 30);
+        const best1RM = best.weight * (1 + best.reps / 30);
+        if (current1RM > best1RM) {
+          bestIndex = i;
+        }
+      }
+    }
+
+    const bestCand = sideCandidates[bestIndex];
     return {
-      weight: templateSet?.weight?.toString() || '60',
-      reps: templateSet?.reps?.toString() || '10',
-      leftWeight: templateSet?.leftWeight?.toString() || templateSet?.weight?.toString() || '60',
-      leftReps: templateSet?.leftReps?.toString() || templateSet?.reps?.toString() || '10',
-      rightWeight: templateSet?.rightWeight?.toString() || templateSet?.weight?.toString() || '60',
-      rightReps: templateSet?.rightReps?.toString() || templateSet?.reps?.toString() || '10',
+      weight: bestCand.originalWeight !== undefined && bestCand.originalWeight !== null ? bestCand.originalWeight.toString() : '',
+      reps: bestCand.originalReps !== undefined && bestCand.originalReps !== null ? bestCand.originalReps.toString() : '',
     };
-  }
+  };
 
-  const isCompound = /bench|press|squat|deadlift|row|overhead|pullup|pull-up|dip|chinup|chin-up/i.test(exName);
-  const isIsolation = /curl|extension|fly|raise|crossover|pushdown|lateral|kickback/i.test(exName);
-  const targetReps = isCompound ? 8 : (isIsolation ? 12 : 10);
+  if (isUnilateral) {
+    const leftBest = findBestForSide(leftSideCandidates);
+    const rightBest = findBestForSide(rightSideCandidates);
 
-  // Unilateral logic
-  if (lastSet.isUnilateral || templateSet?.isUnilateral) {
-    const lw = parseFloat(lastSet.leftWeight ?? lastSet.weight ?? '0') || 0;
-    const lr = parseInt(lastSet.leftReps ?? lastSet.reps ?? '0', 10) || 0;
-    const rw = parseFloat(lastSet.rightWeight ?? lastSet.weight ?? '0') || 0;
-    const rr = parseInt(lastSet.rightReps ?? lastSet.reps ?? '0', 10) || 0;
-
-    // Calculate historical adaptation rate (how many sessions it takes to increase reps)
-    let totalIncreases = 0;
-    let totalSessionsSpent = 0;
-    let currentRepCount = -1;
-    let currentRepSessions = 0;
-
-    for (let i = 0; i < history.length; i++) {
-      const h = history[i];
-      const hLr = parseInt(h.leftReps ?? h.reps ?? '0', 10) || 0;
-      const hRr = parseInt(h.rightReps ?? h.reps ?? '0', 10) || 0;
-      const minR = Math.min(hLr, hRr);
-      if (minR === currentRepCount) {
-        currentRepSessions++;
-      } else {
-        if (currentRepCount !== -1 && minR > currentRepCount) {
-          totalIncreases++;
-          totalSessionsSpent += currentRepSessions;
-        }
-        currentRepCount = minR;
-        currentRepSessions = 1;
-      }
-    }
-
-    const avgSessionsToIncrease = totalIncreases > 0 ? (totalSessionsSpent / totalIncreases) : 2;
-    const requiredSessions = Math.min(5, Math.max(1, Math.round(avgSessionsToIncrease)));
-
-    // Calculate current weight consistency and rep consistency
-    let consecutiveSessionsAtCurrentWeight = 0;
-    let consecutiveSessionsAtLastRepsOrMore = 0;
-    const minReps = Math.min(lr, rr);
-
-    for (let i = history.length - 1; i >= 0; i--) {
-      const hLw = parseFloat(history[i].leftWeight ?? history[i].weight ?? '0') || 0;
-      const hRw = parseFloat(history[i].rightWeight ?? history[i].weight ?? '0') || 0;
-      const hLr = parseInt(history[i].leftReps ?? history[i].reps ?? '0', 10) || 0;
-      const hRr = parseInt(history[i].rightReps ?? history[i].reps ?? '0', 10) || 0;
-
-      if (hLw === lw && hRw === rw) {
-        consecutiveSessionsAtCurrentWeight++;
-        if (Math.min(hLr, hRr) >= minReps) {
-          consecutiveSessionsAtLastRepsOrMore++;
-        } else {
-          break;
-        }
-      } else {
-        break;
-      }
-    }
-
-    if (minReps >= targetReps) {
-      // Met or exceeded target reps! Increase weight
-      const slowProgression = consecutiveSessionsAtCurrentWeight >= requiredSessions * 3;
-      const weightInc = slowProgression ? 1.0 : 1.25; // Smaller jump for slow progressors
-      return {
-        weight: (lw + weightInc).toString(),
-        reps: (targetReps - 2).toString(),
-        leftWeight: (lw + weightInc).toString(),
-        leftReps: (targetReps - 2).toString(),
-        rightWeight: (rw + weightInc).toString(),
-        rightReps: (targetReps - 2).toString(),
-      };
-    } else {
-      // Below target reps: increase reps or consolidate
-      if (consecutiveSessionsAtLastRepsOrMore < requiredSessions) {
-        // Consolidate current performance
-        return {
-          weight: lw.toString(),
-          reps: minReps.toString(),
-          leftWeight: lw.toString(),
-          leftReps: lr.toString(),
-          rightWeight: rw.toString(),
-          rightReps: rr.toString(),
-        };
-      } else {
-        // Progress reps: focus on lifting the weaker side
-        const nextLreps = lr < rr ? lr + 1 : (lr === rr ? lr + 1 : lr);
-        const nextRreps = rr < lr ? rr + 1 : (lr === rr ? rr + 1 : rr);
-        return {
-          weight: lw.toString(),
-          reps: Math.max(nextLreps, nextRreps).toString(),
-          leftWeight: lw.toString(),
-          leftReps: nextLreps.toString(),
-          rightWeight: rw.toString(),
-          rightReps: nextRreps.toString(),
-        };
-      }
-    }
-  }
-
-  // Bilateral logic
-  const w = parseFloat(lastSet.weight ?? '0') || 0;
-  const r = parseInt(lastSet.reps ?? '0', 10) || 0;
-
-  // Calculate historical adaptation rate (how many sessions it takes to increase reps)
-  let totalIncreases = 0;
-  let totalSessionsSpent = 0;
-  let currentRepCount = -1;
-  let currentRepSessions = 0;
-
-  for (let i = 0; i < history.length; i++) {
-    const h = history[i];
-    const hR = parseInt(h.reps ?? '0', 10) || 0;
-    if (hR === currentRepCount) {
-      currentRepSessions++;
-    } else {
-      if (currentRepCount !== -1 && hR > currentRepCount) {
-        totalIncreases++;
-        totalSessionsSpent += currentRepSessions;
-      }
-      currentRepCount = hR;
-      currentRepSessions = 1;
-    }
-  }
-
-  const avgSessionsToIncrease = totalIncreases > 0 ? (totalSessionsSpent / totalIncreases) : 2;
-  const requiredSessions = Math.min(5, Math.max(1, Math.round(avgSessionsToIncrease)));
-
-  // Calculate current weight consistency and rep consistency
-  let consecutiveSessionsAtCurrentWeight = 0;
-  let consecutiveSessionsAtLastRepsOrMore = 0;
-
-  for (let i = history.length - 1; i >= 0; i--) {
-    const hWeight = parseFloat(history[i].weight ?? '0') || 0;
-    const hReps = parseInt(history[i].reps ?? '0', 10) || 0;
-
-    if (hWeight === w) {
-      consecutiveSessionsAtCurrentWeight++;
-      if (hReps >= r) {
-        consecutiveSessionsAtLastRepsOrMore++;
-      } else {
-        break;
-      }
-    } else {
-      break;
-    }
-  }
-
-  if (r >= targetReps) {
-    // Met or exceeded target reps! Increase weight
-    const slowProgression = consecutiveSessionsAtCurrentWeight >= requiredSessions * 3;
-    let weightInc = 2.5;
-    if (isIsolation || w < 20 || slowProgression) {
-      weightInc = 1.25; // Smaller jump for isolation, light weights, or slow progressors
-    }
     return {
-      weight: (w + weightInc).toString(),
-      reps: (targetReps - 2).toString(),
+      weight: leftBest?.weight || rightBest?.weight || '',
+      reps: leftBest?.reps || rightBest?.reps || '',
+      leftWeight: leftBest?.weight || '',
+      leftReps: leftBest?.reps || '',
+      rightWeight: rightBest?.weight || '',
+      rightReps: rightBest?.reps || '',
     };
   } else {
-    // Below target reps: increase reps or consolidate
-    if (consecutiveSessionsAtLastRepsOrMore < requiredSessions) {
-      // Consolidate current reps
-      return {
-        weight: w.toString(),
-        reps: r.toString(),
-      };
-    } else {
-      // Progress reps
-      return {
-        weight: w.toString(),
-        reps: (r + 1).toString(),
-      };
-    }
+    const bilateralBest = findBestForSide(bilateralCandidates);
+    return {
+      weight: bilateralBest?.weight || '',
+      reps: bilateralBest?.reps || '',
+      leftWeight: bilateralBest?.weight || '',
+      leftReps: bilateralBest?.reps || '',
+      rightWeight: bilateralBest?.weight || '',
+      rightReps: bilateralBest?.reps || '',
+    };
   }
 };
 
-const cancelAndScheduleRestNotification = async (duration: number) => {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  if (duration > 0) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Rest Timer Completed! ⏱️",
-        body: "Time's up! Get ready for your next set.",
-        sound: true,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: duration,
-      },
-    });
+class RestTimerEmitter {
+  private listeners = new Set<(state: { remaining: number; active: boolean; endTarget?: number | null }) => void>();
+  private remaining = 0;
+  private active = false;
+  private intervalId: any = null;
+  private endTarget: number | null = null;
+  private isDragging = false;
+
+  constructor() {
+    if (AppState && typeof AppState.addEventListener === 'function') {
+      try {
+        AppState.addEventListener('change', (nextState) => {
+          if (nextState === 'active') {
+            this.sync();
+          }
+        });
+      } catch (e) {
+        console.warn('[AppState Error] Failed to add AppState listener in RestTimerEmitter:', e);
+      }
+    }
   }
-};
+
+  getRemaining() {
+    return this.remaining;
+  }
+
+  isActive() {
+    return this.active;
+  }
+
+  subscribe(cb: (state: { remaining: number; active: boolean; endTarget?: number | null }) => void) {
+    this.listeners.add(cb);
+    cb({ remaining: this.remaining, active: this.active, endTarget: this.endTarget });
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  private emit() {
+    const state = { remaining: this.remaining, active: this.active, endTarget: this.endTarget };
+    this.listeners.forEach(cb => cb(state));
+  }
+
+  start(duration: number) {
+    this.stopInterval();
+    this.remaining = duration;
+    this.active = true;
+    this.endTarget = Date.now() + duration * 1000;
+    this.emit();
+    scheduleRestTimerNotification(duration);
+
+    this.intervalId = setInterval(() => {
+      if (this.isDragging) return;
+      if (!this.endTarget) return;
+
+      const now = Date.now();
+      const remainingSecs = Math.max(0, Math.ceil((this.endTarget - now) / 1000));
+      this.remaining = remainingSecs;
+
+      if (remainingSecs <= 0) {
+        this.active = false;
+        this.endTarget = null;
+        this.stopInterval();
+        this.emit();
+        playTimerCompletedSound();
+      } else {
+        this.emit();
+      }
+    }, 1000);
+  }
+
+  stop() {
+    this.stopInterval();
+    this.remaining = 0;
+    this.active = false;
+    this.endTarget = null;
+    this.emit();
+    cancelRestTimerNotification();
+    playSatisfyingClickStopTimer();
+  }
+
+  adjust(seconds: number) {
+    if (!this.active || !this.endTarget) return;
+    this.endTarget = this.endTarget + seconds * 1000;
+    const now = Date.now();
+    this.remaining = Math.max(0, Math.ceil((this.endTarget - now) / 1000));
+    this.emit();
+    scheduleRestTimerNotification(this.remaining);
+  }
+
+  setRemaining(secs: number) {
+    this.remaining = secs;
+    if (this.active) {
+      this.endTarget = Date.now() + secs * 1000;
+    }
+    this.emit();
+  }
+
+  setIsDragging(dragging: boolean) {
+    this.isDragging = dragging;
+  }
+
+  sync() {
+    if (!this.active || !this.endTarget) return;
+    const now = Date.now();
+    const remainingSecs = Math.max(0, Math.ceil((this.endTarget - now) / 1000));
+    this.remaining = remainingSecs;
+    if (remainingSecs <= 0) {
+      this.active = false;
+      this.endTarget = null;
+      this.stopInterval();
+      this.emit();
+      playTimerCompletedSound();
+    } else {
+      this.emit();
+    }
+  }
+
+  private stopInterval() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}
+
+const restTimerEmitter = new RestTimerEmitter();
+
+const RestTimerHeaderButton: React.FC<{
+  isSubMenuVisible: boolean;
+  onToggleSubMenu: () => void;
+  defaultRestDuration: number;
+}> = React.memo(({ isSubMenuVisible, onToggleSubMenu, defaultRestDuration }) => {
+  const [timerState, setTimerState] = useState({ remaining: 0, active: false });
+
+  useEffect(() => {
+    return restTimerEmitter.subscribe(setTimerState);
+  }, []);
+
+  const handlePress = () => {
+    if (timerState.active) {
+      onToggleSubMenu();
+    } else {
+      restTimerEmitter.start(defaultRestDuration);
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.headerStopwatchBtn,
+        timerState.active && styles.headerTimerBtnActive,
+        pressed && { transform: [{ scale: 0.96 }] }
+      ]}
+      android_ripple={rippleTokens.surface}
+      accessibilityLabel="Toggle rest timer"
+    >
+      <Ionicons 
+        name={timerState.active ? "stopwatch" : "stopwatch-outline"} 
+        size={18} 
+        color={timerState.active ? colors.accent : colors.textPrimary} 
+      />
+      {timerState.active && (
+        <Text style={styles.headerRestTimerText}>{timerState.remaining}s</Text>
+      )}
+    </Pressable>
+  );
+});
+
+const RestTimerRulerContainer: React.FC<{
+  defaultRestDuration: number;
+  onCloseSubMenu: () => void;
+}> = React.memo(({ defaultRestDuration, onCloseSubMenu }) => {
+  const [timerState, setTimerState] = useState<{ remaining: number; active: boolean; endTarget?: number | null }>({
+    remaining: 0,
+    active: false,
+  });
+
+  useEffect(() => {
+    return restTimerEmitter.subscribe(setTimerState);
+  }, []);
+
+  return (
+    <RestTimerRuler
+      currentSecs={timerState.remaining}
+      defaultSecs={defaultRestDuration}
+      isRunning={timerState.active}
+      endTarget={timerState.endTarget ?? null}
+      onSecsChange={(secs) => {
+        restTimerEmitter.setRemaining(secs);
+      }}
+      onSecsChangeComplete={(secs) => {
+        scheduleRestTimerNotification(secs);
+      }}
+      onDragStart={() => {
+        restTimerEmitter.setIsDragging(true);
+      }}
+      onDragEnd={() => {
+        restTimerEmitter.setIsDragging(false);
+      }}
+      onStopStart={() => {
+        restTimerEmitter.stop();
+      }}
+      onStopComplete={() => {
+        onCloseSubMenu();
+      }}
+      onStart={() => {
+        restTimerEmitter.start(timerState.remaining || defaultRestDuration);
+      }}
+    />
+  );
+});
 
 const serializeState = (exercises: any[], note: string): string => {
   try {
@@ -473,6 +641,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   exerciseLibrary = EMPTY_ARRAY,
   onUpdateActiveExercises,
   onUpdateExerciseNotes,
+  onUpdateExerciseInsightsNotes,
   onAddCustomExercise,
   isLiveHeartRateEnabled = false,
   isPlateCalculatorEnabled = true,
@@ -498,7 +667,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const accumulatedOffsetSeconds = useRef((previousDurationMin || 0) * 60);
   const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
   const wasInitializedRef = useRef(false);
-  const [elapsed, setElapsed] = useState(() => formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
   // Workout menu state
   const [isWorkoutMenuVisible, setIsWorkoutMenuVisible] = useState(false);
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
@@ -510,7 +678,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [customDefaultTimerValue, setCustomDefaultTimerValue] = useState('');
   const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
   const hasSyncedPropsRef = useRef(false);
-  const [heartRate, setHeartRate] = useState(132);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
   const [activeInput, setActiveInput] = useState<{
@@ -526,45 +693,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     activeInputRef.current = activeInput;
   }, [activeInput]);
 
+  useEffect(() => {
+    setForegroundSuppression(visible);
+  }, [visible]);
+
   const inputRefs = useRef<{ [key: string]: any }>({});
 
-  const [showSecondsOnly, setShowSecondsOnly] = useState(false);
-  const animatedTimerStyle = useAnimatedStyle(() => ({
-    opacity: 1,
-    transform: [{ scale: 1 }],
-  }));
-
-  const toggleTimerFormat = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setShowSecondsOnly(prev => !prev);
-  }, []);
-
-  useEffect(() => {
-    if (visible) {
-      setLocalWorkoutName(workoutName);
-    }
-  }, [visible, workoutName]);
-
-  // Live heart rate telemetry tick simulation
-  useEffect(() => {
-    if (!visible || !isLiveHeartRateEnabled) return;
-    const id = setInterval(() => {
-      if (isRulerDragging.current) return;
-      setHeartRate(prev => {
-        const delta = Math.floor(Math.random() * 5) - 2; // -2 to +2
-        const next = prev + delta;
-        return Math.max(105, Math.min(160, next));
-      });
-    }, 1500);
-    return () => clearInterval(id);
-  }, [visible, isLiveHeartRateEnabled]);
-
   // Auto rest timer countdown states
-  const [restTimeRemaining, setRestTimeRemaining] = useState(0);
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const restTimerEndTarget = useRef<number | null>(null);
   const [isTimerSubMenuVisible, setIsTimerSubMenuVisible] = useState(false);
-  const isRulerDragging = useRef(false);
 
   // Exercise library selector modal states
   const [isLibraryVisible, setIsLibraryVisible] = useState(false);
@@ -572,8 +708,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [activeExerciseMenuIndex, setActiveExerciseMenuIndex] = useState<number | null>(null);
   const [isExMenuVisible, setIsExMenuVisible] = useState(false);
   const [isTimerPickerVisible, setIsTimerPickerVisible] = useState(false);
-  const [customTimerValue, setCustomTimerValue] = useState('90');
+  const [autoTimerDraft, setAutoTimerDraft] = useState<number>(defaultRestDuration);
+  const [isExerciseInsightsVisible, setIsExerciseInsightsVisible] = useState(false);
   const [isReplaceMode, setIsReplaceMode] = useState(false);
+
+  const mountedRef = useRef(true);
 
   // Bottom Sheet Swipe gesture translation and PanResponders
   const sheetTranslateY = useRef(new RN.Animated.Value(0)).current;
@@ -598,6 +737,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             duration: 180,
             useNativeDriver: true,
           }).start(() => {
+            if (!mountedRef.current) return;
             setIsExMenuVisible(false);
             sheetTranslateY.setValue(0);
           });
@@ -636,6 +776,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             duration: 180,
             useNativeDriver: true,
           }).start(() => {
+            if (!mountedRef.current) return;
             setIsTimerPickerVisible(false);
             sheetTranslateY.setValue(0);
           });
@@ -643,6 +784,46 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           RN.Animated.spring(sheetTranslateY, {
             toValue: 0,
             useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        RN.Animated.spring(sheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // PanResponder for Default Timer bottom sheet
+  const defaultTimerPanResponder = useRef(
+    RN.PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return gestureState.dy > 8 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          sheetTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
+          RN.Animated.timing(sheetTranslateY, {
+            toValue: 600,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            if (!mountedRef.current) return;
+            setIsDefaultTimerPickerVisible(false);
+            sheetTranslateY.setValue(0);
+          });
+        } else {
+          RN.Animated.spring(sheetTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
           }).start();
         }
       },
@@ -674,6 +855,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             duration: 180,
             useNativeDriver: true,
           }).start(() => {
+            if (!mountedRef.current) return;
             setIsWorkoutMenuVisible(false);
             sheetTranslateY.setValue(0);
           });
@@ -702,7 +884,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Drag-and-drop reorder state for exercises
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const exIndicesRef  = useRef<{ [id: string]: number }>({});
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const { width: windowWidth } = useWindowDimensions();
+  const [listWidth, setListWidth] = useState(windowWidth - spacing.lg * 2);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setListWidth(windowWidth - spacing.lg * 2);
+  }, [windowWidth]);
 
   const activeExercisesRef = useRef(activeExercises);
   useEffect(() => {
@@ -765,15 +959,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [activeExercises]);
 
   const lastStartTimeRef = useRef<string | null>(null);
-  // Inline render-phase adjustment: reset workout/timer state when a new workout session starts
-  const prevStartKeyForResetRef = useRef<string | null>(null);
-  const currentStartKey = startTime.toISOString();
-  if (visible && prevStartKeyForResetRef.current !== currentStartKey && prevStartKeyForResetRef.current !== null) {
-    prevStartKeyForResetRef.current = currentStartKey;
-    setIsTimerActive(false);
-  } else if (prevStartKeyForResetRef.current === null) {
-    prevStartKeyForResetRef.current = currentStartKey;
-  }
 
   // Sync props to state when modal becomes visible
   useEffect(() => {
@@ -782,21 +967,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const isNewWorkout = lastStartTimeRef.current !== startKey;
 
       if (!wasInitializedRef.current || isNewWorkout) {
+        if (isNewWorkout && lastStartTimeRef.current !== null) {
+          restTimerEmitter.stop();
+        }
         lastStartTimeRef.current = startKey;
         wasInitializedRef.current = true;
 
         // Reset timer refs and note state on a fresh track/edit session start
         resumeStartTime.current = isEditing ? new Date() : (startTime || new Date());
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
-        setElapsed(formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
         setWorkoutNote(editingComment || '');
 
-        const initial = exercises.map((ex: any, exIdx) => {
-          const setsCount = typeof ex.sets === 'number' ? ex.sets : (Array.isArray(ex.sets) ? ex.sets.length : 3);
+        const initial = exercises.map((ex: ExerciseSet, exIdx): ActiveExercise => {
+          const setsCount = ex.sets;
           
           // Reconstruct SetRecord from setsDetails if present
-          const existingDetails = (ex as any).setsDetails;
-          const isSetsArray = Array.isArray(ex.sets);
+          const existingDetails = ex.setsDetails;
           
           if (existingDetails && existingDetails.length > 0) {
             return {
@@ -827,53 +1013,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               }),
               superSetGroupId: (ex as any).superSetGroupId,
             };
-          } else if (isSetsArray && ex.sets.length > 0) {
-            return {
-              id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
-              name: ex.name,
-              sets: ex.sets.map((s: any, sIdx: number) => {
-                const isUnilateral = s.isUnilateral || false;
-                const completed = s.completed || false;
-                let suggested: SetSuggestion = {
-                  weight: s.weight?.toString() || '60',
-                  reps: s.reps?.toString() || '10',
-                  leftWeight: s.leftWeight?.toString() || s.weight?.toString() || '60',
-                  leftReps: s.leftReps?.toString() || s.reps?.toString() || '10',
-                  rightWeight: s.rightWeight?.toString() || s.weight?.toString() || '60',
-                  rightReps: s.rightReps?.toString() || s.reps?.toString() || '10',
-                };
-                if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                  suggested = getProgressiveOverloadSuggestionForSet(ex.name, sIdx, sessions, s);
-                }
-                return {
-                  id:        s.id || `set-${exIdx}-${sIdx}-${Date.now()}`,
-                  weight:    completed ? suggested.weight : '',
-                  reps:      completed ? suggested.reps : '',
-                  completed: completed,
-                  rpe:       s.rpe ? s.rpe.toString() : '',
-                  category:  (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
-                  isUnilateral: isUnilateral,
-                  leftWeight:   isUnilateral ? (completed ? suggested.leftWeight : '') : undefined,
-                  leftReps:     isUnilateral ? (completed ? suggested.leftReps : '') : undefined,
-                  rightWeight:  isUnilateral ? (completed ? suggested.rightWeight : '') : undefined,
-                  rightReps:    isUnilateral ? (completed ? suggested.rightReps : '') : undefined,
-                  suggestedWeight: suggested.weight,
-                  suggestedReps: suggested.reps,
-                  suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-                  suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-                  suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-                  suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
-                };
-              }),
-              superSetGroupId: (ex as any).superSetGroupId,
-            };
           }
  
            return {
              id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
              name: ex.name,
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
-               const isUnilateral = (ex as any).isUnilateral || false;
+               const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
+               const category = 'S';
+               const positionInCategory = setIdx;
                let suggested: SetSuggestion = {
                  weight: ex.bestWeight ? ex.bestWeight.toString() : '60',
                  reps: ex.bestReps ? ex.bestReps.toString() : '10',
@@ -883,11 +1031,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                  rightReps: ex.bestReps ? ex.bestReps.toString() : '10',
                };
                if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                 suggested = getProgressiveOverloadSuggestionForSet(ex.name, setIdx, sessions, {
-                   weight: suggested.weight,
-                   reps: suggested.reps,
-                   isUnilateral
-                 });
+                 suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral);
                }
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
@@ -909,9 +1053,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                  suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
                };
              }),
-            superSetGroupId: (ex as any).superSetGroupId,
-          };
-        });
+             superSetGroupId: (ex as any).superSetGroupId,
+           };
+         }).filter((ex): ex is ActiveExercise => Boolean(ex));
         setActiveExercises(initial);
 
         // Capture initial state for change detection (to check if user made changes)
@@ -967,172 +1111,88 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   }, [activeExercises]);
 
-  // Live timer interval
+  // Keep refs of values needed by background notifications
+  const localWorkoutNameRef = useRef(localWorkoutName);
   useEffect(() => {
-    if (!visible) return;
-    const id = setInterval(() => {
-      if (isRulerDragging.current) return;
-      setElapsed(formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
-    }, 1000);
-    return () => clearInterval(id);
+    localWorkoutNameRef.current = localWorkoutName;
+  }, [localWorkoutName]);
+
+  const visibleRef = useRef(visible);
+  useEffect(() => {
+    visibleRef.current = visible;
   }, [visible]);
 
-  // Configure notifications
   useEffect(() => {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
-  }, []);
-
-  // Background and Foreground Time Sync + Persistent Notification
-  useEffect(() => {
-    let backgroundNotificationId: string | null = null;
+    let restTimerUnsubscribe: (() => void) | null = null;
 
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState === 'active') {
-        // Sync total elapsed
-        setElapsed(formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current));
-
-        // Sync rest timer
-        if (isTimerActive && restTimerEndTarget.current) {
-          const now = Date.now();
-          if (now >= restTimerEndTarget.current) {
-            setRestTimeRemaining(0);
-            setIsTimerActive(false);
-            restTimerEndTarget.current = null;
-          } else {
-            setRestTimeRemaining(Math.ceil((restTimerEndTarget.current - now) / 1000));
-          }
+        if (restTimerUnsubscribe) {
+          restTimerUnsubscribe();
+          restTimerUnsubscribe = null;
         }
-
-        // Cancel background notification when returning to app
-        if (backgroundNotificationId) {
-          try {
-            await Notifications.dismissNotificationAsync(backgroundNotificationId);
-          } catch (e) {
-            // Ignore errors
-          }
-          backgroundNotificationId = null;
-        }
-
-        // Clear all notifications in tray
-        try {
-          await Notifications.dismissAllNotificationsAsync();
-        } catch (e) {
-          // Ignore errors
-        }
+        await dismissWorkoutBackgroundNotification();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // Show persistent notification when app goes to background during active workout
-        if (visible) {
-          const currentExerciseName = activeExercises.length > 0
-            ? activeExercises[0].name
-            : 'Workout in Progress';
-          const elapsedStr = formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current);
+        if (visibleRef.current) {
+          const initialActive = restTimerEmitter.isActive();
+          const initialRemaining = restTimerEmitter.getRemaining();
 
-          try {
-            const notifId = await Notifications.scheduleNotificationAsync({
-              content: {
-                title: `${localWorkoutName || 'Workout'}`,
-                body: `${currentExerciseName} • ${elapsedStr}${isTimerActive ? ` • Rest: ${restTimeRemaining}s` : ''}`,
-                sticky: true,
-                autoDismiss: false,
-                sound: false,
-              },
-              trigger: null, // Show immediately
-            });
-            backgroundNotificationId = notifId;
-          } catch (e) {
-            console.warn('Error showing background notification', e);
+          const buildWorkoutBody = (timerActive: boolean, timerRemaining: number, timerJustFinished: boolean) => {
+            const currentExerciseName = activeExercisesRef.current.length > 0
+              ? activeExercisesRef.current[0].name
+              : 'Workout in Progress';
+            const elapsedStr = formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current);
+            if (timerJustFinished) {
+              return `${currentExerciseName} • ${elapsedStr} • Rest complete — next set ready`;
+            }
+            return `${currentExerciseName} • ${elapsedStr}${timerActive ? ` • Rest: ${timerRemaining}s` : ''}`;
+          };
+
+          const initialBody = buildWorkoutBody(initialActive, initialRemaining, false);
+          await showWorkoutBackgroundNotification({
+            title: localWorkoutNameRef.current || 'Workout',
+            body: initialBody,
+          });
+
+          if (restTimerUnsubscribe) {
+            restTimerUnsubscribe();
           }
+
+          let prevActive = initialActive;
+          let prevRemaining = initialRemaining;
+
+          restTimerUnsubscribe = restTimerEmitter.subscribe(async (timerState) => {
+            const activeFlips = timerState.active !== prevActive;
+            const remainingHitsZero = timerState.remaining === 0 && prevRemaining > 0;
+
+            if (activeFlips || remainingHitsZero) {
+              const timerJustFinished = !timerState.active && prevActive;
+              const body = buildWorkoutBody(timerState.active, timerState.remaining, timerJustFinished);
+              await showWorkoutBackgroundNotification({
+                title: localWorkoutNameRef.current || 'Workout',
+                body,
+              });
+            }
+
+            prevActive = timerState.active;
+            prevRemaining = timerState.remaining;
+          });
         }
       }
     });
-    return () => subscription.remove();
-  }, [isTimerActive, startTime, visible, activeExercises, localWorkoutName, restTimeRemaining]);
 
-  // Rest Timer Countdown Interval
-  useEffect(() => {
-    if (!isTimerActive || restTimeRemaining <= 0) {
-      if (isTimerActive && restTimeRemaining === 0) {
-        setIsTimerActive(false);
-        setIsTimerSubMenuVisible(false);
-        restTimerEndTarget.current = null;
+    return () => {
+      subscription.remove();
+      if (restTimerUnsubscribe) {
+        restTimerUnsubscribe();
       }
-      return;
-    }
-
-    // Set target when timer becomes active
-    if (!restTimerEndTarget.current) {
-      restTimerEndTarget.current = Date.now() + restTimeRemaining * 1000;
-    }
-
-    const timerId = setInterval(() => {
-      if (isRulerDragging.current) return;
-      if (!restTimerEndTarget.current) return;
-      const now = Date.now();
-      const remaining = Math.ceil((restTimerEndTarget.current - now) / 1000);
-
-      if (remaining <= 0) {
-        setRestTimeRemaining(0);
-        setIsTimerActive(false);
-        setIsTimerSubMenuVisible(false);
-        restTimerEndTarget.current = null;
-        playTimerCompletedSound();
-      } else {
-        setRestTimeRemaining(remaining);
-      }
-    }, 1000);
-
-    return () => clearInterval(timerId);
-  }, [isTimerActive, restTimeRemaining]);
-
-  const adjustRestTimer = (seconds: number) => {
-    if (!restTimerEndTarget.current) return;
-    const now = Date.now();
-    const newTarget = restTimerEndTarget.current + seconds * 1000;
-    if (newTarget <= now) {
-      setRestTimeRemaining(0);
-      setIsTimerActive(false);
-      setIsTimerSubMenuVisible(false);
-      restTimerEndTarget.current = null;
-      Notifications.cancelAllScheduledNotificationsAsync();
-    } else {
-      restTimerEndTarget.current = newTarget;
-      const remaining = Math.ceil((newTarget - now) / 1000);
-      setRestTimeRemaining(remaining);
-      cancelAndScheduleRestNotification(remaining);
-    }
-  };
-
-  const timerPulseAnim = useSharedValue(1);
-  useEffect(() => {
-    if (!isTimerActive) return;
-    if (globalAnimation.speed === 0) {
-      timerPulseAnim.value = 1;
-      return;
-    }
-    const dur = getScaledDuration(500);
-    const easing = Easing.inOut(Easing.ease);
-    timerPulseAnim.value = withRepeat(
-      withSequence(
-        withTiming(0.4, { duration: dur, easing }),
-        withTiming(1, { duration: dur, easing })
-      ),
-      -1,
-      true
-    );
-    return () => { timerPulseAnim.value = 1; };
-  }, [isTimerActive, globalAnimation.speed]);
+      dismissWorkoutBackgroundNotification().catch(() => {});
+    };
+  }, []);
 
   // Set completeness toggler
   const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
-    const targetSet = activeExercises[exIdx]?.sets[setIdx];
+    const targetSet = activeExercisesRef.current[exIdx]?.sets[setIdx];
     if (!targetSet) return;
     const willBeCompleted = !targetSet.completed;
 
@@ -1140,12 +1200,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       playSetCheckedSound();
       playSatisfyingClickFinishSet();
       if (isAutoTimerEnabled) {
-        const customRest = activeExercises[exIdx]?.autoTimer;
+        const customRest = activeExercisesRef.current[exIdx]?.autoTimer;
         const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
-        restTimerEndTarget.current = Date.now() + duration * 1000;
-        setRestTimeRemaining(duration);
-        setIsTimerActive(true);
-        cancelAndScheduleRestNotification(duration);
+        restTimerEmitter.start(duration);
       }
     } else {
       playUncheckSetSound();
@@ -1187,30 +1244,67 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         };
       });
     });
-  }, [activeExercises, isAutoTimerEnabled, defaultRestDuration]);
+  }, [isAutoTimerEnabled, defaultRestDuration]);
 
   // Set weight/reps/rpe/category updater
   const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
+        const firstPassSets = ex.sets.map((set, sIdx) => {
+          if (sIdx !== setIdx) return set;
+          const updated = { ...set, [field]: value };
+          if (field === 'weight') (updated as any).weightSuggested = false;
+          else if (field === 'reps') (updated as any).repsSuggested = false;
+          else if (field === 'leftWeight') (updated as any).leftWeightSuggested = false;
+          else if (field === 'leftReps') (updated as any).leftRepsSuggested = false;
+          else if (field === 'rightWeight') (updated as any).rightWeightSuggested = false;
+          else if (field === 'rightReps') (updated as any).rightRepsSuggested = false;
+          return updated;
+        });
+
+        if (field === 'category') {
+          return {
+            ...ex,
+            sets: firstPassSets.map((s, sIdx) => {
+              const category = s.category || 'S';
+              let positionInCategory = 0;
+              for (let i = 0; i < sIdx; i++) {
+                if ((firstPassSets[i].category || 'S') === category) {
+                  positionInCategory++;
+                }
+              }
+              let suggested: SetSuggestion = {
+                weight: '60',
+                reps: '10',
+                leftWeight: '60',
+                leftReps: '10',
+                rightWeight: '60',
+                rightReps: '10',
+              };
+              if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+                suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, s.isUnilateral || false);
+              }
+              return {
+                ...s,
+                suggestedWeight: suggested.weight,
+                suggestedReps: suggested.reps,
+                suggestedLeftWeight: s.isUnilateral ? suggested.leftWeight : undefined,
+                suggestedLeftReps: s.isUnilateral ? suggested.leftReps : undefined,
+                suggestedRightWeight: s.isUnilateral ? suggested.rightWeight : undefined,
+                suggestedRightReps: s.isUnilateral ? suggested.rightReps : undefined,
+              };
+            })
+          };
+        }
+
         return {
           ...ex,
-          sets: ex.sets.map((set, sIdx) => {
-            if (sIdx !== setIdx) return set;
-            const updated = { ...set, [field]: value };
-            if (field === 'weight') (updated as any).weightSuggested = false;
-            else if (field === 'reps') (updated as any).repsSuggested = false;
-            else if (field === 'leftWeight') (updated as any).leftWeightSuggested = false;
-            else if (field === 'leftReps') (updated as any).leftRepsSuggested = false;
-            else if (field === 'rightWeight') (updated as any).rightWeightSuggested = false;
-            else if (field === 'rightReps') (updated as any).rightRepsSuggested = false;
-            return updated;
-          })
+          sets: firstPassSets
         };
       });
     });
-  }, []);
+  }, [isProgressiveOverloadEnabled, sessions]);
 
   // Stable keyboard close/dismiss handler
   const handleCloseKeyboard = useCallback(() => {
@@ -1222,20 +1316,34 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Stable input focus handler (must NOT be inside .map())
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
-    // 1. Commit the active input first (using activeInput and tempInputValueRef.current)
+    // Commit previous field value first
     if (activeInputRef.current) {
       updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
     }
-    
-    // 2. Set the new input value and focus
+
+    // Set the new input value and focus
     const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] || '';
-    setTempInputValue(String(currentVal));
-    tempInputValueRef.current = String(currentVal);
+    const valStr = String(currentVal);
+    setTempInputValue(valStr);
+    tempInputValueRef.current = valStr;
     
     const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
     setActiveInput(newInput);
     activeInputRef.current = newInput;
   }, [updateSetField]);
+
+
+
+  useEffect(() => {
+    if (visible) {
+      setLocalWorkoutName(workoutName);
+    } else {
+      if (activeInputRef.current) {
+        updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+      }
+      setActiveInput(null);
+    }
+  }, [visible, workoutName, updateSetField]);
 
   // Add a set
   const addSet = useCallback((exIdx: number, isUnilateral: boolean = false) => {
@@ -1245,13 +1353,31 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         if (eIdx !== exIdx) return ex;
         const currentSets = ex.sets;
         const lastSet = currentSets[currentSets.length - 1];
+        const category = lastSet?.category ?? 'S';
+        const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
 
-        const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
-        const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
-        const sugLeftWeight = isUnilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined;
-        const sugLeftReps = isUnilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined;
-        const sugRightWeight = isUnilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined;
-        const sugRightReps = isUnilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined;
+        let suggested: SetSuggestion = {
+          weight: '60',
+          reps: '10',
+          leftWeight: '60',
+          leftReps: '10',
+          rightWeight: '60',
+          rightReps: '10',
+        };
+        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+          suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral);
+        } else {
+          const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
+          const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
+          suggested = {
+            weight: sugWeight,
+            reps: sugReps,
+            leftWeight: isUnilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
+            leftReps: isUnilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
+            rightWeight: isUnilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
+            rightReps: isUnilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
+          };
+        }
 
         const newSet: SetRecord = {
           id:        `set-${exIdx}-${Date.now()}-${Math.random()}`,
@@ -1259,18 +1385,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           reps:      '',
           completed: false,
           rpe:       '',
-          category:  lastSet?.category ?? 'S',
+          category:  category,
           isUnilateral: isUnilateral,
           leftWeight:   isUnilateral ? '' : undefined,
           leftReps:     isUnilateral ? '' : undefined,
           rightWeight:  isUnilateral ? '' : undefined,
           rightReps:    isUnilateral ? '' : undefined,
-          suggestedWeight: sugWeight,
-          suggestedReps: sugReps,
-          suggestedLeftWeight: sugLeftWeight,
-          suggestedLeftReps: sugLeftReps,
-          suggestedRightWeight: sugRightWeight,
-          suggestedRightReps: sugRightReps,
+          suggestedWeight: suggested.weight,
+          suggestedReps: suggested.reps,
+          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
         } as any;
         return {
           ...ex,
@@ -1278,7 +1404,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         };
       });
     });
-  }, []);
+  }, [isProgressiveOverloadEnabled, sessions]);
 
   // Delete a set
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
@@ -1321,10 +1447,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         if (isAutoTimerEnabled) {
           const customRest = activeExercises[exIdx]?.autoTimer;
           const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
-          restTimerEndTarget.current = Date.now() + duration * 1000;
-          setRestTimeRemaining(duration);
-          setIsTimerActive(true);
-          cancelAndScheduleRestNotification(duration);
+          restTimerEmitter.start(duration);
         }
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActiveExercises(prev => {
@@ -1351,7 +1474,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     // 3. Default Jumps for bilateral sets
     if (fieldName === 'weight') {
       const nextKey = `${exIdx}-${setIdx}-reps`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'reps', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1361,7 +1483,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     // 4. Default Jumps for unilateral sets: leftWeight -> leftReps -> rightWeight -> rightReps
     if (fieldName === 'leftWeight') {
       const nextKey = `${exIdx}-${setIdx}-leftReps`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'leftReps', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1369,7 +1490,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     if (fieldName === 'leftReps') {
       const nextKey = `${exIdx}-${setIdx}-rightWeight`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'rightWeight', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1377,7 +1497,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     if (fieldName === 'rightWeight') {
       const nextKey = `${exIdx}-${setIdx}-rightReps`;
-      setActiveInput({ exIdx, setIdx, fieldName: 'rightReps', focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1390,7 +1509,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const nextSet = currentEx.sets[setIdx + 1];
       const nextFieldName = nextSet?.isUnilateral ? 'leftWeight' : 'weight';
       const nextKey = `${exIdx}-${setIdx + 1}-${nextFieldName}`;
-      setActiveInput({ exIdx, setIdx: setIdx + 1, fieldName: nextFieldName, focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1402,7 +1520,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const nextEx = activeExercises[exIdx + 1];
       const nextFieldName = nextEx?.sets[0]?.isUnilateral ? 'leftWeight' : 'weight';
       const nextKey = `${exIdx + 1}-0-${nextFieldName}`;
-      setActiveInput({ exIdx: exIdx + 1, setIdx: 0, fieldName: nextFieldName, focusTime: Date.now() });
       if (inputRefs.current[nextKey]) {
         inputRefs.current[nextKey].focus();
       }
@@ -1415,6 +1532,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Calculate volume & sets for summary
   const handleFinishPress = () => {
+    cleanupTimerAndNotifications();
     let totalVolume = 0;
     let totalSets   = 0;
     
@@ -1474,6 +1592,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
   };
 
+  const cleanupTimerAndNotifications = () => {
+    restTimerEmitter.stop();
+    cancelRestTimerNotification();
+    dismissWorkoutBackgroundNotification();
+    setForegroundSuppression(false);
+  };
+
   const handleDiscardPress = () => {
     let completedSetsCount = 0;
     activeExercises.forEach(ex => {
@@ -1483,11 +1608,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
 
     if (completedSetsCount === 0) {
+      cleanupTimerAndNotifications();
       setActiveExercises([]);
       wasInitializedRef.current = false;
       onDiscard();
     } else {
-      Alert.alert(
+      WebSafeAlert.alert(
         'Discard Workout?',
         'Are you sure you want to discard this workout? All tracked sets will be permanently lost.',
         [
@@ -1496,6 +1622,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             text: 'Discard',
             style: 'destructive',
             onPress: () => {
+              cleanupTimerAndNotifications();
               setActiveExercises([]);
               wasInitializedRef.current = false;
               onDiscard();
@@ -1507,14 +1634,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   };
 
   // Exercise menu press
-  const handleExerciseMenuPress = (exIdx: number) => {
+  const handleExerciseMenuPress = useCallback((exIdx: number) => {
     setActiveExerciseMenuIndex(exIdx);
     setIsExMenuVisible(true);
-  };
+  }, []);
 
   const handleRemoveExercise = () => {
     if (activeExerciseMenuIndex !== null) {
-      Alert.alert(
+      WebSafeAlert.alert(
         'Remove Exercise',
         `Are you sure you want to remove "${activeExercises[activeExerciseMenuIndex].name}" from your active session?`,
         [
@@ -1567,6 +1694,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const isUnilateral = targetEx?.sets[0]?.isUnilateral || false;
 
       const updatedSets = targetEx.sets.map((s, sIdx) => {
+        const category = s.category || 'S';
+        let positionInCategory = 0;
+        for (let i = 0; i < sIdx; i++) {
+          if ((targetEx.sets[i].category || 'S') === category) {
+            positionInCategory++;
+          }
+        }
         let suggested: SetSuggestion = {
           weight: '60',
           reps: '10',
@@ -1576,7 +1710,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           rightReps: '10',
         };
         if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          suggested = getProgressiveOverloadSuggestionForSet(exName, sIdx, sessions, { isUnilateral });
+          suggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
         } else {
           const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
           if (libEx) {
@@ -1634,11 +1768,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           );
           const found = previousSession?.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
           if (found) {
-            setsCount = typeof found.sets === 'number' ? found.sets : (found.setsDetails?.length || found.sets?.length || 3);
+            setsCount = found.setsDetails?.length || found.sets || 3;
           }
         }
 
         const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
+          const category = 'S';
+          const positionInCategory = sIdx;
           let suggested: SetSuggestion = {
             weight: '60',
             reps: '10',
@@ -1648,7 +1784,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             rightReps: '10',
           };
           if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-            suggested = getProgressiveOverloadSuggestionForSet(exName, sIdx, sessions, { isUnilateral });
+            suggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
           } else if (libEx) {
             suggested.weight = (libEx.bestWeight || 60).toString();
             suggested.reps = (libEx.bestReps || 10).toString();
@@ -1695,11 +1831,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     handleConfirmExercisesFromPicker([exName]);
   };
 
-  // Legacy exercise drag helpers removed in favor of ReorderableList
+  // Legacy exercise drag helpers removed
 
   const handleSaveCustomExercise = () => {
     if (!customExerciseName.trim()) {
-      Alert.alert('Error', 'Please enter an exercise name.');
+      WebSafeAlert.alert('Error', 'Please enter an exercise name.');
       return;
     }
     if (onAddCustomExercise) {
@@ -1724,7 +1860,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         setIsCreatingCustom(false);
       }
     } else {
-      Alert.alert('Info', 'Database integration is missing in this view.');
+      WebSafeAlert.alert('Info', 'Database integration is missing in this view.');
     }
   };
 
@@ -1765,96 +1901,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
                 </Pressable>
                 
-                <Pressable
-                  onPress={() => {
-                    if (isTimerActive) {
-                      setIsTimerSubMenuVisible(!isTimerSubMenuVisible);
-                    } else {
-                      restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
-                      setRestTimeRemaining(defaultRestDuration);
-                      setIsTimerActive(true);
-                      cancelAndScheduleRestNotification(defaultRestDuration);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    styles.headerStopwatchBtn,
-                    isTimerActive && styles.headerTimerBtnActive,
-                    pressed && { transform: [{ scale: 0.96 }] }
-                  ]}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Toggle rest timer"
-                >
-                  <Ionicons 
-                    name={isTimerActive ? "stopwatch" : "stopwatch-outline"} 
-                    size={18} 
-                    color={isTimerActive ? colors.accent : colors.textPrimary} 
-                  />
-                  {isTimerActive && (
-                    <Text style={styles.headerRestTimerText}>{restTimeRemaining}s</Text>
-                  )}
-                </Pressable>
- 
-                {isPlateCalculatorEnabled && (
-                  <Pressable
-                    onPress={() => setIsPlateCalcVisible(true)}
-                    style={({ pressed }) => [
-                      styles.headerStopwatchBtn,
-                      pressed && { transform: [{ scale: 0.96 }] }
-                    ]}
-                    android_ripple={rippleTokens.surface}
-                    accessibilityLabel="Open plate calculator"
-                  >
-                    <Ionicons name="disc-outline" size={18} color={colors.textPrimary} />
-                  </Pressable>
-                )}
+                <RestTimerHeaderButton
+                  isSubMenuVisible={isTimerSubMenuVisible}
+                  onToggleSubMenu={() => setIsTimerSubMenuVisible(!isTimerSubMenuVisible)}
+                  defaultRestDuration={defaultRestDuration}
+                />
+                 {/* Plate Calculator button was removed from here */}
               </View>
  
-              {(() => {
-                const sessionSec = Math.max(0, Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000));
-                const totalSeconds = sessionSec + accumulatedOffsetSeconds.current;
-                return (
-                  <View style={[styles.headerCenter, { pointerEvents: 'box-none' }]}>
-                    <Pressable
-                      onPress={toggleTimerFormat}
-                      style={({ pressed }) => [
-                        {
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: spacing.md,
-                          paddingVertical: spacing.sm,
-                          opacity: pressed ? 0.75 : 1.0,
-                        },
-                        pressed && { transform: [{ scale: 0.96 }] }
-                      ]}
-                      hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
-                      accessibilityLabel="Toggle elapsed timer format"
-                    >
-                      <Animated.View
-                        style={[
-                          {
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                          },
-                          animatedTimerStyle,
-                        ]}
-                      >
-                        {showSecondsOnly ? (
-                          <Text style={styles.headerTimerText}>{totalSeconds}s</Text>
-                        ) : (
-                          <Text style={styles.headerTimerText}>{elapsed}</Text>
-                        )}
-                        {isLiveHeartRateEnabled && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 4 }}>
-                            <Ionicons name="heart" size={14} color={colors.error} />
-                            <Text style={{ color: colors.error, fontSize: 13, fontFamily: font.bold }}>{heartRate}</Text>
-                          </View>
-                        )}
-                      </Animated.View>
-                    </Pressable>
-                  </View>
-                );
-              })()}
+              <View pointerEvents="box-none" style={styles.headerCenter}>
+                <ElapsedTimeText
+                  startTime={resumeStartTime.current}
+                  offsetSeconds={accumulatedOffsetSeconds.current}
+                  visible={visible}
+                  style={styles.headerTimerText}
+                />
+              </View>
  
               <View style={styles.headerRight}>
                 <Pressable
@@ -1887,17 +1949,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
-            <ScrollView
+            <Animated.ScrollView
+              ref={scrollRef}
               scrollEnabled={scrollEnabled}
               style={styles.scroll}
               contentContainerStyle={[
                 styles.scrollContent,
-                isTimerActive ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl },
+                isTimerSubMenuVisible ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl },
                 activeInput !== null && { paddingBottom: 280 }
               ]}
               showsVerticalScrollIndicator={false}
               overScrollMode="never"
               keyboardShouldPersistTaps="handled"
+              onStartShouldSetResponder={() => {
+                if (activeInputRef.current !== null) {
+                  handleCloseKeyboard();
+                }
+                return false;
+              }}
             >
               {/* Workout Title Section */}
               <View style={styles.workoutTitleSection}>
@@ -1959,57 +2028,86 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <Text style={styles.emptyText}>No exercises added yet.</Text>
                 </View>
               ) : (
-              <ReorderableList
-                data={activeExercises}
-                keyExtractor={(item) => item.id}
-                onReorder={(newData) => {
-                  setActiveExercises(sanitizeSuperSets(newData));
+              <View
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0 && w !== listWidth) {
+                    setListWidth(w);
+                  }
                 }}
+                style={{ width: '100%' }}
+              >
+              <Sortable.Flex
+                flexDirection="column"
+                gap={0}
+                width="fill"
+                customHandle
+                dragActivationDelay={0}
+                dragActivationFailOffset={5}
+                activeItemScale={1.02}
+                activeItemOpacity={1}
+                activeItemShadowOpacity={0.45}
+                inactiveItemOpacity={1}
+                inactiveItemScale={1}
+                enableActiveItemSnap={false}
+                dimensionsAnimationType="layout"
+                itemsLayoutTransitionMode="reorder"
+                dropAnimationDuration={250}
+                strategy="insert"
+                reorderTriggerOrigin="center"
+                overDrag="vertical"
+                hapticsEnabled
+                scrollableRef={scrollRef}
                 onDragStart={() => setScrollEnabled(false)}
-                onDragEnd={() => setScrollEnabled(true)}
-                renderItem={({ item: exercise, index: exIdx }) => {
-                  exIndicesRef.current[exercise.id] = exIdx;
+                onDragEnd={({ order }) => setActiveExercises(sanitizeSuperSets(order(activeExercises)))}
+                onActiveItemDropped={() => setScrollEnabled(true)}
+                itemExiting={null}
+              >
+                {activeExercises.map((exercise, exIdx) => {
                   const isSuperSet = !!exercise.superSetGroupId;
                   const nextIsSameSuperSet = isSuperSet && exIdx < activeExercises.length - 1 && activeExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
                   const prevIsSameSuperSet = isSuperSet && exIdx > 0 && activeExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
                   const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
-                  const exItemKey = exercise.id;
 
                   return (
-                    <SharedSwipeableRow
-                      onDelete={() => {
-                        setActiveExercises(prev => {
-                          const filtered = prev.filter((_, idx) => idx !== exIdx);
-                          return sanitizeSuperSets(filtered);
-                        });
-                      }}
-                      activeOffsetX={[-30, 30]}
-                      style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}
-                    >
-                      <ActiveExerciseRow
-                        exercise={exercise}
-                        exIdx={exIdx}
-                        exItemKey={exItemKey}
-                        isSuperSet={isSuperSet}
-                        nextIsSameSuperSet={nextIsSameSuperSet}
-                        prevIsSameSuperSet={prevIsSameSuperSet}
-                        superSetColor={superSetColor}
-                        handleExerciseMenuPress={handleExerciseMenuPress}
-                        exerciseLibrary={exerciseLibrary}
-                        activeInput={activeInput}
-                        handleSetFocus={handleSetFocus}
-                        updateSetField={updateSetField}
-                        deleteSet={deleteSet}
-                        toggleSetComplete={toggleSetComplete}
-                        inputRefs={inputRefs}
-                        isRpeMode={isRpeMode}
-                        addSet={addSet}
-                        tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                      />
-                    </SharedSwipeableRow>
+                    <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg, width: listWidth }}>
+                      <SharedSwipeableRow
+                        onDelete={() => {
+                          setActiveExercises(prev => {
+                            const filtered = prev.filter((_, idx) => idx !== exIdx);
+                            return sanitizeSuperSets(filtered);
+                          });
+                        }}
+                        activeOffsetX={[-15, 15]}
+                        snapBackOnRelease={true}
+                        borderRadius={radius.md}
+                      >
+                        <ActiveExerciseRow
+                          exercise={exercise}
+                          exIdx={exIdx}
+                          exItemKey={exercise.id}
+                          isSuperSet={isSuperSet}
+                          nextIsSameSuperSet={nextIsSameSuperSet}
+                          prevIsSameSuperSet={prevIsSameSuperSet}
+                          superSetColor={superSetColor}
+                          handleExerciseMenuPress={handleExerciseMenuPress}
+                          exerciseLibrary={exerciseLibrary}
+                          activeInput={activeInput}
+                          handleSetFocus={handleSetFocus}
+                          updateSetField={updateSetField}
+                          deleteSet={deleteSet}
+                          toggleSetComplete={toggleSetComplete}
+                          inputRefs={inputRefs}
+                          isRpeMode={isRpeMode}
+                          addSet={addSet}
+                          tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                        />
+                      </SharedSwipeableRow>
+                    </View>
                   );
-                }}
-              />
+                })}
+              </Sortable.Flex>
+              </View>
               )}
 
               {/* Discard Workout button */}
@@ -2024,45 +2122,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Ionicons name="trash-outline" size={16} color={colors.error} style={{ marginRight: spacing.xs }} />
                 <Text style={styles.scrollDiscardText}>DISCARD WORKOUT</Text>
               </Pressable>
-            </ScrollView>
+            </Animated.ScrollView>
 
             {/* Timer Ruler Sub-menu */}
             {isTimerSubMenuVisible && (
               <View style={styles.timerSubMenu}>
-                <RestTimerRuler
-                  currentSecs={restTimeRemaining}
-                  defaultSecs={defaultRestDuration}
-                  isRunning={isTimerActive}
-                  onSecsChange={(secs) => {
-                    if (!restTimerEndTarget.current) return;
-                    const newTarget = Date.now() + secs * 1000;
-                    restTimerEndTarget.current = newTarget;
-                    setRestTimeRemaining(secs);
-                  }}
-                  onSecsChangeComplete={(secs) => {
-                    cancelAndScheduleRestNotification(secs);
-                  }}
-                  onDragStart={() => {
-                    isRulerDragging.current = true;
-                  }}
-                  onDragEnd={() => {
-                    isRulerDragging.current = false;
-                  }}
-                  onStopStart={() => {
-                    setIsTimerActive(false);
-                    restTimerEndTarget.current = null;
-                    Notifications.cancelAllScheduledNotificationsAsync();
-                    playSatisfyingClickStopTimer();
-                  }}
-                  onStopComplete={() => {
-                    setIsTimerSubMenuVisible(false);
-                  }}
-                  onStart={() => {
-                    restTimerEndTarget.current = Date.now() + defaultRestDuration * 1000;
-                    setRestTimeRemaining(defaultRestDuration);
-                    setIsTimerActive(true);
-                    cancelAndScheduleRestNotification(defaultRestDuration);
-                  }}
+                <RestTimerRulerContainer
+                  defaultRestDuration={defaultRestDuration}
+                  onCloseSubMenu={() => setIsTimerSubMenuVisible(false)}
                 />
               </View>
             )}
@@ -2082,6 +2149,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   style={styles.sheetBackdrop}
                   onPress={() => setIsExMenuVisible(false)}
+                  testID="ex-menu-backdrop"
                 >
                   <RN.Animated.View
                     style={[
@@ -2091,6 +2159,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     onStartShouldSetResponder={() => true}
                     onResponderTerminationRequest={() => false}
                     {...exMenuPanResponder.panHandlers}
+                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
                   >
                     <View style={styles.dragHandleContainer}>
                       <View style={styles.sheetDragHandle} />
@@ -2104,11 +2173,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       style={styles.sheetItem}
                       onPress={() => {
                         const currentTimer = activeExercises[activeExerciseMenuIndex].autoTimer;
-                        setCustomTimerValue(currentTimer ? currentTimer.toString() : '');
+                        setAutoTimerDraft(currentTimer ?? defaultRestDuration);
                         setIsExMenuVisible(false);
                         setIsTimerPickerVisible(true);
                       }}
                       android_ripple={rippleTokens.surface}
+                      testID="set-auto-timer"
                     >
                       <Ionicons name="time-outline" size={20} color={colors.accent} />
                       <Text style={styles.sheetItemText}>Set Auto-Timer</Text>
@@ -2184,9 +2254,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         }
                       }}
                       android_ripple={rippleTokens.surface}
+                      testID="view-edit-notes"
                     >
                       <Ionicons name="document-text-outline" size={20} color={colors.accent} />
                       <Text style={styles.sheetItemText}>View/Edit Notes</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.sheetItem}
+                      onPress={() => {
+                        if (activeExerciseMenuIndex !== null) {
+                          setIsExMenuVisible(false);
+                          setIsExerciseInsightsVisible(true);
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                      testID="exercise-insights-menu-item"
+                    >
+                      <Ionicons name="analytics-outline" size={20} color={colors.accent} />
+                      <Text style={styles.sheetItemText}>Exercise Insights</Text>
                     </Pressable>
 
                     <Pressable
@@ -2197,8 +2283,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       <Ionicons name="swap-horizontal-outline" size={20} color={colors.accent} />
                       <Text style={styles.sheetItemText}>Replace Exercise</Text>
                     </Pressable>
-
-                    {/* Remove Exercise menu item removed in favor of direct swipe-to-delete */}
                   </RN.Animated.View>
                 </Pressable>
               </Modal>
@@ -2215,6 +2299,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   style={styles.sheetBackdrop}
                   onPress={() => setIsTimerPickerVisible(false)}
+                  testID="timer-picker-backdrop"
                 >
                   <RN.Animated.View
                     style={[
@@ -2224,6 +2309,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     onStartShouldSetResponder={() => true}
                     onResponderTerminationRequest={() => false}
                     {...timerPickerPanResponder.panHandlers}
+                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
                   >
                     <View style={styles.dragHandleContainer}>
                       <View style={styles.sheetDragHandle} />
@@ -2232,134 +2318,34 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     <Text style={styles.sheetTitle}>
                       {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
                     </Text>
-                    
-                    <Text style={{
-                      color: colors.textSecondary,
-                      fontSize: font.sizes.xs,
-                      fontFamily: font.medium,
-                      marginBottom: spacing.xs,
-                    }}>
-                      Configure custom rest duration (seconds)
-                    </Text>
 
-                    <View style={styles.bottomSheetOptions}>
-                      {/* Option to clear custom rest duration */}
-                      <Pressable
-                        style={[
-                          styles.soundOptionRow,
-                          activeExercises[activeExerciseMenuIndex].autoTimer === undefined && styles.soundOptionRowActive
-                        ]}
-                        onPress={() => {
+                    {/* Rest Timer Picker wrapper */}
+                    <View style={{ marginVertical: spacing.md }}>
+                      <RestTimerPicker
+                        value={autoTimerDraft}
+                        defaultValue={defaultRestDuration}
+                        max={1000}
+                        step={5}
+                        onChange={setAutoTimerDraft}
+                        onCommit={setAutoTimerDraft}
+                        onReset={() => setAutoTimerDraft(defaultRestDuration)}
+                        onSave={() => {
+                          if (autoTimerDraft <= 0 || autoTimerDraft > 1000) {
+                            WebSafeAlert.alert('Invalid Input', 'Please select a valid rest duration.');
+                            return;
+                          }
                           setActiveExercises(prev => {
                             const updated = [...prev];
                             updated[activeExerciseMenuIndex] = {
                               ...updated[activeExerciseMenuIndex],
-                              autoTimer: undefined,
+                              autoTimer: autoTimerDraft === defaultRestDuration ? undefined : autoTimerDraft,
                             };
                             return updated;
                           });
                           setIsTimerPickerVisible(false);
                         }}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <View style={styles.soundOptionLeft}>
-                          <Ionicons 
-                            name="globe-outline" 
-                            size={18} 
-                            color={activeExercises[activeExerciseMenuIndex].autoTimer === undefined ? colors.accent : colors.textSecondary} 
-                          />
-                          <Text style={[
-                            styles.soundOptionText,
-                            activeExercises[activeExerciseMenuIndex].autoTimer === undefined && styles.soundOptionTextActive
-                          ]}>
-                            Use Global Default ({defaultRestDuration}s)
-                          </Text>
-                        </View>
-                        {activeExercises[activeExerciseMenuIndex].autoTimer === undefined && (
-                          <Ionicons name="checkmark" size={20} color={colors.accent} />
-                        )}
-                      </Pressable>
-
-                      {([30, 60, 90, 120, 180] as const).map((durationVal) => {
-                        const isSelected = activeExercises[activeExerciseMenuIndex].autoTimer === durationVal;
-                        return (
-                          <Pressable
-                            key={durationVal}
-                            style={[
-                              styles.soundOptionRow,
-                              isSelected && styles.soundOptionRowActive
-                            ]}
-                            onPress={() => {
-                              setActiveExercises(prev => {
-                                const updated = [...prev];
-                                updated[activeExerciseMenuIndex] = {
-                                  ...updated[activeExerciseMenuIndex],
-                                  autoTimer: durationVal,
-                                };
-                                return updated;
-                              });
-                              setIsTimerPickerVisible(false);
-                            }}
-                            android_ripple={rippleTokens.surface}
-                          >
-                            <View style={styles.soundOptionLeft}>
-                              <Ionicons 
-                                name="time-outline" 
-                                size={18} 
-                                color={isSelected ? colors.accent : colors.textSecondary} 
-                              />
-                              <Text style={[
-                                styles.soundOptionText,
-                                isSelected && styles.soundOptionTextActive
-                              ]}>
-                                {durationVal < 60 ? `${durationVal}s` : `${durationVal / 60}m (${durationVal}s)`}
-                              </Text>
-                            </View>
-                            {isSelected && (
-                              <Ionicons name="checkmark" size={20} color={colors.accent} />
-                            )}
-                          </Pressable>
-                        );
-                      })}
+                      />
                     </View>
-
-                    {/* Custom input card */}
-                    <Card padding={spacing.md} style={styles.customTimerContainer}>
-                      <Text style={styles.customTimerTitle}>Custom Rest Duration (Seconds)</Text>
-                      <View style={styles.customTimerRow}>
-                        <TextInput
-                          style={styles.customTimerInput}
-                          keyboardType="number-pad"
-                          value={customTimerValue}
-                          onChangeText={(val) => setCustomTimerValue(val.replace(/[^0-9]/g, ''))}
-                          placeholder="E.g. 45"
-                          placeholderTextColor={colors.textMuted}
-                          maxLength={4}
-                        />
-                        <Pressable
-                          style={styles.customTimerBtn}
-                          onPress={() => {
-                            const parsed = parseInt(customTimerValue, 10);
-                            if (!isNaN(parsed) && parsed > 0) {
-                              setActiveExercises(prev => {
-                                const updated = [...prev];
-                                updated[activeExerciseMenuIndex] = {
-                                  ...updated[activeExerciseMenuIndex],
-                                  autoTimer: parsed,
-                                };
-                                return updated;
-                              });
-                              setIsTimerPickerVisible(false);
-                            } else {
-                              Alert.alert('Invalid Input', 'Please enter a valid number of seconds.');
-                            }
-                          }}
-                          android_ripple={rippleTokens.surface}
-                        >
-                          <Text style={styles.customTimerBtnText}>Save</Text>
-                        </Pressable>
-                      </View>
-                    </Card>
                   </RN.Animated.View>
                 </Pressable>
               </Modal>
@@ -2405,12 +2391,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         keyboardAppearance="dark"
                         maxLength={150}
                         autoFocus
+                        testID="notes-input"
                       />
 
                       <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md, width: '100%' }}>
                         <Pressable
                           style={[styles.modalBtnCancel, { flex: 1 }]}
                           onPress={() => setIsNotesModalVisible(false)}
+                          testID="cancel-notes-btn"
                         >
                           <Text style={styles.modalBtnCancelText}>CANCEL</Text>
                         </Pressable>
@@ -2421,12 +2409,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
                             if (libEx && onUpdateExerciseNotes) {
                               onUpdateExerciseNotes(libEx.id, noteText.trim() || undefined);
-                              Alert.alert('Success', 'Note saved successfully!');
+                              WebSafeAlert.alert('Success', 'Note saved successfully!');
                             } else {
-                              Alert.alert('Info', 'Note updated locally');
+                              WebSafeAlert.alert('Info', 'Note updated locally');
                             }
                             setIsNotesModalVisible(false);
                           }}
+                          testID="save-notes-btn"
                         >
                           <Text style={styles.modalBtnSaveText}>SAVE</Text>
                         </Pressable>
@@ -2437,143 +2426,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Modal>
             )}
 
-            {/* Modal C: Barbell Plate Calculator */}
-            {isPlateCalcVisible && (
-              <Modal
-                visible={isPlateCalcVisible}
-                animationType="fade"
-                transparent
-                onRequestClose={() => setIsPlateCalcVisible(false)}
-              >
-                <Pressable
-                  style={styles.backdrop}
-                  onPress={() => setIsPlateCalcVisible(false)}
-                >
-                  <Pressable
-                    style={styles.card}
-                    onPress={e => e.stopPropagation()}
-                  >
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>PLATE CALCULATOR</Text>
-                      <IconButton
-                        name="close"
-                        size={22}
-                        color={colors.textSecondary}
-                        onPress={() => setIsPlateCalcVisible(false)}
-                      />
-                    </View>
-
-                    <View style={styles.plateCalcBody}>
-                      {/* Bar weight toggle */}
-                      <View style={styles.barWeightToggleRow}>
-                        <Text style={styles.plateCalcLabel}>BARBELL WEIGHT</Text>
-                        <View style={styles.barWeightToggleGroup}>
-                          <Pressable
-                            style={[styles.barToggleBtn, barWeight === 20 && styles.barToggleBtnActive]}
-                            onPress={() => setBarWeight(20)}
-                          >
-                            <Text style={[styles.barToggleText, barWeight === 20 && styles.barToggleTextActive]}>20 kg</Text>
-                          </Pressable>
-                          <Pressable
-                            style={[styles.barToggleBtn, barWeight === 15 && styles.barToggleBtnActive]}
-                            onPress={() => setBarWeight(15)}
-                          >
-                            <Text style={[styles.barToggleText, barWeight === 15 && styles.barToggleTextActive]}>15 kg</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {/* Weight input */}
-                      <View style={{ rowGap: spacing.xs, marginVertical: spacing.sm }}>
-                        <Text style={styles.plateCalcLabel}>TARGET TOTAL WEIGHT (KG)</Text>
-                        <TextInput
-                          style={styles.plateCalcInput}
-                          keyboardType="numeric"
-                          value={plateCalcTargetWeight}
-                          onChangeText={setPlateCalcTargetWeight}
-                          keyboardAppearance="dark"
-                          selectTextOnFocus
-                          placeholder="e.g. 100"
-                          placeholderTextColor={colors.textMuted}
-                        />
-                      </View>
-
-                      {/* Plate breakdown */}
-                      <View style={styles.visualBarbellContainer}>
-                        <Text style={styles.plateCalcSectionTitle}>PLATES PER SIDE (ONE SLEEVE)</Text>
-                        {calculatedPlates.length === 0 ? (
-                          <View style={styles.emptyPlatesBox}>
-                            <Text style={styles.emptyPlatesText}>
-                              {parseFloat(plateCalcTargetWeight) <= barWeight
-                                ? "Weight must exceed barbell weight."
-                                : "Add weight to calculate plates."}
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.platesDisplay}>
-                            {/* Visual representation of barbell sleeve */}
-                            <View style={styles.barbellSleeveVisual}>
-                              {/* Sleeve bar */}
-                              <View style={styles.sleeveBarLine} />
-                              {/* Sleeve stop */}
-                              <View style={styles.sleeveStop} />
-                              
-                              {/* Plates array stacked on sleeve */}
-                              <View style={styles.stackedPlatesContainer}>
-                                {calculatedPlates.map((plate) => {
-                                  const scaleFactor = plate.size >= 25 ? 1.0 : plate.size >= 20 ? 0.93 : plate.size >= 15 ? 0.86 : plate.size >= 10 ? 0.79 : plate.size >= 5 ? 0.72 : 0.65;
-                                  const heightVal = 86 * scaleFactor;
-                                  const widthVal = 13 * scaleFactor;
-                                  
-                                  return (
-                                    <View
-                                      key={`${plate.size}-${plate.color}`}
-                                      style={[
-                                        styles.visualPlate,
-                                        {
-                                          backgroundColor: plate.color,
-                                          height: heightVal,
-                                          width: widthVal,
-                                          borderRadius: 3,
-                                          marginRight: 2,
-                                        }
-                                      ]}
-                                    >
-                                      <Text style={[styles.visualPlateText, { color: plate.textColor, fontSize: 8 * scaleFactor }]}>
-                                        {plate.size}
-                                      </Text>
-                                    </View>
-                                  );
-                                })}
-                              </View>
-                            </View>
-
-                            {/* Plate list legend text */}
-                            <View style={styles.platesTextLegend}>
-                              {(() => {
-                                const counts: Record<number, number> = {};
-                                calculatedPlates.forEach(p => {
-                                  counts[p.size] = (counts[p.size] || 0) + 1;
-                                });
-                                return Object.keys(counts).sort((a, b) => parseFloat(b) - parseFloat(a)).map(sizeStr => {
-                                  const size = parseFloat(sizeStr);
-                                  const count = counts[size];
-                                  return (
-                                    <Text key={sizeStr} style={styles.legendTextLine}>
-                                      • <Text style={{ color: colors.textPrimary, fontFamily: font.bold }}>{count}x</Text> {size} kg plate{count > 1 ? 's' : ''}
-                                    </Text>
-                                  );
-                                });
-                              })()}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  </Pressable>
-                </Pressable>
-              </Modal>
+            {/* Modal: Exercise Insights */}
+            {isExerciseInsightsVisible && activeExerciseMenuIndex !== null && (
+              <ExerciseInsightsModal
+                visible={isExerciseInsightsVisible}
+                exerciseName={activeExercises[activeExerciseMenuIndex].name}
+                exerciseLibraryEntry={exerciseLibrary?.find(
+                  (e) => e.name.toLowerCase() === activeExercises[activeExerciseMenuIndex].name.toLowerCase()
+                )}
+                sessions={sessions}
+                onClose={() => setIsExerciseInsightsVisible(false)}
+                onUpdateExerciseInsightsNotes={onUpdateExerciseInsightsNotes}
+              />
             )}
+
+            {/* Modal C: Barbell Plate Calculator was removed from here */}
 
             {/* Workout Options Bottom Sheet Menu */}
             {isWorkoutMenuVisible && (
@@ -2586,6 +2453,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   style={styles.sheetBackdrop}
                   onPress={() => setIsWorkoutMenuVisible(false)}
+                  testID="workout-menu-backdrop"
                 >
                   <RN.Animated.View
                     style={[
@@ -2595,6 +2463,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     onStartShouldSetResponder={() => true}
                     onResponderTerminationRequest={() => false}
                     {...workoutMenuPanResponder.panHandlers}
+                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
                   >
                     <View style={styles.dragHandleContainer}>
                       <View style={styles.sheetDragHandle} />
@@ -2801,10 +2670,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 }
                                 setIsStartTimePickerVisible(false);
                               } else {
-                                Alert.alert('Error', 'Invalid hours (must be 00-23)');
+                                WebSafeAlert.alert('Error', 'Invalid hours (must be 00-23)');
                               }
                             } else {
-                              Alert.alert('Error', 'Invalid format. Use HH:MM');
+                              WebSafeAlert.alert('Error', 'Invalid format. Use HH:MM');
                             }
                           }}
                         >
@@ -2828,6 +2697,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Pressable
                   style={styles.sheetBackdrop}
                   onPress={() => setIsDefaultTimerPickerVisible(false)}
+                  testID="default-timer-backdrop"
                 >
                   <RN.Animated.View
                     style={[
@@ -2836,7 +2706,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     ]}
                     onStartShouldSetResponder={() => true}
                     onResponderTerminationRequest={() => false}
-                    {...workoutMenuPanResponder.panHandlers}
+                    {...defaultTimerPanResponder.panHandlers}
+                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
                   >
                     <View style={styles.dragHandleContainer}>
                       <View style={styles.sheetDragHandle} />
@@ -2949,6 +2820,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 }
               }}
               fieldName={activeInput?.fieldName}
+              maxLength={activeInput?.fieldName?.toLowerCase().includes('reps') ? 4 : 6}
               title={activeInput ? activeExercises[activeInput.exIdx]?.name : ''}
               isRpeMode={isRpeMode}
               onNext={handleNextField}
@@ -3006,6 +2878,10 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   const { swipeGesture } = useExerciseRowGestures();
   const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
   const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
+  const isLeftWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftWeight';
+  const isLeftRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftReps';
+  const isRightWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightWeight';
+  const isRightRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightReps';
 
   const isCompleted = set.completed;
   const showPrevConnected = false;
@@ -3027,6 +2903,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           borderRadius={radius.xs}
           style={rowStyle}
           blocksExternalGesture={swipeGesture}
+          snapBackOnRelease={true}
         >
           <View
             style={[
@@ -3080,47 +2957,42 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               <View style={styles.unilateralRow}>
                 <Text style={styles.unilateralLabel}>L</Text>
                 <View style={styles.unilateralInputWrapper}>
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
+                  <SetInputCell
+                    ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-leftWeight`] = r; }}
                     style={[
                       styles.unilateralInput,
                       set.completed && styles.inputCompleted,
+                      isLeftWeightFocused && { borderColor: colors.accent },
                     ]}
-                    showSoftInputOnFocus={false}
                     value={
-                      activeInput?.exIdx === exIdx &&
-                      activeInput?.setIdx === setIdx &&
-                      activeInput?.fieldName === 'leftWeight'
+                      isLeftWeightFocused
                         ? (tempInputValue ?? '')
                         : String(set.leftWeight || set.weight || '')
                     }
-                    onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
+                    onPress={() => onFocus(exIdx, setIdx, 'leftWeight')}
+                    placeholder={set.suggestedLeftWeight || set.suggestedWeight || '0'}
+                    isActive={isLeftWeightFocused}
+                    isCompleted={set.completed}
                   />
                 </View>
                 <View style={styles.unilateralInputWrapper}>
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
+                  <SetInputCell
+                    ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-leftReps`] = r; }}
                     style={[
                       styles.unilateralInput,
-                      set.completed && styles.textCompleted,
+                      set.completed && styles.inputCompleted,
+                      isLeftRepsFocused && { borderColor: colors.accent },
                     ]}
-                    showSoftInputOnFocus={false}
+                    textStyle={set.completed && styles.textCompleted}
                     value={
-                      activeInput?.exIdx === exIdx &&
-                      activeInput?.setIdx === setIdx &&
-                      activeInput?.fieldName === 'leftReps'
+                      isLeftRepsFocused
                         ? (tempInputValue ?? '')
                         : String(set.leftReps || set.reps || '')
                     }
-                    onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
+                    onPress={() => onFocus(exIdx, setIdx, 'leftReps')}
+                    placeholder={set.suggestedLeftReps || set.suggestedReps || '0'}
+                    isActive={isLeftRepsFocused}
+                    isCompleted={set.completed}
                   />
                 </View>
               </View>
@@ -3129,47 +3001,42 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               <View style={styles.unilateralRow}>
                 <Text style={styles.unilateralLabel}>R</Text>
                 <View style={styles.unilateralInputWrapper}>
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
+                  <SetInputCell
+                    ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-rightWeight`] = r; }}
                     style={[
                       styles.unilateralInput,
                       set.completed && styles.inputCompleted,
+                      isRightWeightFocused && { borderColor: colors.accent },
                     ]}
-                    showSoftInputOnFocus={false}
                     value={
-                      activeInput?.exIdx === exIdx &&
-                      activeInput?.setIdx === setIdx &&
-                      activeInput?.fieldName === 'rightWeight'
+                      isRightWeightFocused
                         ? (tempInputValue ?? '')
                         : String(set.rightWeight || set.weight || '')
                     }
-                    onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
+                    onPress={() => onFocus(exIdx, setIdx, 'rightWeight')}
+                    placeholder={set.suggestedRightWeight || set.suggestedWeight || '0'}
+                    isActive={isRightWeightFocused}
+                    isCompleted={set.completed}
                   />
                 </View>
                 <View style={styles.unilateralInputWrapper}>
-                  <TextInput
-                    ref={r => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
+                  <SetInputCell
+                    ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-rightReps`] = r; }}
                     style={[
                       styles.unilateralInput,
-                      set.completed && styles.textCompleted,
+                      set.completed && styles.inputCompleted,
+                      isRightRepsFocused && { borderColor: colors.accent },
                     ]}
-                    showSoftInputOnFocus={false}
+                    textStyle={set.completed && styles.textCompleted}
                     value={
-                      activeInput?.exIdx === exIdx &&
-                      activeInput?.setIdx === setIdx &&
-                      activeInput?.fieldName === 'rightReps'
+                      isRightRepsFocused
                         ? (tempInputValue ?? '')
                         : String(set.rightReps || set.reps || '')
                     }
-                    onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    editable={!set.completed}
-                    selectTextOnFocus
+                    onPress={() => onFocus(exIdx, setIdx, 'rightReps')}
+                    placeholder={set.suggestedRightReps || set.suggestedReps || '0'}
+                    isActive={isRightRepsFocused}
+                    isCompleted={set.completed}
                   />
                 </View>
               </View>
@@ -3210,6 +3077,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
         borderRadius={radius.xs}
         style={rowStyle}
         blocksExternalGesture={swipeGesture}
+        snapBackOnRelease={true}
       >
         <View
           style={[
@@ -3258,24 +3126,22 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
           {/* Weight Input */}
           <View style={[styles.colWeight, styles.inputWrapper]}>
-            <TextInput
-              ref={r => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
+            <SetInputCell
+              ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
               style={[
                 styles.input,
                 set.completed && styles.inputCompleted,
                 isWeightFocused && { borderColor: colors.accent },
               ]}
-              showSoftInputOnFocus={false}
               value={
                 isWeightFocused
                   ? (tempInputValue ?? '')
                   : String(set.weight || '')
               }
-              onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-              placeholder="0"
-              placeholderTextColor={colors.textMuted}
-              editable={!set.completed}
-              selectTextOnFocus
+              onPress={() => onFocus(exIdx, setIdx, 'weight')}
+              placeholder={set.suggestedWeight || '0'}
+              isActive={isWeightFocused}
+              isCompleted={set.completed}
             />
           </View>
 
@@ -3288,23 +3154,19 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 isRepsFocused && { borderColor: colors.accent },
               ]}
             >
-              <TextInput
-                ref={r => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
-                style={[
-                  styles.repsInput,
-                  set.completed && styles.textCompleted,
-                ]}
-                showSoftInputOnFocus={false}
+              <SetInputCell
+                ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
+                style={styles.repsInput}
+                textStyle={set.completed && styles.textCompleted}
                 value={
                   isRepsFocused
                     ? (tempInputValue ?? '')
                     : String(set.reps || '')
                 }
-                onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-                editable={!set.completed}
-                selectTextOnFocus
+                onPress={() => onFocus(exIdx, setIdx, 'reps')}
+                placeholder={set.suggestedReps || '0'}
+                isActive={isRepsFocused}
+                isCompleted={set.completed}
               />
               {set.rpe ? (
                 <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
@@ -3404,6 +3266,11 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
       exIdx * 75,
       withTiming(0, { duration: 350, easing: Easing.out(Easing.quad) })
     );
+    return () => {
+      cancelAnimation(enterScale);
+      cancelAnimation(enterOpacity);
+      cancelAnimation(enterTranslateY);
+    };
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -3416,28 +3283,26 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
     };
   });
 
-  const { dragGesture } = useReorder();
+
 
   return (
     <Animated.View style={animatedStyle}>
-      <View style={{ marginBottom: spacing.lg }}>
-        <View style={[
-          styles.exerciseCard,
-          isSuperSet && {
-            borderLeftWidth: 4,
-            borderLeftColor: superSetColor,
-          },
-          nextIsSameSuperSet && {
-            marginBottom: 0,
-            borderBottomLeftRadius: 0,
-            borderBottomRightRadius: 0,
-            borderBottomWidth: 0,
-          },
-          prevIsSameSuperSet && {
-            borderTopLeftRadius: 0,
-            borderTopRightRadius: 0,
-          }
-        ]}>
+      <View style={[
+        styles.exerciseCard,
+        isSuperSet && {
+          borderLeftWidth: 4,
+          borderLeftColor: superSetColor,
+        },
+        nextIsSameSuperSet && {
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+          borderBottomWidth: 0,
+        },
+        prevIsSameSuperSet && {
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+        }
+      ]}>
           <View style={styles.exerciseHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.sm, flex: 1 }}>
               <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
@@ -3447,19 +3312,13 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 onPress={() => handleExerciseMenuPress(exIdx)}
                 style={styles.exEllipsis}
                 android_ripple={rippleTokens.borderless}
+                testID={`ex-ellipsis-${exIdx}`}
               >
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
               </Pressable>
-              {dragGesture ? (
-                <GestureDetector gesture={dragGesture}>
-                  <View
-                    style={styles.dragHandle}
-                    accessibilityLabel="Drag to reorder exercise"
-                  >
-                    <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-                  </View>
-                </GestureDetector>
-              ) : null}
+              <Sortable.Handle style={styles.dragHandle}>
+                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} accessibilityLabel="Drag to reorder exercise" />
+              </Sortable.Handle>
             </View>
           </View>
 
@@ -3469,7 +3328,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               return (
                 <View style={styles.notesContainer}>
                   <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.notesText} numberOfLines={2}>
+                  <Text style={styles.notesText} numberOfLines={2} testID="exercise-notes-text">
                     {libEx.notes}
                   </Text>
                 </View>
@@ -3526,7 +3385,6 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             <Text style={styles.addSetText}>ADD SET</Text>
           </Pressable>
         </View>
-      </View>
     </Animated.View>
   );
 });
@@ -3607,10 +3465,9 @@ const styles = StyleSheet.create({
     bottom:         0,
     justifyContent: 'center',
     alignItems:     'center',
-    zIndex:         -1,
   },
   headerTimerText: {
-    color:      colors.accent,
+    color:      colors.textPrimary,
     fontSize:   font.sizes.base,
     fontFamily: font.semibold,
   },

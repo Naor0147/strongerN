@@ -13,7 +13,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
-import { ExerciseRowGesturesContext } from './exerciseRowGestures';
+import { ExerciseRowGesturesContext } from '../ui/gestureCoexistence';
 
 /**
  * SwipeableRow — slide a row left to reveal a delete underlay, then swipe
@@ -32,24 +32,24 @@ import { ExerciseRowGesturesContext } from './exerciseRowGestures';
  * so the parent's array removal causes no layout jump / snap-back on Android.
  */
 
-export type SwipeableRowOnDelete =
-  | (() => void)
-  | ((confirm: (onDone: () => void) => void, cancel: () => void) => void);
-
 export const SwipeableRow: React.FC<{
   children: React.ReactNode;
-  onDelete: SwipeableRowOnDelete;
+  onDelete?: () => void;
+  onDeleteWithConfirm?: (confirm: (onDone: () => void) => void, cancel: () => void) => void;
   borderRadius?: number;
   style?: any;
   blocksExternalGesture?: any | any[];
   activeOffsetX?: [number, number];
+  snapBackOnRelease?: boolean;
 }> = ({
   children,
   onDelete,
+  onDeleteWithConfirm,
   borderRadius = radius.xs,
   style,
   blocksExternalGesture,
   activeOffsetX = [-15, 15],
+  snapBackOnRelease = false,
 }) => {
   const translateX = useSharedValue(0);
   const isOpen = useSharedValue(false);
@@ -59,14 +59,24 @@ export const SwipeableRow: React.FC<{
   const hasTriggeredHaptic = useSharedValue(false);
   const isDeleting = useSharedValue(false);
 
-  // ─── Ref pattern: always hold the latest onDelete without changing any
+  const cancelledRef = React.useRef(false);
+
+  // ─── Ref pattern: always hold the latest handlers without changing any
   // useCallback/useMemo dependencies. This is what keeps panGesture from
-  // being recreated every time the parent re-renders with a new inline arrow.
-  const onDeleteRef = React.useRef<SwipeableRowOnDelete>(onDelete);
+  // being recreated every time the parent re-renders with new inline arrows.
+  const onDeleteRef = React.useRef(onDelete);
   onDeleteRef.current = onDelete;
 
+  const onDeleteWithConfirmRef = React.useRef(onDeleteWithConfirm);
+  onDeleteWithConfirmRef.current = onDeleteWithConfirm;
+
   React.useEffect(() => {
-    return () => { cancelAnimation(translateX); };
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+      cancelAnimation(translateX);
+      cancelAnimation(collapse);
+    };
   }, []);
 
   const triggerHaptic = useCallback(() => {
@@ -92,6 +102,12 @@ export const SwipeableRow: React.FC<{
   }, []);
 
   // Slide the row fully off-screen, then collapse height+opacity to 0, then
+  const handleDone = useCallback((onDone: () => void) => {
+    if (cancelledRef.current) return;
+    onDone();
+  }, []);
+
+  // Slide the row fully off-screen, then collapse height+opacity to 0, then
   // invoke `onDone` on the JS thread. The row is already invisible/zero-height
   // by the time `onDone` runs, so the parent's array removal is jump-free.
   const slideOffThenCollapse = useCallback((onDone: () => void) => {
@@ -108,10 +124,10 @@ export const SwipeableRow: React.FC<{
         easing: Easing.in(Easing.quad),
       }, () => {
         'worklet';
-        runOnJS(onDone)();
+        runOnJS(handleDone)(onDone);
       });
     });
-  }, []);
+  }, [handleDone]);
 
   // Restore the row to rest (used by the 2-arg `cancel` path).
   const cancelSlide = useCallback(() => {
@@ -130,8 +146,9 @@ export const SwipeableRow: React.FC<{
     triggerSuccessHaptic();
 
     const currentOnDelete = onDeleteRef.current;
+    const currentOnDeleteWithConfirm = onDeleteWithConfirmRef.current;
 
-    if (typeof currentOnDelete === 'function' && currentOnDelete.length === 2) {
+    if (currentOnDeleteWithConfirm) {
       // Confirm/cancel flow. The parent decides; we animate only after confirm.
       const confirm = (onDone: () => void) => {
         slideOffThenCollapse(onDone);
@@ -139,10 +156,10 @@ export const SwipeableRow: React.FC<{
       const cancel = () => {
         cancelSlide();
       };
-      (currentOnDelete as (c: (onDone: () => void) => void, x: () => void) => void)(confirm, cancel);
-    } else {
+      currentOnDeleteWithConfirm(confirm, cancel);
+    } else if (currentOnDelete) {
       slideOffThenCollapse(() => {
-        (currentOnDelete as () => void)();
+        currentOnDelete();
       });
     }
   }, [triggerSuccessHaptic, slideOffThenCollapse, cancelSlide]);
@@ -154,7 +171,7 @@ export const SwipeableRow: React.FC<{
       // Tighter vertical fail so the parent ScrollView wins quickly on Android;
       // slightly larger horizontal activation so taps/inputs don't misfire.
       .activeOffsetX(activeOffsetX)
-      .failOffsetY([-6, 6]);
+      .failOffsetY([-10, 10]);
 
     if (blocksExternalGesture) {
       if (Array.isArray(blocksExternalGesture)) {
@@ -196,18 +213,23 @@ export const SwipeableRow: React.FC<{
         if (currentX < currentThreshold || e.velocityX < -500) {
           runOnJS(handleDeletePress)();
         } else {
-          const threshold = isOpen.value ? -30 : -45;
-          if (e.translationX < threshold) {
-            isOpen.value = true;
-            animateTranslation(-70);
-          } else {
+          if (snapBackOnRelease) {
             isOpen.value = false;
             animateTranslation(0);
+          } else {
+            const threshold = isOpen.value ? -30 : -45;
+            if (e.translationX < threshold) {
+              isOpen.value = true;
+              animateTranslation(-70);
+            } else {
+              isOpen.value = false;
+              animateTranslation(0);
+            }
           }
           hasTriggeredHaptic.value = false;
         }
       });
-  }, [handleDeletePress, triggerHaptic, animateTranslation, blocksExternalGesture, activeOffsetX]);
+  }, [handleDeletePress, triggerHaptic, animateTranslation, blocksExternalGesture, activeOffsetX, snapBackOnRelease]);
 
   const animatedUnderlayStyle = useAnimatedStyle(() => ({
     opacity: translateX.value < -10 ? 1 : 0,

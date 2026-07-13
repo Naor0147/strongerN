@@ -29,7 +29,7 @@ import IconButton    from '../components/ui/IconButton';
 import SectionLabel  from '../components/ui/SectionLabel';
 import PressableRow  from '../components/ui/PressableRow';
 import { RoutineSharingModal } from '../components/ui/RoutineSharingModal';
-import { ReorderableList } from '../components/ui/ReorderableList';
+import Sortable from 'react-native-sortables';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RoutineEditorModal from '../components/layout/RoutineEditorModal';
 
@@ -127,11 +127,9 @@ const TemplateCard: React.FC<TemplateCardProps> = React.memo(({ template, onStar
         <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
       </Pressable>
       {dragGesture ? (
-        <GestureDetector gesture={dragGesture}>
-          <View style={styles.tplDragHandle} accessibilityLabel="Drag to reorder template">
-            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-          </View>
-        </GestureDetector>
+        <Sortable.Handle style={styles.tplDragHandle}>
+          <Ionicons name="reorder-three" size={22} color={colors.textSecondary} accessibilityLabel="Drag to reorder template" />
+        </Sortable.Handle>
       ) : null}
     </View>
   </Card>
@@ -203,6 +201,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   const [isFolderModalVisible, setIsFolderModalVisible] = useState(false);
   const [selectedFolderFilter, setSelectedFolderFilter] = useState('All');
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const scrollRef = useRef<ScrollView>(null);
   
   // Filter popover state
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
@@ -757,6 +756,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             />
           ) : (
             <ScrollView
+              ref={scrollRef}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.list}
               overScrollMode="never"
@@ -828,27 +828,47 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               </View>
 
               {/* Reorderable Draggable List */}
-              <ReorderableList
-                data={filteredTemplates}
-                keyExtractor={(item) => item.id}
-                onReorder={(newData) => {
+              <Sortable.Flex
+                flexDirection="column"
+                gap={0}
+                width="fill"
+                customHandle
+                dragActivationDelay={0}
+                dragActivationFailOffset={5}
+                activeItemScale={1.02}
+                activeItemOpacity={1}
+                activeItemShadowOpacity={0.45}
+                inactiveItemOpacity={1}
+                inactiveItemScale={1}
+                enableActiveItemSnap={false}
+                dimensionsAnimationType="layout"
+                itemsLayoutTransitionMode="reorder"
+                dropAnimationDuration={250}
+                strategy="insert"
+                reorderTriggerOrigin="center"
+                overDrag="vertical"
+                hapticsEnabled
+                scrollableRef={scrollRef}
+                onDragStart={() => setScrollEnabled(false)}
+                onDragEnd={({ order }) => {
                   if (onReorderTemplates) {
-                    onReorderTemplates(newData);
+                    onReorderTemplates(order(filteredTemplates));
                   }
                 }}
-                onDragStart={() => setScrollEnabled(false)}
-                onDragEnd={() => setScrollEnabled(true)}
-                renderItem={({ item, dragGesture }) => (
-                  <View style={styles.templateCardWrap}>
+                onActiveItemDropped={() => setScrollEnabled(true)}
+                itemExiting={null}
+              >
+                {filteredTemplates.map((item) => (
+                  <View key={item.id} style={styles.templateCardWrap}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
                       onMenuPress={handleMenuPress}
-                      dragGesture={dragGesture}
+                      dragGesture={true}
                     />
                   </View>
-                )}
-              />
+                ))}
+              </Sortable.Flex>
             </ScrollView>
           )}
         </>
