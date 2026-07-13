@@ -55,19 +55,21 @@ A concise reference for the **AMOLED-first** high-fidelity design system in `str
 ---
 
 ## 🧩 5. Atomic Components
-All primitives reside in [components/ui/](file:///C:/Antigravity/strongerN/components/ui/):
-- **[Card](file:///C:/Antigravity/strongerN/components/ui/Card.tsx)**: Rounded card wrapper with `shadow.card`. Support active outline & left-accent variants.
-- **[StatCard](file:///C:/Antigravity/strongerN/components/ui/StatCard.tsx)**: Displays metrics using dynamic counting animations.
-- **[BarChart](file:///C:/Antigravity/strongerN/components/ui/BarChart.tsx)**: Weekly activity SVG bar representation.
-- **[Badge](file:///C:/Antigravity/strongerN/components/ui/Badge.tsx)**: Status indicators (PR/Pro) with high-contrast background.
-- **[PressableRow](file:///C:/Antigravity/strongerN/components/ui/PressableRow.tsx)**: Row component with built-in platform ripples and active state scale.
+All primitives reside in [components/ui/](file:///C:/Antigravity/strongerN/src/components/ui/):
+- **[Card](file:///C:/Antigravity/strongerN/src/components/ui/Card.tsx)**: Rounded card wrapper with `shadow.card`. Support active outline & left-accent variants.
+- **[StatCard](file:///C:/Antigravity/strongerN/src/components/ui/StatCard.tsx)**: Displays metrics using dynamic counting animations.
+- **[BarChart](file:///C:/Antigravity/strongerN/src/components/ui/BarChart.tsx)**: Weekly activity SVG bar representation.
+- **[Badge](file:///C:/Antigravity/strongerN/src/components/ui/Badge.tsx)**: Status indicators (PR/Pro) with high-contrast background.
+- **[PressableRow](file:///C:/Antigravity/strongerN/src/components/ui/PressableRow.tsx)**: Row component with built-in platform ripples and active state scale.
+- **[RestTimerRuler](file:///C:/Antigravity/strongerN/src/components/ui/RestTimerRuler.tsx)**: Premium linear dial rest-timer (react-native-svg + Reanimated, 120fps UI-thread driven, cross-platform).
 
 ---
 
 ## 🏃 6. UX Animations & Ripples
 - **Modals**: Smooth spring curves (`stiffness: 140, damping: 16`).
-- **Live Tracking**: Floating active workout bar ([ActiveWorkoutBar.tsx](file:///C:/Antigravity/strongerN/components/layout/ActiveWorkoutBar.tsx)) with pulsating indicator.
+- **Live Tracking**: Floating active workout bar ([ActiveWorkoutBar.tsx](file:///C:/Antigravity/strongerN/src/components/layout/ActiveWorkoutBar.tsx)) with pulsating indicator.
 - **Android Ripples**: Custom surface-shaped ripples defined in `theme.ts`.
+- **Rest timer ruler**: Reanimated SharedValue-driven <Animated.View> translateX on a static SVG tick path; target device refresh rate, floor 120fps on native.
 
 ---
 
@@ -86,3 +88,12 @@ Every screen/component must satisfy these requirements:
 - [ ] **Offline Resilience**: Sounds and icons must be local. Avoid external assets/streams.
 - [ ] **Auth Deep Links**: Authentication redirects must handle deep links (`strongern://oauth-callback`).
 - [ ] **Simulated Badges**: Flag simulated/non-native layers clearly as `(Simulated)`.
+
+---
+
+## ⚡ 8. Performance Targets
+
+- **Global frame-rate goal: match the device's screen refresh rate (adaptive 60/90/120/144Hz), with a floor of ≥120 FPS on native.** Applies to all UI motion and animations across the app — not only the rest timer.
+- Animations must run on the Reanimated UI thread (worklets) via `SharedValue` + `useAnimatedStyle`/`useAnimatedProps`. **No JS-thread `setState` or `requestAnimationFrame` may drive animation-rate UI.**
+- Static SVG/vector content that does not change per frame is preferred; smooth sub-pixel motion is achieved via a single group `transform` driven by a `SharedValue`, not by re-rendering primitives each frame.
+- Rare, discrete state changes (phase transitions, integer-second label-window swaps, theme switches) are allowed on the JS thread (≤ a few times per second).

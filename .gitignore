@@ -79,4 +79,9 @@ Desktop.ini
 .expo-shared/
 
 # APK files
-*.apk   
+*.apk
+
+# Playwright E2E testing
+test-results/
+playwright-report/
+expo-e2e.log

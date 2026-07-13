@@ -1,6 +1,17 @@
 # Auto-Load Agent Rules
 
-At the start of every session, read the `.agents` folder and load all rule files from `.agents/rules/` to understand project-specific behaviors and constraints.
+At the start of every session, read the `.agents` folder and load all rule files from `.agents/rules/` (including `auto-git-commit.md`) to understand project-specific behaviors and constraints.
+
+# ui-ux-design-pro-max
+
+This sandbox project strictly implements a premium, AMOLED-first, high-fidelity dark design system using design intelligence from `ui-ux-design-pro-max`. Ensure any edits to `RestTimerRuler.tsx` align perfectly with colors, typography, and interactive state rules specified in [UI_UX_README.md](file:///C:/Antigravity/strongerNTesting/UI_UX_README.md).
+
+# E2E Testing Guide for AI Agents
+
+To run the end-to-end tests, run the command `npm run e2e`.
+- **Exit Code**: The script returns `0` on success and `1` on failure.
+- **Output Format**: The test runner uses a failures-only custom reporter. If all tests pass, it prints a single summary line. If tests fail, it outputs structured diagnostic logs (error description, file source, anchor code, and regression fix recommendation).
+- **Debugging Protocol**: Do not read test spec files to analyze test failures. Trust the diagnostic output containing the exact `source` file, `anchor` code string, and recommended `fix`.
 
 # Graphify Auto-Update
 
