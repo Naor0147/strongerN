@@ -333,6 +333,7 @@ function App() {
   const [showHighlights, setShowHighlights] = React.useState(false);
   const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(false);
 
+
   // Dynamically calculate weekly chart data based on sessionsList (Monday start to match getWeeklyStreak)
   const dynamicWeeklyChartData = React.useMemo(() => {
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
@@ -1451,6 +1452,25 @@ function App() {
     name: string;
   } | null>(null);
 
+  // Stable refs for state stabilization
+  const templatesListRef = React.useRef(templatesList);
+  const exercisesListRef = React.useRef(exercisesList);
+  const sessionsListRef = React.useRef(sessionsList);
+  const userRef = React.useRef(user);
+  const editingSessionIdRef = React.useRef(editingSessionId);
+  const workoutNameRef = React.useRef(workoutName);
+  const startTimeRef = React.useRef(startTime);
+
+  React.useEffect(() => {
+    templatesListRef.current = templatesList;
+    exercisesListRef.current = exercisesList;
+    sessionsListRef.current = sessionsList;
+    userRef.current = user;
+    editingSessionIdRef.current = editingSessionId;
+    workoutNameRef.current = workoutName;
+    startTimeRef.current = startTime;
+  }, [templatesList, exercisesList, sessionsList, user, editingSessionId, workoutName, startTime]);
+
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
@@ -1459,7 +1479,7 @@ function App() {
     // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
     let resolvedDetails = exercisesDetails;
     if (!resolvedDetails || resolvedDetails.length === 0) {
-      const matchingTemplate = templatesList.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
+      const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
       if (matchingTemplate && matchingTemplate.exercisesDetails && matchingTemplate.exercisesDetails.length > 0) {
         resolvedDetails = matchingTemplate.exercisesDetails;
       }
@@ -1467,7 +1487,7 @@ function App() {
     
     // Map exercise names to exercise set objects
     const mappedExercises = exerciseNames.map((exName, index) => {
-      const libraryEx = exercisesList.find(e => e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+      const libraryEx = exercisesListRef.current.find(e => e.name.toLowerCase().trim() === exName.toLowerCase().trim());
       const isExUnilateral = libraryEx?.isUnilateral || false;
 
       // Find the corresponding detail, preferably by index first, fallback to name lookup
@@ -1503,7 +1523,7 @@ function App() {
       let bestReps = 10;
       let sets: any = 3;
 
-      const previousSession = sessionsList.find((s: any) => 
+      const previousSession = sessionsListRef.current.find((s: any) => 
         s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim())
       );
       if (previousSession) {
@@ -1538,7 +1558,7 @@ function App() {
     setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
-  }, [templatesList, exercisesList, sessionsList]);
+  }, []);
 
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
@@ -1570,12 +1590,21 @@ function App() {
     setIsWorkoutModalVisible(true);
   };
 
+  const handleDiscardWorkout = React.useCallback(() => {
+    setIsWorkoutActive(false);
+    setIsWorkoutModalVisible(false);
+    setWorkoutExercises([]);
+    setWorkoutName('Active Workout');
+    setEditingSessionId(null);
+    setActiveWorkoutComment('');
+  }, []);
+
   const handleFinishWorkout = React.useCallback((summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => {
     if (summary.totalSets === 0) {
       handleDiscardWorkout();
       return;
     }
-    const completedExercises = workoutExercises.reduce<any[]>((acc, ex) => {
+    const completedExercises = workoutExercisesRef.current.reduce<any[]>((acc, ex) => {
       const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
       if (count > 0) {
         if (typeof ex.sets === 'number') {
@@ -1608,15 +1637,15 @@ function App() {
       return acc;
     }, []);
 
-    let updatedSessions = [...sessionsList];
-    let nextUser = { ...user };
+    let updatedSessions = [...sessionsListRef.current];
+    let nextUser = { ...userRef.current };
 
-    if (editingSessionId) {
-      updatedSessions = sessionsList.map((s: any) => {
-        if (s.id === editingSessionId) {
+    if (editingSessionIdRef.current) {
+      updatedSessions = sessionsListRef.current.map((s: any) => {
+        if (s.id === editingSessionIdRef.current) {
           return {
             ...s,
-            title: workoutName,
+            title: workoutNameRef.current,
             exercises: completedExercises.length > 0 ? completedExercises : [],
             durationMinutes: summary.durationMin,
             totalVolumeKg: summary.totalVolume,
@@ -1630,15 +1659,15 @@ function App() {
     } else {
       const newSession = {
         id: `session-new-${Date.now()}`,
-        title: workoutName,
-        datetime: new Date(startTime),
+        title: workoutNameRef.current,
+        datetime: new Date(startTimeRef.current),
         comment: summary.comment || '',
         exercises: completedExercises.length > 0 ? completedExercises : [],
         durationMinutes: summary.durationMin,
         totalVolumeKg: summary.totalVolume,
         prs: summary.totalVolume > 0 ? 1 : 0,
       };
-      updatedSessions = [newSession, ...sessionsList];
+      updatedSessions = [newSession, ...sessionsListRef.current];
       nextUser.totalWorkouts = updatedSessions.length;
     }
 
@@ -1648,7 +1677,7 @@ function App() {
     // Calculate workout insights
     try {
       const activeLocale = (i18n.locale === 'he' || i18n.locale.startsWith('he')) ? 'he' : 'en';
-      const insights = generateWorkoutInsights(completedExercises, sessionsList, activeLocale);
+      const insights = generateWorkoutInsights(completedExercises, sessionsListRef.current, activeLocale);
       setInsightsData(insights);
     } catch (err) {
       console.warn('Error generating workout insights:', err);
@@ -1660,22 +1689,28 @@ function App() {
       totalVolume: summary.totalVolume,
       totalSets: summary.totalSets,
       durationMin: summary.durationMin,
-      name: workoutName,
+      name: workoutNameRef.current,
     });
 
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
     setActiveWorkoutComment('');
-  }, [workoutExercises, sessionsList, user, editingSessionId, workoutName]);
+  }, [handleDiscardWorkout]);
 
-  const handleDiscardWorkout = () => {
-    setIsWorkoutActive(false);
+  const handleCloseWorkoutModal = React.useCallback(() => {
     setIsWorkoutModalVisible(false);
-    setWorkoutExercises([]);
-    setWorkoutName('Active Workout');
-    setEditingSessionId(null);
-    setActiveWorkoutComment('');
-  };
+  }, []);
+
+  const handleUpdateExerciseInsightsNotes = React.useCallback((exId: string, insightsNotes?: string) => {
+    setExercisesList(prev => prev.map(ex => ex.id === exId ? { ...ex, insightsNotes } : ex));
+  }, []);
+
+  const handleUpdateWorkoutComment = React.useCallback((newComment: string) => {
+    setActiveWorkoutComment(newComment);
+    if (editingSessionIdRef.current) {
+      setSessionsList(prev => prev.map(s => s.id === editingSessionIdRef.current ? { ...s, comment: newComment } : s));
+    }
+  }, []);
 
   const handleDeleteSession = React.useCallback((sessionId: string) => {
     setSessionsList(prev => {
@@ -1932,7 +1967,7 @@ function App() {
           <Tab.Navigator
             initialRouteName="Profile"
             tabBar={renderTabBar}
-            screenOptions={{ headerShown: false }}
+            screenOptions={{ headerShown: false, freezeOnBlur: true }}
           >
             <Tab.Screen name="Profile">
               {() => (
@@ -2091,15 +2126,13 @@ function App() {
             startTime={startTime}
             exercises={workoutExercises}
             isAutoTimerEnabled={isAutoTimerEnabled}
-            onClose={() => setIsWorkoutModalVisible(false)}
+            onClose={handleCloseWorkoutModal}
             onFinish={handleFinishWorkout}
             onDiscard={handleDiscardWorkout}
             exerciseLibrary={exercisesList}
             onUpdateActiveExercises={setWorkoutExercises}
             onUpdateExerciseNotes={handleUpdateExerciseNotes}
-            onUpdateExerciseInsightsNotes={(exId, insightsNotes) => {
-              setExercisesList(prev => prev.map(ex => ex.id === exId ? { ...ex, insightsNotes } : ex));
-            }}
+            onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
             onAddCustomExercise={handleAddExercise}
             isLiveHeartRateEnabled={isLiveHeartRateEnabled}
             isPlateCalculatorEnabled={isPlateCalculatorEnabled}
@@ -2114,12 +2147,7 @@ function App() {
             isEditing={!!editingSessionId}
             previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
             editingComment={activeWorkoutComment}
-            onUpdateComment={(newComment) => {
-              setActiveWorkoutComment(newComment);
-              if (editingSessionId) {
-                setSessionsList(prev => prev.map(s => s.id === editingSessionId ? { ...s, comment: newComment } : s));
-              }
-            }}
+            onUpdateComment={handleUpdateWorkoutComment}
             onUpdateStartTime={setStartTime}
             onUpdateDefaultRestDuration={setDefaultRestDuration}
           />
