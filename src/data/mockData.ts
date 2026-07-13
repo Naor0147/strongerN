@@ -567,3 +567,125 @@ export const mockBodyPartMetrics: MeasureItem[] = [
   { id: 'bp-10', label: i18n.t('mockData.leftCalf'), lastValue: '38.0 cm', history: [{ date: getRelativeDateString(7), value: 38.0 }] },
   { id: 'bp-11', label: i18n.t('mockData.rightCalf'), lastValue: '38.1 cm', history: [{ date: getRelativeDateString(7), value: 38.1 }] },
 ];
+
+export interface ExerciseHistoryEntry {
+  id: string;
+  date: Date;
+  exerciseId: string;
+  exerciseName: string;
+  sets: {
+    reps: number;
+    weightKg: number;
+  }[];
+}
+
+export const mockExerciseHistory: ExerciseHistoryEntry[] = [
+  {
+    id: 'h-1',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 60); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 8, weightKg: 60 },
+      { reps: 8, weightKg: 60 },
+      { reps: 8, weightKg: 60 },
+    ],
+  },
+  {
+    id: 'h-2',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 50); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 8, weightKg: 62.5 },
+      { reps: 8, weightKg: 62.5 },
+      { reps: 7, weightKg: 62.5 },
+    ],
+  },
+  {
+    id: 'h-3',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 40); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 8, weightKg: 62.5 },
+      { reps: 8, weightKg: 62.5 },
+      { reps: 8, weightKg: 62.5 },
+    ],
+  },
+  {
+    id: 'h-4',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 8, weightKg: 65 },
+      { reps: 8, weightKg: 65 },
+      { reps: 6, weightKg: 65 },
+    ],
+  },
+  {
+    id: 'h-5',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 20); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 8, weightKg: 65 },
+      { reps: 8, weightKg: 65 },
+      { reps: 8, weightKg: 65 },
+    ],
+  },
+  {
+    id: 'h-6',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 10); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 6, weightKg: 70 },
+      { reps: 6, weightKg: 70 },
+      { reps: 5, weightKg: 70 },
+    ],
+  },
+  {
+    id: 'h-7',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 3); return d; })(),
+    exerciseId: 'ex-1',
+    exerciseName: 'Bench Press',
+    sets: [
+      { reps: 5, weightKg: 80 },
+      { reps: 5, weightKg: 80 },
+      { reps: 4, weightKg: 80 },
+    ],
+  },
+  {
+    id: 'h-sq-1',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 45); return d; })(),
+    exerciseId: 'ex-2',
+    exerciseName: 'Back Squat',
+    sets: [
+      { reps: 5, weightKg: 90 },
+      { reps: 5, weightKg: 90 },
+    ],
+  },
+  {
+    id: 'h-sq-2',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d; })(),
+    exerciseId: 'ex-2',
+    exerciseName: 'Back Squat',
+    sets: [
+      { reps: 5, weightKg: 95 },
+      { reps: 5, weightKg: 95 },
+    ],
+  },
+  {
+    id: 'h-sq-3',
+    date: (() => { const d = new Date(); d.setDate(d.getDate() - 15); return d; })(),
+    exerciseId: 'ex-2',
+    exerciseName: 'Back Squat',
+    sets: [
+      { reps: 5, weightKg: 100 },
+      { reps: 5, weightKg: 100 },
+    ],
+  },
+];
+
