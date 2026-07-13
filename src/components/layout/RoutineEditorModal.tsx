@@ -316,6 +316,31 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     return JSON.stringify(currentExercisesSimplified) !== initialRef.current.exercisesStr;
   };
 
+  const superSetColors = useMemo(() => {
+    const colorsMap: Record<string, string> = {};
+    const colorsList = ['#4F8EF7', '#38BDF8', '#6366F1', '#22D97A'];
+    let colorIdx = 0;
+    editorExercises.forEach(ex => {
+      if (ex.superSetGroupId && !colorsMap[ex.superSetGroupId]) {
+        colorsMap[ex.superSetGroupId] = colorsList[colorIdx % colorsList.length];
+        colorIdx++;
+      }
+    });
+    return colorsMap;
+  }, [editorExercises]);
+
+  const handleExerciseMenuPress = useCallback((idx: number) => {
+    setExMenuIdx(idx);
+    setIsExMenuVisible(true);
+  }, []);
+
+  const handleDeleteExercise = useCallback((exIdx: number) => {
+    setEditorExercises(prev => {
+      const filtered = prev.filter((_, i) => i !== exIdx);
+      return sanitizeSuperSets(filtered);
+    });
+  }, []);
+
   const handleCloseAttempt = () => {
     if (checkHasChanges()) {
       setIsDiscardConfirmVisible(true);
@@ -658,85 +683,66 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 )}
 
                 {/* Exercise List */}
-                {(() => {
-                  const superSetColors: Record<string, string> = {};
-                  const colorsList = ['#4F8EF7', '#38BDF8', '#6366F1', '#22D97A'];
-                  let colorIdx = 0;
-                  editorExercises.forEach(ex => {
-                    if (ex.superSetGroupId && !superSetColors[ex.superSetGroupId]) {
-                      superSetColors[ex.superSetGroupId] = colorsList[colorIdx % colorsList.length];
-                      colorIdx++;
-                    }
-                  });
+                <Sortable.Flex
+                  flexDirection="column"
+                  gap={0}
+                  width="fill"
+                  customHandle
+                  dragActivationDelay={0}
+                  dragActivationFailOffset={5}
+                  activeItemScale={1.02}
+                  activeItemOpacity={1}
+                  activeItemShadowOpacity={0.45}
+                  inactiveItemOpacity={1}
+                  inactiveItemScale={1}
+                  enableActiveItemSnap={false}
+                  dimensionsAnimationType="layout"
+                  itemsLayoutTransitionMode="reorder"
+                  dropAnimationDuration={250}
+                  strategy="insert"
+                  reorderTriggerOrigin="center"
+                  overDrag="vertical"
+                  hapticsEnabled
+                  scrollableRef={scrollRef}
+                  onDragStart={() => setScrollEnabled(false)}
+                  onDragEnd={({ order }) => setEditorExercises(sanitizeSuperSets(order(editorExercises)))}
+                  onActiveItemDropped={() => setScrollEnabled(true)}
+                  itemExiting={null}
+                >
+                  {editorExercises.map((exercise, exIdx) => {
+                    const isSuperSet = !!exercise.superSetGroupId;
+                    const nextIsSameSuperSet = isSuperSet && exIdx < editorExercises.length - 1 && editorExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
+                    const prevIsSameSuperSet = isSuperSet && exIdx > 0 && editorExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
+                    const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
-                  return (
-                    <Sortable.Flex
-                      flexDirection="column"
-                      gap={0}
-                      width="fill"
-                      customHandle
-                      dragActivationDelay={0}
-                      dragActivationFailOffset={5}
-                      activeItemScale={1.02}
-                      activeItemOpacity={1}
-                      activeItemShadowOpacity={0.45}
-                      inactiveItemOpacity={1}
-                      inactiveItemScale={1}
-                      enableActiveItemSnap={false}
-                      dimensionsAnimationType="layout"
-                      itemsLayoutTransitionMode="reorder"
-                      dropAnimationDuration={250}
-                      strategy="insert"
-                      reorderTriggerOrigin="center"
-                      overDrag="vertical"
-                      hapticsEnabled
-                      scrollableRef={scrollRef}
-                      onDragStart={() => setScrollEnabled(false)}
-                      onDragEnd={({ order }) => setEditorExercises(sanitizeSuperSets(order(editorExercises)))}
-                      onActiveItemDropped={() => setScrollEnabled(true)}
-                      itemExiting={null}
-                    >
-                      {editorExercises.map((exercise, exIdx) => {
-                        const isSuperSet = !!exercise.superSetGroupId;
-                        const nextIsSameSuperSet = isSuperSet && exIdx < editorExercises.length - 1 && editorExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
-                        const prevIsSameSuperSet = isSuperSet && exIdx > 0 && editorExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
-                        const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
-
-                        return (
-                          <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
-                            <SwipeableRow
-                              onDelete={() => {
-                                setEditorExercises(prev => {
-                                  const filtered = prev.filter((_, i) => i !== exIdx);
-                                  return sanitizeSuperSets(filtered);
-                                });
-                              }}
-                              activeOffsetX={[-30, 30]}
-                            >
-                              <ExerciseCard
-                                exercise={exercise}
-                                exIdx={exIdx}
-                                activeInput={activeInput}
-                                onFocus={handleSetFocus}
-                                updateSetField={updateSetField}
-                                deleteSet={deleteSet}
-                                inputRefs={inputRefs}
-                                mode="editor"
-                                superSetColor={superSetColor}
-                                isSuperSet={isSuperSet}
-                                nextIsSameSuperSet={nextIsSameSuperSet}
-                                prevIsSameSuperSet={prevIsSameSuperSet}
-                                onMenuPress={(idx) => { setExMenuIdx(idx); setIsExMenuVisible(true); }}
-                                onAddSet={addSet}
-                                tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                              />
-                            </SwipeableRow>
-                          </View>
-                        );
-                      })}
-                    </Sortable.Flex>
-                  );
-                })()}
+                    return (
+                      <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg }}>
+                        <SwipeableRow
+                          onDelete={() => handleDeleteExercise(exIdx)}
+                          activeOffsetX={[-30, 30]}
+                        >
+                          <ExerciseCard
+                            exercise={exercise}
+                            exIdx={exIdx}
+                            activeInput={activeInput}
+                            onFocus={handleSetFocus}
+                            updateSetField={updateSetField}
+                            deleteSet={deleteSet}
+                            inputRefs={inputRefs}
+                            mode="editor"
+                            superSetColor={superSetColor}
+                            isSuperSet={isSuperSet}
+                            nextIsSameSuperSet={nextIsSameSuperSet}
+                            prevIsSameSuperSet={prevIsSameSuperSet}
+                            onMenuPress={handleExerciseMenuPress}
+                            onAddSet={addSet}
+                            tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
+                          />
+                        </SwipeableRow>
+                      </View>
+                    );
+                  })}
+                </Sortable.Flex>
 
                 {/* Add Exercise Button */}
                 <Pressable

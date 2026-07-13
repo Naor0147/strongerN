@@ -41,7 +41,7 @@ export const SwipeableRow: React.FC<{
   blocksExternalGesture?: any | any[];
   activeOffsetX?: [number, number];
   snapBackOnRelease?: boolean;
-}> = ({
+}> = React.memo(({
   children,
   onDelete,
   onDeleteWithConfirm,
@@ -321,7 +321,7 @@ export const SwipeableRow: React.FC<{
       </GestureDetector>
     </Animated.View>
   );
-};
+});
 
 const swipeStyles = StyleSheet.create({
   container: {

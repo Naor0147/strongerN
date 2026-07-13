@@ -131,7 +131,9 @@ function App() {
     Rubik_700Bold,
   });
 
+
   // ── Auth State ────────────────────────────────────────────────
+
   // null = loading from storage; false = needs onboarding; AuthState = loaded
   const [authState, setAuthState] = React.useState<{
     hasCompletedOnboarding: boolean;
@@ -1174,7 +1176,7 @@ function App() {
   };
 
   // Dynamic state modifiers
-  const handleAddExercise = (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => {
+  const handleAddExercise = React.useCallback((name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => {
     const newEx = {
       id: `ex-custom-${Date.now()}`,
       name,
@@ -1185,21 +1187,21 @@ function App() {
     };
     setExercisesList(prev => [newEx, ...prev]);
     return newEx;
-  };
+  }, []);
 
-  const handleDeleteExercise = (id: string) => {
+  const handleDeleteExercise = React.useCallback((id: string) => {
     setExercisesList(prev => prev.filter(e => e.id !== id));
-  };
+  }, []);
 
-  const handleUpdateExerciseNotes = (id: string, notes?: string) => {
+  const handleUpdateExerciseNotes = React.useCallback((id: string, notes?: string) => {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, notes } : e));
-  };
+  }, []);
 
-  const handleUpdateExercise = (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => {
+  const handleUpdateExercise = React.useCallback((id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, name, muscleGroup, equipment, isUnilateral } : e));
-  };
+  }, []);
 
-  const handleAddTemplate = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
+  const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
     const newTpl = {
       id: `tpl-custom-${Date.now()}`,
       name,
@@ -1209,17 +1211,17 @@ function App() {
       folder,
     };
     setTemplatesList(prev => [newTpl, ...prev]);
-  };
+  }, []);
 
-  const handleDeleteTemplate = (id: string) => {
+  const handleDeleteTemplate = React.useCallback((id: string) => {
     setTemplatesList(prev => prev.filter(t => t.id !== id));
-  };
+  }, []);
 
-  const handleUpdateTemplate = (id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
+  const handleUpdateTemplate = React.useCallback((id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
     setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails } : t));
-  };
+  }, []);
 
-  const handleReorderTemplates = (newTemplates: any[]) => {
+  const handleReorderTemplates = React.useCallback((newTemplates: any[]) => {
     setTemplatesList(prev => {
       const reorderedIds = new Set(newTemplates.map(t => t.id));
       const result: any[] = [];
@@ -1233,7 +1235,7 @@ function App() {
       });
       return result;
     });
-  };
+  }, []);
 
 
 
@@ -1294,19 +1296,19 @@ function App() {
     setUser(prev => ({ ...prev, name }));
   };
 
-  const handleAddFolder = (name: string) => {
+  const handleAddFolder = React.useCallback((name: string) => {
     setFoldersList(prev => prev.includes(name) ? prev : [...prev, name]);
-  };
+  }, []);
 
-  const handleRemoveFolder = (name: string) => {
+  const handleRemoveFolder = React.useCallback((name: string) => {
     setFoldersList(prev => prev.filter(f => f !== name));
     setTemplatesList(prev => prev.map(t => t.folder === name ? { ...t, folder: undefined } : t));
-  };
+  }, []);
 
-  const handleSubscribeProgram = (programId: string | null) => {
+  const handleSubscribeProgram = React.useCallback((programId: string | null) => {
     setActiveProgramId(programId);
     setProgramStartDate(programId ? new Date().toISOString() : null);
-  };
+  }, []);
 
   const handleWipeAllData = () => {
     setUser({
@@ -1449,7 +1451,7 @@ function App() {
     name: string;
   } | null>(null);
 
-  const handleStartWorkout = (name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
+  const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
     setActiveWorkoutComment('');
@@ -1536,7 +1538,7 @@ function App() {
     setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
-  };
+  }, [templatesList, exercisesList, sessionsList]);
 
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
@@ -1686,10 +1688,11 @@ function App() {
     });
   }, []);
 
+  const activeWorkoutStateSavedRef = React.useRef(false);
+
   // Persist active workout state on changes (cross-platform via db.ts)
   React.useEffect(() => {
     if (!isDataLoaded || !isWorkoutRestored) return;
-    console.log('[SAVE EFFECT] isWorkoutActive:', isWorkoutActive, 'exercises:', workoutExercises.length);
     if (isWorkoutActive) {
       const activeState = {
         workoutName,
@@ -1700,9 +1703,11 @@ function App() {
       };
       console.log('[SAVE] Saving workout state, exercises count:', workoutExercises.length);
       saveToDb('strongern_active_workout_state', activeState);
-    } else {
+      activeWorkoutStateSavedRef.current = true;
+    } else if (activeWorkoutStateSavedRef.current) {
       console.log('[SAVE] Deleting workout state (not active)');
       deleteFromDb('strongern_active_workout_state');
+      activeWorkoutStateSavedRef.current = false;
     }
   }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored]);
 
@@ -1801,6 +1806,97 @@ function App() {
       <BottomTabBar {...props} />
     </>
   ), [isWorkoutActive, workoutName, startTime]);
+
+  // Memoize Tab screens to prevent them from unmounting/re-mounting or re-rendering on every App state change
+  const historyScreenElement = React.useMemo(() => {
+    return <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />;
+  }, [sessionsList, handleResumeWorkout, handleDeleteSession]);
+
+  const workoutScreenElement = React.useMemo(() => {
+    return (
+      <WorkoutScreen 
+        templates={templatesList} 
+        onStartWorkout={handleStartWorkout}
+        onAddTemplate={handleAddTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
+        onUpdateTemplate={handleUpdateTemplate}
+        onReorderTemplates={handleReorderTemplates}
+        exercises={exercisesList}
+        folders={foldersList}
+        onAddFolder={handleAddFolder}
+        onDeleteFolder={handleRemoveFolder}
+        activeProgramId={activeProgramId}
+        programStartDate={programStartDate}
+        onSubscribeProgram={handleSubscribeProgram}
+        isProgramsEnabled={isProgramsEnabled}
+        enableRoutineFolders={enableRoutineFolders}
+        onAddCustomExercise={handleAddExercise}
+        sessions={sessionsList}
+        exerciseNameLanguage={exerciseNameLanguage}
+      />
+    );
+  }, [
+    templatesList,
+    handleStartWorkout,
+    handleAddTemplate,
+    handleDeleteTemplate,
+    handleUpdateTemplate,
+    handleReorderTemplates,
+    exercisesList,
+    foldersList,
+    handleAddFolder,
+    handleRemoveFolder,
+    activeProgramId,
+    programStartDate,
+    handleSubscribeProgram,
+    isProgramsEnabled,
+    enableRoutineFolders,
+    handleAddExercise,
+    sessionsList,
+    exerciseNameLanguage
+  ]);
+
+  const exercisesScreenElement = React.useMemo(() => {
+    return (
+      <ExercisesScreen 
+        exercises={exercisesList} 
+        onAddExercise={handleAddExercise}
+        onDeleteExercise={handleDeleteExercise}
+        onUpdateExerciseNotes={handleUpdateExerciseNotes}
+        onUpdateExercise={handleUpdateExercise}
+        sessions={sessionsList}
+        exerciseNameLanguage={exerciseNameLanguage}
+      />
+    );
+  }, [
+    exercisesList,
+    handleAddExercise,
+    handleDeleteExercise,
+    handleUpdateExerciseNotes,
+    handleUpdateExercise,
+    sessionsList,
+    exerciseNameLanguage
+  ]);
+
+  const muscleMapScreenElement = React.useMemo(() => {
+    return (
+      <MuscleMapScreen
+        weeklyMuscleSets={weeklyMuscleSets}
+        sessions={sessionsList}
+        exercisesList={exercisesList}
+        exerciseNameLanguage={exerciseNameLanguage}
+        showHypertrophyGoal={showHypertrophyGoal}
+        setShowHypertrophyGoal={setShowHypertrophyGoal}
+      />
+    );
+  }, [
+    weeklyMuscleSets,
+    sessionsList,
+    exercisesList,
+    exerciseNameLanguage,
+    showHypertrophyGoal,
+    setShowHypertrophyGoal
+  ]);
 
   console.log('[App] EXPO_PUBLIC_E2E is:', process.env.EXPO_PUBLIC_E2E);
   if (process.env.EXPO_PUBLIC_E2E === 'true') {
@@ -1957,61 +2053,21 @@ function App() {
 
             {isHistoryEnabled && (
               <Tab.Screen name="History">
-                {() => <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />}
+                {() => historyScreenElement}
               </Tab.Screen>
             )}
 
             <Tab.Screen name="Workout">
-              {() => (
-                <WorkoutScreen 
-                  templates={templatesList} 
-                  onStartWorkout={handleStartWorkout}
-                  onAddTemplate={handleAddTemplate}
-                  onDeleteTemplate={handleDeleteTemplate}
-                  onUpdateTemplate={handleUpdateTemplate}
-                  onReorderTemplates={handleReorderTemplates}
-                  exercises={exercisesList}
-                  folders={foldersList}
-                  onAddFolder={handleAddFolder}
-                  onDeleteFolder={handleRemoveFolder}
-                  activeProgramId={activeProgramId}
-                  programStartDate={programStartDate}
-                  onSubscribeProgram={handleSubscribeProgram}
-                  isProgramsEnabled={isProgramsEnabled}
-                  enableRoutineFolders={enableRoutineFolders}
-                  onAddCustomExercise={handleAddExercise}
-                  sessions={sessionsList}
-                  exerciseNameLanguage={exerciseNameLanguage}
-                />
-              )}
+              {() => workoutScreenElement}
             </Tab.Screen>
 
             <Tab.Screen name="Exercises">
-              {() => (
-                <ExercisesScreen 
-                  exercises={exercisesList} 
-                  onAddExercise={handleAddExercise}
-                  onDeleteExercise={handleDeleteExercise}
-                  onUpdateExerciseNotes={handleUpdateExerciseNotes}
-                  onUpdateExercise={handleUpdateExercise}
-                  sessions={sessionsList}
-                  exerciseNameLanguage={exerciseNameLanguage}
-                />
-              )}
+              {() => exercisesScreenElement}
             </Tab.Screen>
 
             {isMusclesEnabled && (
               <Tab.Screen name="Muscles">
-                {() => (
-                  <MuscleMapScreen
-                    weeklyMuscleSets={weeklyMuscleSets}
-                    sessions={sessionsList}
-                    exercisesList={exercisesList}
-                    exerciseNameLanguage={exerciseNameLanguage}
-                    showHypertrophyGoal={showHypertrophyGoal}
-                    setShowHypertrophyGoal={setShowHypertrophyGoal}
-                  />
-                )}
+                {() => muscleMapScreenElement}
               </Tab.Screen>
             )}
           </Tab.Navigator>

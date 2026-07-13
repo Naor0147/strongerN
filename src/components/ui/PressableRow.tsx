@@ -137,4 +137,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PressableRow;
+export default React.memo(PressableRow);
