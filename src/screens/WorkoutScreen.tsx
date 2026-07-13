@@ -461,7 +461,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const headerActions = useMemo(() => {
     if (activeTab === 'programs') return [];
-    const actions = [
+    const actions: any[] = [
       {
         icon: isSearching ? 'close-outline' as const : 'search-outline' as const,
         label: i18n.t('common.search'),

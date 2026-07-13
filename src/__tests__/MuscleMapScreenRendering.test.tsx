@@ -134,6 +134,8 @@ describe('MuscleMapScreen', () => {
           weeklyMuscleSets={weeklyMuscleSets}
           sessions={sessions}
           exercisesList={exercisesList}
+          showHypertrophyGoal={false}
+          setShowHypertrophyGoal={() => {}}
         />
       );
     });

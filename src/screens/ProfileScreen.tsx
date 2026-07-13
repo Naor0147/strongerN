@@ -738,6 +738,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   setShowHighlights,
   enableRoutineFolders = false,
   setEnableRoutineFolders,
+  showHypertrophyGoal = false,
+  setShowHypertrophyGoal,
   isDeveloperModeEnabled = false,
   setIsDeveloperModeEnabled,
   authMode = 'guest',
