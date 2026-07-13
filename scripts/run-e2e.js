@@ -96,7 +96,7 @@ async function main() {
 
       const startTime = Date.now();
 
-      expoProcess = spawn('npx', ['expo', 'start', '--web', '--port', String(PORT)], {
+      expoProcess = spawn('npx', ['expo', 'start', '--web', '--port', String(PORT), '--clear'], {
         stdio: 'pipe',
         shell: true,
         cwd: path.resolve(__dirname, '..'),

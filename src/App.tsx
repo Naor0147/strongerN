@@ -1802,6 +1802,7 @@ function App() {
     </>
   ), [isWorkoutActive, workoutName, startTime]);
 
+  console.log('[App] EXPO_PUBLIC_E2E is:', process.env.EXPO_PUBLIC_E2E);
   if (process.env.EXPO_PUBLIC_E2E === 'true') {
     return <E2EAppHarness />;
   }
