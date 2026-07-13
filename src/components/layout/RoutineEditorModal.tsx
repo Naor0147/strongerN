@@ -16,7 +16,7 @@ import {
   Alert,
   LayoutAnimation,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, type SharedValue, useAnimatedRef } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -166,7 +166,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // Drag state
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const scrollRef = useRef<RN.ScrollView>(null);
+  const scrollRef = useAnimatedRef<RN.ScrollView>();
 
   // Exercise context menu
   const [exMenuIdx,     setExMenuIdx]     = useState<number | null>(null);

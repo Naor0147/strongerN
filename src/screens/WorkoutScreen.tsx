@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureDetector } from 'react-native-gesture-handler';
+import { useAnimatedRef } from 'react-native-reanimated';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
 import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
@@ -201,7 +202,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   const [isFolderModalVisible, setIsFolderModalVisible] = useState(false);
   const [selectedFolderFilter, setSelectedFolderFilter] = useState('All');
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useAnimatedRef<ScrollView>();
   
   // Filter popover state
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
