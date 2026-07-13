@@ -474,23 +474,6 @@ function App() {
             applyTheme('default', '#4F8EF7', parsedOverrides);
           }
 
-          // Restore active workout state from DB (cross-platform)
-          try {
-            const savedWorkout = await loadFromDb('strongern_active_workout_state');
-            console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
-            if (savedWorkout && savedWorkout.workoutExercises && savedWorkout.workoutExercises.length > 0) {
-              console.log('[RESTORE] Restoring', savedWorkout.workoutExercises.length, 'exercises');
-              setIsWorkoutActive(true);
-              if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
-              if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
-              setWorkoutExercises(savedWorkout.workoutExercises);
-              if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
-            } else {
-              console.log('[RESTORE] No workout exercises found in saved state');
-            }
-          } catch (e) {
-            console.warn('Error restoring active workout state', e);
-          }
           setIsWorkoutRestored(true);
         }
       } catch (e) {
