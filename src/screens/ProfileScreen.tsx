@@ -951,18 +951,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }));
 
   React.useEffect(() => {
-    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
-      ? globalAnimation.speed
-      : 1;
-
-    if (speed === 0) {
-      fadeAnim.value = 1;
-      return;
-    }
-    fadeAnim.value = withTiming(1, {
-      duration: 450 * speed,
-      easing: Easing.out(Easing.cubic),
-    });
+    fadeAnim.value = 1;
+    slideAnim.value = 0;
   }, []);
 
   const handleLoadDemoData = () => {

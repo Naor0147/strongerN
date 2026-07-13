@@ -278,14 +278,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
   const slideAnim = useSharedValue(20);
 
   React.useEffect(() => {
-    if (globalAnimation.speed === 0) {
-      fadeAnim.value = 1;
-      slideAnim.value = 0;
-      return;
-    }
-    const dur = getScaledDuration(350);
-    fadeAnim.value = withTiming(1, { duration: dur });
-    slideAnim.value = withTiming(0, { duration: dur });
+    fadeAnim.value = 1;
+    slideAnim.value = 0;
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({

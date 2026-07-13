@@ -1,7 +1,10 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
 import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView } from 'react-native';
+import { enableFreeze } from 'react-native-screens';
 import { NavigationContainer }      from '@react-navigation/native';
+
+enableFreeze(true);
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
@@ -474,6 +477,25 @@ function App() {
             applyTheme('default', '#4F8EF7', parsedOverrides);
           }
 
+          // Restore active workout state from DB (cross-platform)
+          try {
+            const savedWorkout = await loadFromDb('strongern_active_workout_state');
+            console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
+            if (savedWorkout && savedWorkout.workoutExercises && savedWorkout.workoutExercises.length > 0 && savedWorkout.workoutName && savedWorkout.workoutName !== 'Empty Workout') {
+              console.log('[RESTORE] Restoring', savedWorkout.workoutExercises.length, 'exercises');
+              setIsWorkoutActive(true);
+              if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
+              if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
+              setWorkoutExercises(savedWorkout.workoutExercises);
+              if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
+              if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
+            } else {
+              console.log('[RESTORE] No valid non-empty workout found in saved state, purging');
+              deleteFromDb('strongern_active_workout_state');
+            }
+          } catch (e) {
+            console.warn('Error restoring active workout state', e);
+          }
           setIsWorkoutRestored(true);
         }
       } catch (e) {
@@ -1365,7 +1387,7 @@ function App() {
 
   // Active workout management states
   const [isWorkoutActive, setIsWorkoutActive] = React.useState(false);
-  const [workoutName, setWorkoutName] = React.useState("Active Workout");
+  const [workoutName, setWorkoutName] = React.useState("");
   const [startTime, setStartTime] = React.useState<Date>(() => new Date());
   const [workoutExercises, setWorkoutExercises] = React.useState<any[]>([]);
   const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(false);
@@ -1653,7 +1675,7 @@ function App() {
   // Persist active workout state on changes (cross-platform via db.ts)
   React.useEffect(() => {
     if (!isDataLoaded || !isWorkoutRestored) return;
-    if (isWorkoutActive) {
+    if (isWorkoutActive && workoutExercises.length > 0 && workoutName !== 'Empty Workout') {
       const activeState = {
         workoutName,
         startTime: startTime.toISOString(),
@@ -1664,8 +1686,8 @@ function App() {
       console.log('[SAVE] Saving workout state, exercises count:', workoutExercises.length);
       saveToDb('strongern_active_workout_state', activeState);
       activeWorkoutStateSavedRef.current = true;
-    } else if (activeWorkoutStateSavedRef.current) {
-      console.log('[SAVE] Deleting workout state (not active)');
+    } else {
+      console.log('[SAVE] Deleting or not persisting workout state (exercises empty or empty workout)');
       deleteFromDb('strongern_active_workout_state');
       activeWorkoutStateSavedRef.current = false;
     }
@@ -1678,7 +1700,7 @@ function App() {
         Notifications.dismissAllNotificationsAsync().catch(() => {});
       }
       if (state === 'background' || state === 'inactive') {
-        if (isWorkoutActive) {
+        if (isWorkoutActive && workoutExercises.length > 0 && workoutName !== 'Empty Workout') {
           const activeState = {
             workoutName,
             startTime: startTime.toISOString(),
@@ -1687,6 +1709,8 @@ function App() {
             comment: activeWorkoutComment,
           };
           saveToDb('strongern_active_workout_state', activeState);
+        } else {
+          deleteFromDb('strongern_active_workout_state');
         }
       }
     });
@@ -2175,7 +2199,7 @@ function App() {
             <Modal
               transparent
               visible={isInsightsVisible}
-              animationType="slide"
+              animationType="fade"
               onRequestClose={() => setIsInsightsVisible(false)}
             >
               <View style={styles.insightsBackdrop}>
