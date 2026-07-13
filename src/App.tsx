@@ -1381,59 +1381,12 @@ function App() {
 
 
   // Active workout management states
-  const [isWorkoutActive, setIsWorkoutActive] = React.useState(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        return !!window.localStorage.getItem('strongern_active_workout_state');
-      }
-    } catch {}
-    return false;
-  });
-  const [workoutName, setWorkoutName] = React.useState(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('strongern_active_workout_state');
-        if (saved) {
-          return JSON.parse(saved).workoutName || 'Active Workout';
-        }
-      }
-    } catch {}
-    return "";
-  });
-  const [startTime, setStartTime] = React.useState<Date>(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('strongern_active_workout_state');
-        if (saved) {
-          return new Date(JSON.parse(saved).startTime);
-        }
-      }
-    } catch {}
-    return new Date();
-  });
-  const [workoutExercises, setWorkoutExercises] = React.useState<any[]>(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('strongern_active_workout_state');
-        if (saved) {
-          return JSON.parse(saved).workoutExercises || [];
-        }
-      }
-    } catch {}
-    return [];
-  });
+  const [isWorkoutActive, setIsWorkoutActive] = React.useState(false);
+  const [workoutName, setWorkoutName] = React.useState("Active Workout");
+  const [startTime, setStartTime] = React.useState<Date>(() => new Date());
+  const [workoutExercises, setWorkoutExercises] = React.useState<any[]>([]);
   const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(false);
-  const [activeWorkoutComment, setActiveWorkoutComment] = React.useState(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = window.localStorage.getItem('strongern_active_workout_state');
-        if (saved) {
-          return JSON.parse(saved).comment || '';
-        }
-      }
-    } catch {}
-    return '';
-  });
+  const [activeWorkoutComment, setActiveWorkoutComment] = React.useState("");
   const [completionData, setCompletionData] = React.useState<{
     totalVolume: number;
     totalSets: number;
