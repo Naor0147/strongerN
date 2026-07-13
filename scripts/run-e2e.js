@@ -13,6 +13,13 @@ let didStartExpo = false;
 
 // Clean up child process on exit
 function cleanup() {
+  try {
+    const envPath = path.resolve(__dirname, '../.env.local');
+    if (fs.existsSync(envPath)) {
+      fs.unlinkSync(envPath);
+    }
+  } catch (err) {}
+
   if (didStartExpo && expoProcess) {
     console.log('[e2e] Cleaning up Expo.');
     if (process.platform === 'win32') {
@@ -83,6 +90,7 @@ function pollExpoServer(timeoutMs) {
 
 async function main() {
   try {
+    fs.writeFileSync(path.resolve(__dirname, '../.env.local'), 'EXPO_PUBLIC_E2E=true\n');
     console.log(`[e2e] Checking :${PORT}...`);
     const isActive = await checkPortActive();
 
