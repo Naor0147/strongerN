@@ -17,11 +17,16 @@ export default class AIReporter implements Reporter {
     if (result.status === 'passed') {
       this.passedTests++;
     } else if (result.status === 'failed' || result.status === 'timedOut') {
-      // Collect the first error message, stripping ANSI color codes to keep tokens low and output clean
       const rawError = result.errors[0] || result.error;
-      const message = rawError?.message
+      let message = rawError?.message
         ? rawError.message.replace(/\u001b\[[0-9;]*m/g, '')
         : 'Unknown error';
+      if (result.stdout.length > 0) {
+        message += '\nSTDOUT:\n' + result.stdout.map(chunk => chunk.toString()).join('');
+      }
+      if (result.stderr.length > 0) {
+        message += '\nSTDERR:\n' + result.stderr.map(chunk => chunk.toString()).join('');
+      }
       this.failures.push({
         testName: test.title,
         error: { message },
@@ -37,7 +42,7 @@ export default class AIReporter implements Reporter {
 
     for (const fail of this.failures) {
       console.log(`\nFAIL: ${fail.testName}`);
-      console.log(`REASON: ${fail.error.message.split('\n')[0]}`); // Only the first line of the error message to keep it extremely concise
+      console.log(`REASON: ${fail.error.message}`); // Only the first line of the error message to keep it extremely concise
 
       // Check if diagnostic ID is present in error message
       let diagId: DiagnosisId | null = null;
