@@ -25,6 +25,15 @@ import * as RN from 'react-native';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+// Phase A2: Safe wrapper — LayoutAnimation.configureNext throws on Fabric/Hermes in RN 0.81+
+const safeLayoutAnim = (preset = LayoutAnimation.Presets.easeInEaseOut) => {
+  try {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      LayoutAnimation.configureNext(preset);
+    }
+  } catch { /* no-op — Fabric doesn't support LayoutAnimation reliably */ }
+};
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   setForegroundSuppression,
@@ -1208,7 +1217,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       playUncheckSetSound();
     }
 
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnim();
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -1347,7 +1356,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Add a set
   const addSet = useCallback((exIdx: number, isUnilateral: boolean = false) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnim();
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
         if (eIdx !== exIdx) return ex;
@@ -1449,7 +1458,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
           restTimerEmitter.start(duration);
         }
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        safeLayoutAnim();
         setActiveExercises(prev => {
           return prev.map((ex, eIdx) => {
             if (eIdx !== exIdx) return ex;
@@ -1820,7 +1829,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           sets: sets,
         };
       });
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      safeLayoutAnim();
       setActiveExercises(prev => [...prev, ...newOnes]);
     }
     setIsLibraryVisible(false);
@@ -1854,7 +1863,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             { id: `set-${Date.now()}-2`, weight: '60', reps: '10', completed: false },
           ]
         };
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        safeLayoutAnim();
         setActiveExercises(prev => [...prev, newActive]);
         setIsLibraryVisible(false);
         setIsCreatingCustom(false);

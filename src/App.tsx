@@ -22,7 +22,7 @@ import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import { generateWorkoutInsights } from './utils/insights';
+// generateWorkoutInsights import removed (completion insights feature removed)
 
 // Screens — Auth
 import LoginScreen from './screens/LoginScreen';
@@ -40,7 +40,7 @@ import { initNotifications, getLastNotificationResponse, onNotificationTapped, i
 
 // Simulators
 import { WatchCompanionSimulator } from './components/ui/WatchCompanionSimulator';
-import { SocialShareCard } from './components/ui/SocialShareCard';
+// SocialShareCard import removed (share feature removed from completion)
 
 // Screens
 import ProfileScreen   from './screens/ProfileScreen';
@@ -253,9 +253,7 @@ function App() {
   const [isWatchSimulatorVisible, setIsWatchSimulatorVisible] = React.useState(false);
   const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(false);
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(false);
-  const [isSocialShareVisible, setIsSocialShareVisible] = React.useState(false);
-  const [isInsightsVisible, setIsInsightsVisible] = React.useState(false);
-  const [insightsData, setInsightsData] = React.useState<any[]>([]);
+  // isSocialShareVisible, isInsightsVisible, insightsData states removed (completion insights/share removed)
 
   // Custom Alert Modal State
   const [activeAlert, setActiveAlert] = React.useState<CustomAlertConfig | null>(null);
@@ -1507,6 +1505,16 @@ function App() {
 
     console.log('[START WORKOUT] Creating', mappedExercises.length, 'exercises');
     setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
+
+    // Phase C: Update lastUsed on the matching template when the workout starts
+    if (name && name !== i18n.t('extras.emptyWorkout')) {
+      setTemplatesList(prev => prev.map(t =>
+        t.name && t.name.toLowerCase().trim() === name.toLowerCase().trim()
+          ? { ...t, lastUsed: new Date() }
+          : t
+      ));
+    }
+
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
   }, []);
@@ -1625,15 +1633,7 @@ function App() {
     setSessionsList(updatedSessions);
     setUser(nextUser);
     
-    // Calculate workout insights
-    try {
-      const activeLocale = (i18n.locale === 'he' || i18n.locale.startsWith('he')) ? 'he' : 'en';
-      const insights = generateWorkoutInsights(completedExercises, sessionsListRef.current, activeLocale);
-      setInsightsData(insights);
-    } catch (err) {
-      console.warn('Error generating workout insights:', err);
-      setInsightsData([]);
-    }
+    // Insights calculation removed (completion insights feature removed)
     
     // Show celebratory screen
     setCompletionData({
@@ -1663,16 +1663,18 @@ function App() {
     }
   }, []);
 
+  // Phase A1: Removed nested setState (was crashing React 19 concurrent renderer).
+  // totalWorkouts is now kept in sync via a separate useEffect below.
   const handleDeleteSession = React.useCallback((sessionId: string) => {
-    setSessionsList(prev => {
-      const filtered = prev.filter(s => s.id !== sessionId);
-      setUser(prevUser => ({
-        ...prevUser,
-        totalWorkouts: filtered.length,
-      }));
-      return filtered;
-    });
+    setSessionsList(prev => prev.filter(s => s.id !== sessionId));
   }, []);
+
+  // Keep totalWorkouts derived from sessionsList length (avoids nested setState crash)
+  React.useEffect(() => {
+    setUser(prev => prev.totalWorkouts === sessionsList.length
+      ? prev
+      : { ...prev, totalWorkouts: sessionsList.length });
+  }, [sessionsList]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
 
@@ -2072,38 +2074,40 @@ function App() {
             />
           )}
 
-          {/* Active Workout Interactive Modal Sheet */}
-          <ActiveWorkoutModal
-            visible={isWorkoutModalVisible}
-            workoutName={workoutName}
-            startTime={startTime}
-            exercises={workoutExercises}
-            isAutoTimerEnabled={isAutoTimerEnabled}
-            onClose={handleCloseWorkoutModal}
-            onFinish={handleFinishWorkout}
-            onDiscard={handleDiscardWorkout}
-            exerciseLibrary={exercisesList}
-            onUpdateActiveExercises={setWorkoutExercises}
-            onUpdateExerciseNotes={handleUpdateExerciseNotes}
-            onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
-            onAddCustomExercise={handleAddExercise}
-            isLiveHeartRateEnabled={isLiveHeartRateEnabled}
-            isPlateCalculatorEnabled={isPlateCalculatorEnabled}
-            defaultRestDuration={defaultRestDuration}
-            onRenameWorkout={setWorkoutName}
-            sessions={sessionsList}
-            isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
-            isAutoFinishSetEnabled={isAutoFinishSetEnabled}
-            isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
-            isRpeMode={isRpeMode}
-            exerciseNameLanguage={exerciseNameLanguage}
-            isEditing={!!editingSessionId}
-            previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
-            editingComment={activeWorkoutComment}
-            onUpdateComment={handleUpdateWorkoutComment}
-            onUpdateStartTime={setStartTime}
-            onUpdateDefaultRestDuration={setDefaultRestDuration}
-          />
+          {/* Active Workout Interactive Modal Sheet — wrapped in ErrorBoundary (Phase A3) */}
+          <ErrorBoundary>
+            <ActiveWorkoutModal
+              visible={isWorkoutModalVisible}
+              workoutName={workoutName}
+              startTime={startTime}
+              exercises={workoutExercises}
+              isAutoTimerEnabled={isAutoTimerEnabled}
+              onClose={handleCloseWorkoutModal}
+              onFinish={handleFinishWorkout}
+              onDiscard={handleDiscardWorkout}
+              exerciseLibrary={exercisesList}
+              onUpdateActiveExercises={setWorkoutExercises}
+              onUpdateExerciseNotes={handleUpdateExerciseNotes}
+              onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
+              onAddCustomExercise={handleAddExercise}
+              isLiveHeartRateEnabled={isLiveHeartRateEnabled}
+              isPlateCalculatorEnabled={isPlateCalculatorEnabled}
+              defaultRestDuration={defaultRestDuration}
+              onRenameWorkout={setWorkoutName}
+              sessions={sessionsList}
+              isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
+              isAutoFinishSetEnabled={isAutoFinishSetEnabled}
+              isKeyboardDismissOnNextEnabled={isKeyboardDismissOnNextEnabled}
+              isRpeMode={isRpeMode}
+              exerciseNameLanguage={exerciseNameLanguage}
+              isEditing={!!editingSessionId}
+              previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
+              editingComment={activeWorkoutComment}
+              onUpdateComment={handleUpdateWorkoutComment}
+              onUpdateStartTime={setStartTime}
+              onUpdateDefaultRestDuration={setDefaultRestDuration}
+            />
+          </ErrorBoundary>
 
           {/* Measure Modal Sheet (accessible from Profile) */}
           <Modal
@@ -2164,30 +2168,12 @@ function App() {
                     </View>
                   </View>
                   
-                  <Pressable
-                    style={[styles.doneBtn, { backgroundColor: colors.surface2, borderColor: colors.accent, borderWidth: 1, marginBottom: spacing.sm }]}
-                    onPress={() => setIsSocialShareVisible(true)}
-                    android_ripple={rippleTokens.surface}
-                  >
-                    <Text style={[styles.doneBtnText, { color: colors.accent }]}>{i18n.t('completion.shareCard')}</Text>
-                  </Pressable>
-
-                  {insightsData && insightsData.length > 0 && (
-                    <Pressable
-                      style={[styles.doneBtn, { backgroundColor: colors.surface2, borderColor: colors.violet, borderWidth: 1, marginBottom: spacing.sm }]}
-                      onPress={() => setIsInsightsVisible(true)}
-                      android_ripple={rippleTokens.surface}
-                    >
-                      <Text style={[styles.doneBtnText, { color: colors.violet }]}>{i18n.t('completion.viewInsights')}</Text>
-                    </Pressable>
-                  )}
+                  {/* Share and Insights buttons removed (Phase D) */}
 
                   <Pressable
                     style={styles.doneBtn}
                     onPress={() => {
                       setCompletionData(null);
-                      setInsightsData([]);
-                      setIsInsightsVisible(false);
                     }}
                     android_ripple={rippleTokens.accent}
                   >
@@ -2198,103 +2184,7 @@ function App() {
             </Modal>
           )}
 
-          {/* Workout Insights Modal Overlay */}
-          {isInsightsVisible && (
-            <Modal
-              transparent
-              visible={isInsightsVisible}
-              animationType="fade"
-              onRequestClose={() => setIsInsightsVisible(false)}
-            >
-              <View style={styles.insightsBackdrop}>
-                <View style={styles.insightsCard}>
-                  <View style={styles.insightsHeader}>
-                    <Ionicons name="sparkles" size={24} color={colors.violet} style={{ marginRight: spacing.xs }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.insightsTitleText}>{i18n.t('completion.insightsTitle')}</Text>
-                      <Text style={styles.insightsSubtitleText}>{i18n.t('completion.insightsSubtitle')}</Text>
-                    </View>
-                    <Pressable
-                      onPress={() => setIsInsightsVisible(false)}
-                      style={styles.insightsCloseBtn}
-                      android_ripple={rippleTokens.borderless}
-                    >
-                      <Ionicons name="close" size={24} color={colors.textSecondary} />
-                    </Pressable>
-                  </View>
-
-                  <ScrollView
-                    style={styles.insightsScroll}
-                    contentContainerStyle={styles.insightsScrollContent}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {insightsData.map((insight, idx) => {
-                      const statusColor =
-                        insight.status === 'progress'
-                          ? colors.success
-                          : insight.status === 'regression'
-                          ? colors.error
-                          : insight.status === 'first'
-                          ? colors.highlight
-                          : colors.textSecondary;
-
-                      const statusLabel =
-                        insight.status === 'progress'
-                          ? i18n.t('completion.insightBadgeProgress')
-                          : insight.status === 'regression'
-                          ? i18n.t('completion.insightBadgeRegression')
-                          : insight.status === 'first'
-                          ? i18n.t('completion.insightBadgeFirst')
-                          : i18n.t('completion.insightBadgeNeutral');
-
-                      return (
-                        <View key={idx} style={styles.insightItemCard}>
-                          <View style={styles.insightItemHeader}>
-                            <Text style={styles.insightItemName} numberOfLines={1}>
-                              {insight.exerciseName}
-                            </Text>
-                            <View style={[styles.insightBadge, { backgroundColor: statusColor + '15', borderColor: statusColor, borderWidth: 1 }]}>
-                              <Text style={[styles.insightBadgeText, { color: statusColor }]}>
-                                {statusLabel}
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View style={styles.insightItemDetails}>
-                            {insight.details.map((detail: string, dIdx: number) => (
-                              <View key={dIdx} style={styles.insightDetailRow}>
-                                <Ionicons name="chevron-forward" size={14} color={statusColor} style={{ marginTop: 2, marginRight: spacing.xs }} />
-                                <Text style={styles.insightDetailText}>{detail}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <Pressable
-                    style={[styles.doneBtn, { backgroundColor: colors.violet }]}
-                    onPress={() => setIsInsightsVisible(false)}
-                    android_ripple={rippleTokens.accent}
-                  >
-                    <Text style={styles.doneBtnText}>{i18n.t('common.ok')}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </Modal>
-          )}
-
-          {completionData && (
-            <SocialShareCard
-              visible={isSocialShareVisible}
-              workoutName={completionData.name}
-              durationMin={completionData.durationMin}
-              totalSets={completionData.totalSets}
-              totalVolume={completionData.totalVolume}
-              onClose={() => setIsSocialShareVisible(false)}
-            />
-          )}
+          {/* Workout Insights Modal and SocialShareCard removed (Phase D) */}
           {/* Custom Alert Modal (App-Wide Native Alert Replacement) */}
           {activeAlert && (
             <Modal

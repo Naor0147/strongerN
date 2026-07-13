@@ -931,30 +931,6 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       <ScreenHeader
         title={i18n.t('muscleMap.title')}
         subtitle={i18n.t('muscleMap.weekFocus')}
-        actions={[
-          {
-            icon: 'options-outline',
-            label: i18n.t('muscleMap.settingsLabel', { defaultValue: 'Settings' }),
-            onPress: () => {
-              Alert.alert(
-                i18n.t('muscleMap.settingsTitle', { defaultValue: 'Muscle Map Settings' }),
-                i18n.t('muscleMap.settingsDesc', { defaultValue: 'Configure Muscle Map display preferences' }),
-                [
-                  {
-                    text: showHypertrophyGoal 
-                      ? i18n.t('muscleMap.hideHypertrophyGoal', { defaultValue: 'Hide Hypertrophy Goal' }) 
-                      : i18n.t('muscleMap.showHypertrophyGoal', { defaultValue: 'Show Hypertrophy Goal' }),
-                    onPress: () => setShowHypertrophyGoal(!showHypertrophyGoal)
-                  },
-                  {
-                    text: i18n.t('common.cancel'),
-                    style: 'cancel'
-                  }
-                ]
-              );
-            }
-          }
-        ]}
         testID="musclemap.header"
       />
       <ScrollView

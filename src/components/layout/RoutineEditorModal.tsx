@@ -15,11 +15,21 @@ import {
   Vibration,
   Alert,
   LayoutAnimation,
+  UIManager,
   useWindowDimensions,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, type SharedValue, useAnimatedRef } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
+
+// Phase A2: Safe LayoutAnimation wrapper — Fabric/Hermes RN 0.81+ may throw
+const safeLayoutAnim = (preset = LayoutAnimation.Presets.easeInEaseOut) => {
+  try {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      LayoutAnimation.configureNext(preset);
+    }
+  } catch { /* no-op */ }
+};
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
@@ -431,7 +441,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
   // ── Set helpers ──────────────────────────────────────────────────────────────
   const addSet = useCallback((exIdx: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnim();
     setEditorExercises(prev => {
       const next = [...prev];
       const exName = next[exIdx].name;
