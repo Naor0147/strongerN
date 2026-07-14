@@ -5,7 +5,7 @@
  * - To ENABLE React Scan performance monitoring: Set `REACT_SCAN_ENABLED = true`
  * - To DISABLE React Scan performance monitoring: Set `REACT_SCAN_ENABLED = false`
  * 
- * React Scan helps identify unnecessary component re-renders and performance bottlenecks.
+ * React Scan displays a visual toolbar and highlights re-renders in web browsers.
  * See: https://github.com/aidenybai/react-scan
  */
 
@@ -13,26 +13,33 @@ import { scan } from 'react-scan';
 
 // ============================================================================
 // ⚡ TOGGLE REACT SCAN HERE ⚡
-// Set to `true` to enable performance scanning, or `false` to disable.
+// Set to `true` to enable performance scanning overlay, or `false` to disable.
 // ============================================================================
 export const REACT_SCAN_ENABLED = false;
 
 /**
- * Initializes React Scan if running in development mode and `REACT_SCAN_ENABLED` is true.
+ * Initializes React Scan overlay for web browsers.
  */
 export function initReactScan(): void {
-  if (__DEV__ && REACT_SCAN_ENABLED) {
+  if (typeof window === 'undefined') {
+    // React Scan overlay is designed for browser DOM environment
+    return;
+  }
+
+  if (REACT_SCAN_ENABLED) {
     try {
       scan({
         enabled: true,
+        showToolbar: true,
+        dangerouslyForceRunInProduction: true, // Ensures overlay activates regardless of bundler ENV flag
         log: true,
       });
-      console.log('[ReactScan] Performance monitoring initialized.');
+      console.log('[ReactScan] ⚡ Performance monitoring overlay initialized.');
     } catch (error) {
-      console.warn('[ReactScan] Initialization warning/error:', error);
+      console.warn('[ReactScan] Initialization warning:', error);
     }
   }
 }
 
-// Automatically trigger initialization when this module is imported
+// Automatically initialize on module import
 initReactScan();
