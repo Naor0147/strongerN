@@ -903,7 +903,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 itemExiting={null}
               >
                 {filteredTemplates.map((item) => (
-                  <View key={item.id} style={styles.templateCardWrap}>
+                  <View key={item.id} style={[styles.templateCardWrap, { width: cardListWidth }]}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
@@ -1293,7 +1293,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   templateCardWrap: {
-    width: '100%',
     marginBottom: spacing.md,
   },
   list: {
