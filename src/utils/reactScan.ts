@@ -22,21 +22,29 @@ export const REACT_SCAN_ENABLED = false;
  */
 export function initReactScan(): void {
   if (typeof window === 'undefined') {
-    // React Scan overlay is designed for browser DOM environment
     return;
   }
 
   if (REACT_SCAN_ENABLED) {
-    try {
-      scan({
-        enabled: true,
-        showToolbar: true,
-        dangerouslyForceRunInProduction: true, // Ensures overlay activates regardless of bundler ENV flag
-        log: true,
-      });
-      console.log('[ReactScan] ⚡ Performance monitoring overlay initialized.');
-    } catch (error) {
-      console.warn('[ReactScan] Initialization warning:', error);
+    const startScan = () => {
+      try {
+        scan({
+          enabled: true,
+          showToolbar: true,
+          dangerouslyForceRunInProduction: true, // Guarantees execution under Metro web bundler
+          log: true,
+        });
+        console.log('[ReactScan] ⚡ Performance monitoring overlay initialized.');
+      } catch (error) {
+        console.warn('[ReactScan] Initialization warning:', error);
+      }
+    };
+
+    // Ensure DOM body is ready before attaching scanner UI
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startScan);
+    } else {
+      startScan();
     }
   }
 }
