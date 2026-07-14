@@ -2032,7 +2032,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   accessibilityLabel="Edit workout note"
                 >
                   <Ionicons name="document-text-outline" size={16} color={colors.accent} />
-                  <Text style={[styles.notesText, { color: colors.textPrimary, fontSize: font.sizes.sm }]} numberOfLines={3}>
+                  <Text style={[styles.notesText, { color: colors.textPrimary, fontSize: font.sizes.sm }]}>
                     {workoutNote}
                   </Text>
                 </Pressable>
@@ -3344,7 +3344,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               return (
                 <View style={styles.notesContainer}>
                   <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.notesText} numberOfLines={2} testID="exercise-notes-text">
+                  <Text style={styles.notesText} testID="exercise-notes-text">
                     {libEx.notes}
                   </Text>
                 </View>

@@ -93,7 +93,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
       {isActive && notes ? (
         <View style={s.notesContainer}>
           <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
-          <Text style={s.notesText} numberOfLines={2}>{notes}</Text>
+          <Text style={s.notesText}>{notes}</Text>
         </View>
       ) : null}
 
