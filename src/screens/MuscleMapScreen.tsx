@@ -13,7 +13,7 @@ import {
   Platform,
   InteractionManager,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, runOnJS, type SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, runOnJS, Easing, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -750,9 +750,13 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     ],
   }));
 
+  const mapEntryOpacity = useSharedValue(0);
+  const mapEntryScale = useSharedValue(0.92);
+
   const mapAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: mapEntryOpacity.value,
     transform: [
-      { scale: scaleAnim.value },
+      { scale: scaleAnim.value * mapEntryScale.value },
       { translateX: translateXAnim.value },
       { translateY: translateYAnim.value },
     ],
@@ -927,22 +931,16 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     [sortedMuscles, view],
   );
 
-  const [isMapReady, setIsMapReady] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(true);
 
+  // Trigger UI-thread spring & timing entry animation when screen mounts or view switches
   useEffect(() => {
-    if (!InteractionManager || typeof InteractionManager.runAfterInteractions !== 'function') {
-      setIsMapReady(true);
-      return;
-    }
-    const task = InteractionManager.runAfterInteractions(() => {
-      setIsMapReady(true);
-    });
-    return () => {
-      if (task && typeof task.cancel === 'function') {
-        task.cancel();
-      }
-    };
-  }, []);
+    mapEntryOpacity.value = 0;
+    mapEntryScale.value = 0.92;
+    const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
+    mapEntryOpacity.value = withTiming(1, { duration: 320, easing: easingFn });
+    mapEntryScale.value = withSpring(1, getSpringConfig(120, 18));
+  }, [view]);
 
   return (
     <View style={[styles.safe, { paddingTop: top }]}>
