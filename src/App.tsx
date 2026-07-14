@@ -1159,7 +1159,7 @@ function App() {
   // Dynamic state modifiers
   const handleAddExercise = React.useCallback((name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => {
     const newEx = {
-      id: `ex-custom-${Date.now()}`,
+      id: `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
       name,
       muscleGroup,
       allTimeSets: 0,
@@ -1184,7 +1184,7 @@ function App() {
 
   const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
     const newTpl = {
-      id: `tpl-custom-${Date.now()}`,
+      id: `tpl-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
       name,
       exercises: exerciseNames,
       exercisesDetails,
