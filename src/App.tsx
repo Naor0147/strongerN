@@ -390,12 +390,23 @@ function App() {
               })));
             }
             if (parsed.exercisesList) {
-              const loadedIds = new Set(parsed.exercisesList.map((e: any) => e.id));
-              const loadedNames = new Set(parsed.exercisesList.map((e: any) => e.name.toLowerCase().trim()));
-              const merged = [...parsed.exercisesList];
+              const loadedIds = new Set();
+              const uniqueLoaded = parsed.exercisesList.map((e: any) => {
+                if (!e.id || loadedIds.has(e.id)) {
+                  const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+                  loadedIds.add(newId);
+                  return { ...e, id: newId };
+                }
+                loadedIds.add(e.id);
+                return e;
+              });
+
+              const loadedNames = new Set(uniqueLoaded.map((e: any) => e.name.toLowerCase().trim()));
+              const merged = [...uniqueLoaded];
               mockExercises.forEach((defaultEx) => {
                 if (!loadedIds.has(defaultEx.id) && !loadedNames.has(defaultEx.name.toLowerCase().trim())) {
                   merged.push(defaultEx);
+                  loadedIds.add(defaultEx.id);
                 }
               });
               setExercisesList(merged);
@@ -1062,7 +1073,19 @@ function App() {
           lastUsed: new Date(t.lastUsed)
         })));
       }
-      if (parsed.exercisesList) setExercisesList(parsed.exercisesList);
+      if (parsed.exercisesList) {
+        const loadedIds = new Set();
+        const uniqueLoaded = parsed.exercisesList.map((e: any) => {
+          if (!e.id || loadedIds.has(e.id)) {
+            const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+            loadedIds.add(newId);
+            return { ...e, id: newId };
+          }
+          loadedIds.add(e.id);
+          return e;
+        });
+        setExercisesList(uniqueLoaded);
+      }
       if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
       if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
       if (parsed.lastSynced) setLastSynced(parsed.lastSynced);
