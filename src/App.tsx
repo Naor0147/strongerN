@@ -359,7 +359,6 @@ function App() {
           if (secureOverridesStr) {
             try {
               parsedOverrides = JSON.parse(secureOverridesStr);
-              setThemeOverrides(parsedOverrides);
             } catch (e) {
               console.warn('Failed to parse theme overrides', e);
             }

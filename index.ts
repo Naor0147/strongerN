@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler';
+import './src/utils/reactScan'; // React Scan performance monitor toggle
 import './src/utils/alertOverride'; // Override Alert.alert globally
 import './src/utils/crashLogger'; // Initialize global error trackers
 import { registerRootComponent } from 'expo';

@@ -38,7 +38,8 @@
     "react-native-sortables": "^1.9.4",
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "react-scan": "^0.5.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
