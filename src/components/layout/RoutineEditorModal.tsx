@@ -448,37 +448,49 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       const libEx = exercises.find(e => e.name.toLowerCase() === exName.toLowerCase());
       const isUnilateral = libEx?.isUnilateral || false;
       const last = next[exIdx].sets[next[exIdx].sets.length - 1];
-      next[exIdx].sets = [
-        ...next[exIdx].sets,
-        {
-          id:       `s-${exIdx}-${Date.now()}-${Math.random()}`,
-          weight:   last?.weight ?? '0',
-          reps:     last?.reps   ?? '10',
-          category: last?.category ?? 'S',
-          isUnilateral,
-          leftWeight:   isUnilateral ? (last?.leftWeight ?? last?.weight ?? '0') : undefined,
-          leftReps:     isUnilateral ? (last?.leftReps ?? last?.reps ?? '10') : undefined,
-          rightWeight:  isUnilateral ? (last?.rightWeight ?? last?.weight ?? '0') : undefined,
-          rightReps:    isUnilateral ? (last?.rightReps ?? last?.reps ?? '10') : undefined,
-        },
-      ];
+      next[exIdx] = {
+        ...next[exIdx],
+        sets: [
+          ...next[exIdx].sets,
+          {
+            id:       `s-${exIdx}-${Date.now()}-${Math.random()}`,
+            weight:   last?.weight ?? '0',
+            reps:     last?.reps   ?? '10',
+            category: last?.category ?? 'S',
+            isUnilateral,
+            leftWeight:   isUnilateral ? (last?.leftWeight ?? last?.weight ?? '0') : undefined,
+            leftReps:     isUnilateral ? (last?.leftReps ?? last?.reps ?? '10') : undefined,
+            rightWeight:  isUnilateral ? (last?.rightWeight ?? last?.weight ?? '0') : undefined,
+            rightReps:    isUnilateral ? (last?.rightReps ?? last?.reps ?? '10') : undefined,
+          },
+        ],
+      };
       return next;
     });
   }, [exercises]);
 
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
+    safeLayoutAnim();
     setEditorExercises(prev => {
-      const next = [...prev];
-      next[exIdx].sets = next[exIdx].sets.filter((_, i) => i !== setIdx);
-      return next;
+      return prev.map((ex, eIdx) => {
+        if (eIdx !== exIdx) return ex;
+        return { ...ex, sets: ex.sets.filter((_, i) => i !== setIdx) };
+      });
     });
   }, []);
 
   const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
     setEditorExercises(prev => {
-      const next = [...prev];
-      (next[exIdx].sets[setIdx] as any)[field] = value;
-      return next;
+      return prev.map((ex, eIdx) => {
+        if (eIdx !== exIdx) return ex;
+        return {
+          ...ex,
+          sets: ex.sets.map((set, sIdx) => {
+            if (sIdx !== setIdx) return set;
+            return { ...set, [field]: value };
+          }),
+        };
+      });
     });
   }, []);
 
