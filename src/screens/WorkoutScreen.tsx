@@ -873,6 +873,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               {/* Reorderable Draggable List */}
               <Sortable.Flex
                 flexDirection="column"
+                flexWrap="nowrap"
                 gap={0}
                 width="fill"
                 customHandle
@@ -902,7 +903,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 itemExiting={null}
               >
                 {filteredTemplates.map((item) => (
-                  <View key={item.id} style={[styles.templateCardWrap, { width: cardListWidth }]}>
+                  <View key={item.id} style={styles.templateCardWrap}>
                     <TemplateCard
                       template={item}
                       onStart={onStartWorkout}
@@ -1292,6 +1293,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   templateCardWrap: {
+    width: '100%',
     marginBottom: spacing.md,
   },
   list: {

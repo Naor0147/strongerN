@@ -79,16 +79,11 @@ export const ProfileSkeleton: React.FC = () => {
         </View>
       </View>
 
-      {/* Stat Grid Skeleton */}
-      <View style={skeletonStyles.statGrid}>
-        <SkeletonBlock width="48%" height={80} borderRadius={radius.md} />
-        <SkeletonBlock width="48%" height={80} borderRadius={radius.md} />
-        <SkeletonBlock width="48%" height={80} borderRadius={radius.md} />
-        <SkeletonBlock width="48%" height={80} borderRadius={radius.md} />
-      </View>
+      {/* Up Next Workout Single Large Card Skeleton (Matches loaded layout) */}
+      <SkeletonBlock width="100%" height={145} borderRadius={radius.lg} />
 
-      {/* Section Skeleton */}
-      <SkeletonBlock width="100%" height={140} borderRadius={radius.lg} style={{ marginTop: spacing.md }} />
+      {/* Dashboard / Chart Section Skeleton */}
+      <SkeletonBlock width="100%" height={160} borderRadius={radius.lg} />
     </ShimmerContainer>
   );
 };
@@ -96,15 +91,25 @@ export const ProfileSkeleton: React.FC = () => {
 export const WorkoutHeaderSkeleton: React.FC = () => {
   return (
     <ShimmerContainer style={skeletonStyles.container}>
+      {/* Screen Header */}
       <View style={skeletonStyles.headerRow}>
         <SkeletonBlock width={120} height={28} borderRadius={radius.sm} />
         <SkeletonBlock width={36} height={36} borderRadius={18} />
       </View>
 
-      <View style={skeletonStyles.routineHeader}>
-        <SkeletonBlock width={180} height={24} />
-        <SkeletonBlock width="100%" height={50} borderRadius={radius.md} style={{ marginTop: spacing.sm }} />
+      {/* Start Empty Workout CTA */}
+      <SkeletonBlock width="100%" height={50} borderRadius={radius.md} />
+
+      {/* My Routines Header */}
+      <View style={{ gap: spacing.xs, marginTop: spacing.xs }}>
+        <SkeletonBlock width={140} height={20} />
+        <SkeletonBlock width={90} height={14} />
       </View>
+
+      {/* Routine Templates List Skeletons */}
+      <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
+      <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
+      <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
     </ShimmerContainer>
   );
 };
@@ -130,15 +135,5 @@ const skeletonStyles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  statGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
-  routineHeader: {
-    gap: spacing.xs,
-    marginTop: spacing.xs,
   },
 });
