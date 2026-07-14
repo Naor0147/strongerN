@@ -53,7 +53,7 @@ interface WorkoutScreenProps {
   onSubscribeProgram?: (programId: string | null) => void;
   isProgramsEnabled?: boolean;
   enableRoutineFolders?: boolean;
-  onAddCustomExercise?: (name: string, muscle: string, equipment: string) => any;
+  onAddCustomExercise?: (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   sessions?:         any[];
   exerciseNameLanguage?: 'en' | 'he';
   onUpdateExerciseNotes?: (id: string, notes?: string) => void;
@@ -333,9 +333,16 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     // Save exercise notes to the global library
     if (exercisesDetails && Array.isArray(exercisesDetails)) {
       exercisesDetails.forEach((detail: any) => {
-        if (detail.name && detail.notes !== undefined && onUpdateExerciseNotes) {
-          const match = exercises.find(e => e.name.toLowerCase() === detail.name.toLowerCase());
-          if (match) {
+        if (detail.name) {
+          const trimmedName = detail.name.trim();
+          let match = exercises.find(e => e.name.toLowerCase() === trimmedName.toLowerCase());
+
+          if (!match && onAddCustomExercise) {
+            const isExUnilateral = Array.isArray(detail.sets) && detail.sets.some((s: any) => s.isUnilateral);
+            match = onAddCustomExercise(trimmedName, 'Other', 'Other', isExUnilateral);
+          }
+
+          if (match && detail.notes !== undefined && onUpdateExerciseNotes) {
             onUpdateExerciseNotes(match.id, detail.notes);
           }
         }
@@ -494,14 +501,34 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       }
 
       if (onAddTemplate) {
-        // Save exercise notes to the global library if provided
+        // Save exercise notes to the global library if provided (auto-create if missing)
         if (parsed.exercisesDetails && Array.isArray(parsed.exercisesDetails)) {
           parsed.exercisesDetails.forEach((detail: any) => {
-            if (detail.name && detail.notes && onUpdateExerciseNotes) {
-              const match = exercises.find(e => e.name.toLowerCase() === detail.name.toLowerCase());
-              if (match) {
+            if (detail.name) {
+              const trimmedName = detail.name.trim();
+              let match = exercises.find(e => e.name.toLowerCase() === trimmedName.toLowerCase());
+
+              if (!match && onAddCustomExercise) {
+                const isExUnilateral = Array.isArray(detail.sets) && detail.sets.some((s: any) => s.isUnilateral);
+                match = onAddCustomExercise(trimmedName, 'Other', 'Other', isExUnilateral);
+              }
+
+              if (match && detail.notes !== undefined && onUpdateExerciseNotes) {
                 onUpdateExerciseNotes(match.id, detail.notes);
               }
+            }
+          });
+        }
+
+        // Auto-create any missing exercises from the general list as well
+        if (parsed.exercises && Array.isArray(parsed.exercises)) {
+          parsed.exercises.forEach((exName: string) => {
+            const trimmedName = exName.trim();
+            const exists = exercises.some(e => e.name.toLowerCase() === trimmedName.toLowerCase());
+            if (!exists && onAddCustomExercise) {
+              const detail = parsed.exercisesDetails?.find((d: any) => d.name.toLowerCase() === trimmedName.toLowerCase());
+              const isExUnilateral = detail && Array.isArray(detail.sets) && detail.sets.some((s: any) => s.isUnilateral);
+              onAddCustomExercise(trimmedName, 'Other', 'Other', isExUnilateral);
             }
           });
         }
