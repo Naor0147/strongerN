@@ -19,9 +19,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureDetector } from 'react-native-gesture-handler';
-import { useAnimatedRef } from 'react-native-reanimated';
+import Animated, { useAnimatedRef, useSharedValue, useAnimatedStyle, withSpring, withTiming, Easing } from 'react-native-reanimated';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, getSpringConfig } from '../theme';
 import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
 import i18n from '../utils/i18n';
 
@@ -340,6 +340,24 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   // Calendar program week viewer state
   const [viewingWeek, setViewingWeek] = useState(1);
 
+  // UI-thread entrance micro-animation
+  const fadeAnim = useSharedValue(0);
+  const scaleAnim = useSharedValue(0.96);
+
+  useEffect(() => {
+    fadeAnim.value = 0;
+    scaleAnim.value = 0.96;
+    const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
+    fadeAnim.value = withTiming(1, { duration: 280, easing: easingFn });
+    scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
+  }, []);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ scale: scaleAnim.value }],
+    flex: 1,
+  }));
+
   const handleDeleteRoutine = (tpl: Template) => {
     Alert.alert(
       i18n.t('workout.deleteRoutine'),
@@ -557,11 +575,12 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.safe, { paddingTop: insets.top }]}>
-      <ScreenHeader
-        title={i18n.t('workout.title')}
-        actions={headerActions}
-        testID="workout.header"
-      />
+        <Animated.View style={animatedContainerStyle}>
+          <ScreenHeader
+            title={i18n.t('workout.title')}
+            actions={headerActions}
+            testID="workout.header"
+          />
 
       {/* Tab Header Selector */}
       {isProgramsEnabled && (
@@ -1032,6 +1051,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
           )}
         </ScrollView>
       )}
+      </Animated.View>
 
       {/* Routine Editor — Full-Screen (replaces old Create/Edit Routine popup) */}
       <RoutineEditorModal

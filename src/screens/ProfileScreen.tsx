@@ -19,7 +19,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import Animated, { useSharedValue, withTiming, Easing, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useSharedValue, withTiming, withSpring, Easing, useAnimatedStyle } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,7 +41,7 @@ import {
   CrashLog
 } from '../utils/crashLogger';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getSpringConfig } from '../theme';
 import * as googleDrive from '../utils/googleDrive';
 import { getNextWorkout } from '../utils/workout';
 import {
@@ -920,16 +920,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Load animations
   const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(0);
+  const scaleAnim = useSharedValue(0.96);
 
   const animatedProfileStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
+    transform: [{ scale: scaleAnim.value }],
+    flex: 1,
   }));
 
   React.useEffect(() => {
-    fadeAnim.value = 1;
-    slideAnim.value = 0;
+    fadeAnim.value = 0;
+    scaleAnim.value = 0.96;
+    const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
+    fadeAnim.value = withTiming(1, { duration: 280, easing: easingFn });
+    scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
   }, []);
 
   const handleLoadDemoData = () => {

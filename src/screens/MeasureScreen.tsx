@@ -11,13 +11,13 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, cancelAnimation } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, cancelAnimation, Easing } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import { MeasureItem } from '../data/mockData';
 import i18n from '../utils/i18n';
 
@@ -267,15 +267,33 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
     },
   ], []);
 
+  const fadeAnim = useSharedValue(0);
+  const scaleAnim = useSharedValue(0.96);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ scale: scaleAnim.value }],
+    flex: 1,
+  }));
+
+  useEffect(() => {
+    fadeAnim.value = 0;
+    scaleAnim.value = 0.96;
+    const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
+    fadeAnim.value = withTiming(1, { duration: 280, easing: easingFn });
+    scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
+  }, []);
+
   const totalCount = primaryMetrics.length + bodyPartMetrics.length;
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
-      <ScreenHeader
-        title={i18n.t('measure.title')}
-        subtitle={i18n.t('extras.metricsTracked', { count: totalCount })}
-        actions={headerActions}
-      />
+      <Animated.View style={animatedContainerStyle}>
+        <ScreenHeader
+          title={i18n.t('measure.title')}
+          subtitle={i18n.t('extras.metricsTracked', { count: totalCount })}
+          actions={headerActions}
+        />
       <FlatList
         data={allData}
         keyExtractor={keyExtractor}
@@ -286,6 +304,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
         removeClippedSubviews
         testID="measure.list"
       />
+      </Animated.View>
 
       {/* Modal 1: Log Metric Value (Redesigned as Metric Details Modal) */}
       {selectedMetric && (

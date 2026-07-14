@@ -13,13 +13,13 @@ import {
   Pressable,
   Alert,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import { Exercise } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
@@ -334,17 +334,20 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   );
 
   const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(20);
+  const scaleAnim = useSharedValue(0.96);
 
   const animatedContainerStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
+    transform: [{ scale: scaleAnim.value }],
     flex: 1,
   }));
 
   React.useEffect(() => {
-    fadeAnim.value = 1;
-    slideAnim.value = 0;
+    fadeAnim.value = 0;
+    scaleAnim.value = 0.96;
+    const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
+    fadeAnim.value = withTiming(1, { duration: 280, easing: easingFn });
+    scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
   }, []);
 
   // Context Menu and Notes states
