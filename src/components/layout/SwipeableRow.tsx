@@ -39,16 +39,16 @@ export const SwipeableRow: React.FC<{
   borderRadius?: number;
   style?: any;
   blocksExternalGesture?: any | any[];
-  activeOffsetX?: [number, number] | number[];
+  activeOffsetX?: [number, number];
   snapBackOnRelease?: boolean;
-}> = React.memo(({
+}> = ({
   children,
   onDelete,
   onDeleteWithConfirm,
   borderRadius = radius.xs,
   style,
   blocksExternalGesture,
-  activeOffsetX = [-15, 15] as [number, number] | number[],
+  activeOffsetX = [-15, 15],
   snapBackOnRelease = false,
 }) => {
   const translateX = useSharedValue(0);
@@ -170,7 +170,7 @@ export const SwipeableRow: React.FC<{
     let g = Gesture.Pan()
       // Tighter vertical fail so the parent ScrollView wins quickly on Android;
       // slightly larger horizontal activation so taps/inputs don't misfire.
-      .activeOffsetX(activeOffsetX as [number, number])
+      .activeOffsetX(activeOffsetX)
       .failOffsetY([-10, 10]);
 
     if (blocksExternalGesture) {
@@ -321,7 +321,7 @@ export const SwipeableRow: React.FC<{
       </GestureDetector>
     </Animated.View>
   );
-});
+};
 
 const swipeStyles = StyleSheet.create({
   container: {

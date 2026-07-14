@@ -34,8 +34,10 @@ import { RoutineSharingModal } from '../components/ui/RoutineSharingModal';
 import Sortable from 'react-native-sortables';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RoutineEditorModal from '../components/layout/RoutineEditorModal';
+import { WorkoutHeaderSkeleton } from '../components/ui/Skeleton';
 
 interface WorkoutScreenProps {
+  isHydrating?:      boolean;
   templates:         Template[];
   exercises:         Exercise[];
   onStartWorkout?:   (name: string, exercises: string[], exercisesDetails?: any[]) => void;
@@ -169,6 +171,7 @@ const EMPTY_SESSIONS: any[] = [];
 
 // ─── Screen ────────────────────────────────────────────────────────
 const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
+  isHydrating = false,
   templates,
   exercises,
   onStartWorkout,
@@ -571,6 +574,18 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       onPress={folderPressHandlers[item.name]}
     />
   ), [folderPressHandlers]);
+
+  if (isHydrating) {
+    return (
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
+        <ScreenHeader
+          title={i18n.t('workout.title')}
+          testID="workout.header"
+        />
+        <WorkoutHeaderSkeleton />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

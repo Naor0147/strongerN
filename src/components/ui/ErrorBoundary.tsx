@@ -28,8 +28,8 @@ export class ErrorBoundary extends Component<Props, State> {
     const stack = errorInfo.componentStack || error.stack || '';
     console.error('[ErrorBoundary] Caught crash:', error.message, stack);
     
-    // Synchronously save crash log to database
-    saveCrashLogSync(error.message, stack, true);
+    // Synchronously save crash log to database (non-fatal recovery view)
+    saveCrashLogSync(error.message, stack, false);
   }
 
   private handleCopyLog = () => {

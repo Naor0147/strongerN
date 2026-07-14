@@ -3,7 +3,6 @@ module.exports = function(api) {
   return {
     presets: [
       'babel-preset-expo',
-      '@ohah/react-native-mcp-server/babel-preset',
     ],
     plugins: [
       'react-native-worklets/plugin',

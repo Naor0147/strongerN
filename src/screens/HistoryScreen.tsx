@@ -10,6 +10,7 @@ import {
   Pressable,
   ScrollView,
   InteractionManager,
+  Platform,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from 'react-native-reanimated';
 import * as RN from 'react-native';
@@ -591,7 +592,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
-            removeClippedSubviews
+            removeClippedSubviews={Platform.OS === 'ios'}
             initialNumToRender={5}
             maxToRenderPerBatch={4}
             updateCellsBatchingPeriod={50}

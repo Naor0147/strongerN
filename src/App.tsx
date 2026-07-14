@@ -1,6 +1,6 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView } from 'react-native';
+import { View, StyleSheet, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
 import { NavigationContainer }      from '@react-navigation/native';
 
@@ -1801,6 +1801,7 @@ function App() {
   const workoutScreenElement = React.useMemo(() => {
     return (
       <WorkoutScreen 
+        isHydrating={!isDataLoaded || !isWorkoutRestored}
         templates={templatesList} 
         onStartWorkout={handleStartWorkout}
         onAddTemplate={handleAddTemplate}
@@ -1822,6 +1823,8 @@ function App() {
       />
     );
   }, [
+    isDataLoaded,
+    isWorkoutRestored,
     templatesList,
     handleStartWorkout,
     handleAddTemplate,
@@ -1886,24 +1889,12 @@ function App() {
     return <E2EAppHarness />;
   }
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
-  }
-
   // Show login/onboarding if not yet completed
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
-      {authState === null || !isDataLoaded || !isWorkoutRestored ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
-      ) : !authState.hasCompletedOnboarding ? (
+      {authState === null ? null : !authState.hasCompletedOnboarding ? (
         <LoginScreen
           onComplete={handleAuthComplete}
           onGoogleLogin={handleGoogleLogin}
@@ -1920,6 +1911,7 @@ function App() {
             <Tab.Screen name="Profile">
               {() => (
                 <ProfileScreen
+                  isHydrating={!isDataLoaded || !isWorkoutRestored}
                   user={user}
                   weeklyChartData={dynamicWeeklyChartData}
                   sessions={sessionsList}
@@ -2242,12 +2234,6 @@ const styles = StyleSheet.create({
   root: {
     flex:            1,
     backgroundColor: colors.bg,
-  },
-  loading: {
-    flex:            1,
-    backgroundColor: colors.bg,
-    alignItems:      'center',
-    justifyContent:  'center',
   },
 
   // Celebration Modal Styles

@@ -19,7 +19,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import Animated, { useSharedValue, withTiming, withSpring, Easing, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useSharedValue, withTiming, withSpring, Easing, useAnimatedStyle, FadeIn } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { ProfileSkeleton } from '../components/ui/Skeleton';
+
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
 import { pickAndReadBackupFile } from '../utils/backupManager';
@@ -67,6 +69,7 @@ import SectionLabel from '../components/ui/SectionLabel';
 import IconButton   from '../components/ui/IconButton';
 
 interface ProfileScreenProps {
+  isHydrating?:          boolean;
   user:                  User;
   weeklyChartData:       ChartDataPoint[];
   sessions:              any[];
@@ -655,6 +658,7 @@ const DeveloperCrashLogsView: React.FC<DeveloperCrashLogsViewProps> = ({ onBack 
 };
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ 
+  isHydrating = false,
   user, 
   weeklyChartData, 
   sessions,
@@ -1411,6 +1415,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     );
   };
 
+
+  if (isHydrating) {
+    return (
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
+        <ScreenHeader
+          title={i18n.t('tabs.profile')}
+          testID="profile.header"
+        />
+        <ProfileSkeleton />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>

@@ -1,6 +1,7 @@
 import { Platform, Share, Clipboard } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
+import * as Application from 'expo-application';
 import { saveToDb, loadFromDb } from './db';
 
 export interface CrashLog {
@@ -14,7 +15,7 @@ export interface CrashLog {
 }
 
 const CRASH_LOGS_KEY = 'crash_logs';
-const CURRENT_APP_VERSION = '1.0.0.40';
+const CURRENT_APP_VERSION = Application.nativeApplicationVersion || '1.0.0.98';
 
 export async function getCrashLogs(): Promise<CrashLog[]> {
   try {
@@ -213,6 +214,24 @@ export function initCrashLogger(): void {
   isInitialized = true;
 
   console.log('[CrashLogger] Initializing global error catchers...');
+
+  // Hook console.error for debounced sync persistence
+  const originalConsoleError = console.error;
+  let lastLoggedMsg = '';
+  let lastLoggedTime = 0;
+
+  console.error = (...args: any[]) => {
+    try {
+      const msg = args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      const now = Date.now();
+      if (!msg.startsWith('[CrashLogger]') && (msg !== lastLoggedMsg || now - lastLoggedTime > 1000)) {
+        lastLoggedMsg = msg;
+        lastLoggedTime = now;
+        saveCrashLogSync('console.error: ' + msg, '', false);
+      }
+    } catch (e) {}
+    originalConsoleError.apply(console, args);
+  };
 
   // Hook JS Exceptions
   if (typeof ErrorUtils !== 'undefined') {
