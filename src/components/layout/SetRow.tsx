@@ -225,7 +225,9 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
               </View>
             </Pressable>
           ) : (
-            <View style={s.colCheck} />
+            <View style={[s.colCheck, s.checkButton, { opacity: 0.2 }]}>
+              <View style={s.checkCircle} />
+            </View>
           )}
         </View>
       </SwipeableRow>
@@ -369,7 +371,9 @@ unstable_pressDelay={0}
             </View>
           </Pressable>
         ) : (
-          <View style={s.colCheck} />
+          <View style={[s.colCheck, s.checkButton, { opacity: 0.2 }]}>
+            <View style={s.checkCircle} />
+          </View>
         )}
       </View>
     </SwipeableRow>

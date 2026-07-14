@@ -111,7 +111,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
         {isActive ? (
           <Text style={[s.columnLabel, s.colCheck, { textAlign: 'center' }]}>{i18n.t('activeWorkout.doneBtn')}</Text>
         ) : (
-          <View style={s.colCheck} />
+          <Text style={[s.columnLabel, s.colCheck, { textAlign: 'center', color: colors.textMuted, opacity: 0.45 }]}>{i18n.t('activeWorkout.doneBtn')}</Text>
         )}
       </View>
 

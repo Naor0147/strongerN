@@ -583,7 +583,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   >
                     <Ionicons name="checkmark" size={16} color={colors.bg} style={{ marginRight: spacing.xs }} />
                     <Text style={styles.confirmBtnText}>
-                      {i18n.t('extras.addExercisePlural', { plural: selectedNames.length !== 1 ? 's' : '' })}
+                      {i18n.t('extras.addExercisePlural', { count: selectedNames.length, plural: selectedNames.length !== 1 ? 's' : '' })}
                     </Text>
                   </Pressable>
                 </View>
