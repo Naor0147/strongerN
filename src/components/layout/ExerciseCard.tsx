@@ -89,8 +89,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = React.memo(({
         </View>
       </View>
 
-      {/* Exercise Notes (active mode only) */}
-      {isActive && notes ? (
+      {/* Exercise Notes */}
+      {notes ? (
         <View style={s.notesContainer}>
           <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
           <Text style={s.notesText}>{notes}</Text>

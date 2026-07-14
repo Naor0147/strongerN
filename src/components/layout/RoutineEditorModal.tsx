@@ -198,6 +198,7 @@ const RoutineEditorItem = React.memo<RoutineEditorItemProps>(({
           onMenuPress={handleMenu}
           onAddSet={handleAddSet}
           tempInputValue={tempInputValue}
+          notes={exercise.notes}
         />
       </SwipeableRow>
     </View>

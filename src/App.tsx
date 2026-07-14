@@ -1443,12 +1443,13 @@ function App() {
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
     setStartTime(new Date());
-    setActiveWorkoutComment('');
+    
+    const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
+    setActiveWorkoutComment(matchingTemplate?.notes || '');
     
     // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
     let resolvedDetails = exercisesDetails;
     if (!resolvedDetails || resolvedDetails.length === 0) {
-      const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
       if (matchingTemplate && matchingTemplate.exercisesDetails && matchingTemplate.exercisesDetails.length > 0) {
         resolvedDetails = matchingTemplate.exercisesDetails;
       }
@@ -2079,6 +2080,7 @@ function App() {
               onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
               onAddCustomExercise={handleAddExercise}
               isLiveHeartRateEnabled={isLiveHeartRateEnabled}
+              onUpdateExercise={handleUpdateExercise}
 
               defaultRestDuration={defaultRestDuration}
               onRenameWorkout={setWorkoutName}

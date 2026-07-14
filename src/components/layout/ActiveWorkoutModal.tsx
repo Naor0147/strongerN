@@ -43,6 +43,7 @@ import {
   dismissWorkoutBackgroundNotification,
 } from '../../utils/notifications';
 import { Ionicons } from '@expo/vector-icons';
+import i18n from '../../utils/i18n';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
@@ -126,6 +127,7 @@ interface ActiveWorkoutModalProps {
   onUpdateExerciseInsightsNotes?: (exerciseId: string, insightsNotes?: string) => void;
   onAddCustomExercise?:   (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => any;
   isLiveHeartRateEnabled?: boolean;
+  onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
 
   defaultRestDuration?: number;
   onRenameWorkout?: (name: string) => void;
@@ -669,6 +671,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateComment,
   onUpdateStartTime,
   onUpdateDefaultRestDuration,
+  onUpdateExercise,
 }) => {
   const insets = useSafeAreaInsets();
   // Track the actual resume/edit start time (when THIS session started, not the original workout)
@@ -1356,7 +1359,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [visible, workoutName, updateSetField]);
 
   // Add a set
-  const addSet = useCallback((exIdx: number, isUnilateral: boolean = false) => {
+  const addSet = useCallback((exIdx: number, isUnilateral?: boolean) => {
     safeLayoutAnim();
     setActiveExercises(prev => {
       return prev.map((ex, eIdx) => {
@@ -1365,6 +1368,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         const lastSet = currentSets[currentSets.length - 1];
         const category = lastSet?.category ?? 'S';
         const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
+        const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
 
         let suggested: SetSuggestion = {
           weight: '60',
@@ -1375,17 +1379,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           rightReps: '10',
         };
         if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral);
+          suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, unilateral);
         } else {
           const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
           const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
           suggested = {
             weight: sugWeight,
             reps: sugReps,
-            leftWeight: isUnilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
-            leftReps: isUnilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
-            rightWeight: isUnilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
-            rightReps: isUnilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
+            leftWeight: unilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
+            leftReps: unilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
+            rightWeight: unilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
+            rightReps: unilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
           };
         }
 
@@ -1396,17 +1400,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           completed: false,
           rpe:       '',
           category:  category,
-          isUnilateral: isUnilateral,
-          leftWeight:   isUnilateral ? '' : undefined,
-          leftReps:     isUnilateral ? '' : undefined,
-          rightWeight:  isUnilateral ? '' : undefined,
-          rightReps:    isUnilateral ? '' : undefined,
+          isUnilateral: unilateral,
+          leftWeight:   unilateral ? '' : undefined,
+          leftReps:     unilateral ? '' : undefined,
+          rightWeight:  unilateral ? '' : undefined,
+          rightReps:    unilateral ? '' : undefined,
           suggestedWeight: suggested.weight,
           suggestedReps: suggested.reps,
-          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+          suggestedLeftWeight: unilateral ? suggested.leftWeight : undefined,
+          suggestedLeftReps: unilateral ? suggested.leftReps : undefined,
+          suggestedRightWeight: unilateral ? suggested.rightWeight : undefined,
+          suggestedRightReps: unilateral ? suggested.rightReps : undefined,
         } as any;
         return {
           ...ex,
@@ -2298,6 +2302,60 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     >
                       <Ionicons name="swap-horizontal-outline" size={20} color={colors.accent} />
                       <Text style={styles.sheetItemText}>Replace Exercise</Text>
+                    </Pressable>
+
+                    {/* Switch to Unilateral / Bilateral mode toggle option */}
+                    <Pressable
+                      style={styles.sheetItem}
+                      onPress={() => {
+                        if (activeExerciseMenuIndex !== null) {
+                          const currentEx = activeExercises[activeExerciseMenuIndex];
+                          if (!currentEx) return;
+                          const isCurrentlyUnilateral = currentEx.sets?.some((s: any) => s.isUnilateral) || false;
+                          const targetUnilateral = !isCurrentlyUnilateral;
+
+                          // 1. Update local active exercises state sets configuration
+                          setActiveExercises(prev => prev.map((ex, idx) => {
+                            if (idx !== activeExerciseMenuIndex) return ex;
+                            return {
+                              ...ex,
+                              sets: ex.sets.map(s => {
+                                const unilateral = targetUnilateral;
+                                return {
+                                  ...s,
+                                  isUnilateral: unilateral,
+                                  leftWeight: unilateral ? (s.leftWeight !== undefined ? s.leftWeight : s.weight) : undefined,
+                                  leftReps: unilateral ? (s.leftReps !== undefined ? s.leftReps : s.reps) : undefined,
+                                  rightWeight: unilateral ? (s.rightWeight !== undefined ? s.rightWeight : s.weight) : undefined,
+                                  rightReps: unilateral ? (s.rightReps !== undefined ? s.rightReps : s.reps) : undefined,
+                                };
+                              })
+                            };
+                          }));
+
+                          // 2. Update global exercises list mode state
+                          const libEx = exerciseLibrary?.find((e: any) => e.name.toLowerCase() === currentEx.name.toLowerCase());
+                          if (libEx && onUpdateExercise) {
+                            onUpdateExercise(
+                              libEx.id,
+                              libEx.name,
+                              libEx.muscleGroup,
+                              libEx.equipment || 'Other',
+                              targetUnilateral
+                            );
+                          }
+                          
+                          setIsExMenuVisible(false);
+                        }
+                      }}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Ionicons name="repeat-outline" size={20} color={colors.accent} />
+                      <Text style={styles.sheetItemText}>
+                        {activeExerciseMenuIndex !== null && activeExercises[activeExerciseMenuIndex]?.sets?.some((s: any) => s.isUnilateral)
+                          ? i18n.t('extras.switchToBilateral')
+                          : i18n.t('extras.switchToUnilateral')}
+                      </Text>
                     </Pressable>
                   </RN.Animated.View>
                 </Pressable>
