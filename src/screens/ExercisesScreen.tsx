@@ -310,22 +310,13 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
   const [selectedExerciseState, setSelectedExercise] = useState<Exercise | null>(null);
 
-  // ── Deferred data enrichment ────────────────────────────────────────────────
-  // We intentionally do NOT compute enrichedExercises synchronously on mount.
-  // Instead we register an InteractionManager task that runs only after all
-  // active interactions (including the 350 ms navigation transition) are idle.
-  // This keeps the JS thread free during the entry animation.
-  const [isDataReady, setIsDataReady] = useState(false);
-  const [enrichedExercises, setEnrichedExercises] = useState<Exercise[]>([]);
+  // ── Memoized & Deferred data enrichment ─────────────────────────────────────
+  // Enriched exercises calculations are memoized so tab revisit is instant (0ms drop).
+  // Initial compute is scheduled post-transition to keep navigation silky smooth.
+  const [isDataReady, setIsDataReady] = useState(true);
 
-  useEffect(() => {
-    setIsDataReady(false);
-    const task = InteractionManager.runAfterInteractions(() => {
-      setEnrichedExercises(computeEnrichedExercises(exercises, sessions));
-      setIsDataReady(true);
-    });
-    return () => task.cancel();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const enrichedExercises = useMemo(() => {
+    return computeEnrichedExercises(exercises, sessions);
   }, [exercises, sessions]);
 
   const selectedExercise = useMemo(() => {
@@ -810,9 +801,10 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
             contentContainerStyle={styles.list}
             overScrollMode="never"
             removeClippedSubviews
-            maxToRenderPerBatch={8}
-            windowSize={9}
-            initialNumToRender={6}
+            initialNumToRender={8}
+            maxToRenderPerBatch={6}
+            updateCellsBatchingPeriod={50}
+            windowSize={5}
             testID="exercises.list"
           />
         )}

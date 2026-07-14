@@ -546,6 +546,11 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={styles.listContent}
                   keyboardShouldPersistTaps="handled"
+                  initialNumToRender={8}
+                  maxToRenderPerBatch={6}
+                  updateCellsBatchingPeriod={50}
+                  windowSize={5}
+                  removeClippedSubviews
                   ListFooterComponent={
                     <Pressable
                       style={styles.createCustomRow}

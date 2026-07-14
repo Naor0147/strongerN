@@ -287,24 +287,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
     transform: [{ translateY: slideAnim.value }],
   }));
 
-  // ── Deferred sections computation ──────────────────────────────────────────────────
-  // We intentionally do NOT compute sections synchronously on mount.
-  // InteractionManager schedules the sort+group work only after all active
-  // interactions (the 350 ms navigation transition) are idle, keeping the
-  // JS thread free during the entry animation.
-  const [isDataReady, setIsDataReady] = useState(false);
-  const [sections, setSections] = useState<SectionData[]>([]);
+  // ── Deferred & Memoized sections computation ────────────────────────────────
+  // Grouping & filtering sections are memoized so tab revisit is instant (0ms drop).
+  const [isDataReady, setIsDataReady] = useState(true);
 
-  useEffect(() => {
-    setIsDataReady(false);
-    const task = InteractionManager.runAfterInteractions(() => {
-      setSections(
-        computeSections(sessions, searchQuery, rangeStart, rangeEnd, calendarMonth, calendarYear)
-      );
-      setIsDataReady(true);
-    });
-    return () => task.cancel();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sections = useMemo(() => {
+    return computeSections(sessions, searchQuery, rangeStart, rangeEnd, calendarMonth, calendarYear);
   }, [sessions, searchQuery, rangeStart, rangeEnd, calendarMonth, calendarYear]);
 
   const renderItem = useCallback(
@@ -602,7 +590,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
             removeClippedSubviews
             initialNumToRender={5}
             maxToRenderPerBatch={4}
-            windowSize={7}
+            updateCellsBatchingPeriod={50}
+            windowSize={5}
           />
         )}
       </Animated.View>

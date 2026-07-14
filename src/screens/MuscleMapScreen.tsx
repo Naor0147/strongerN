@@ -1,5 +1,5 @@
 // screens/MuscleMapScreen.tsx
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Dimensions,
   useWindowDimensions,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -926,6 +927,23 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     [sortedMuscles, view],
   );
 
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  useEffect(() => {
+    if (!InteractionManager || typeof InteractionManager.runAfterInteractions !== 'function') {
+      setIsMapReady(true);
+      return;
+    }
+    const task = InteractionManager.runAfterInteractions(() => {
+      setIsMapReady(true);
+    });
+    return () => {
+      if (task && typeof task.cancel === 'function') {
+        task.cancel();
+      }
+    };
+  }, []);
+
   return (
     <View style={[styles.safe, { paddingTop: top }]}>
       <ScreenHeader
@@ -987,7 +1005,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
           <Animated.View 
             collapsable={false}
             style={[styles.svgCard, mapAnimatedStyle]}>
-            {view === 'front' ? (
+            {!isMapReady ? (
+              <View style={{ width: 208, height: 380, backgroundColor: colors.surface, borderRadius: radius.md }} />
+            ) : view === 'front' ? (
               <FrontSvgMap 
                 muscleSets={weeklyMuscleSets} 
                 maxSets={maxSets} 

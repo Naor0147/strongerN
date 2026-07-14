@@ -729,6 +729,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.list}
               ItemSeparatorComponent={() => <View style={styles.rowSep} />}
+              initialNumToRender={6}
+              maxToRenderPerBatch={4}
+              updateCellsBatchingPeriod={50}
+              windowSize={5}
+              removeClippedSubviews
               ListHeaderComponent={
                 <View>
                   {/* CTA — Start Empty */}
