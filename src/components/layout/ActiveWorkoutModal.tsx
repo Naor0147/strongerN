@@ -59,6 +59,7 @@ import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
 import Sortable from 'react-native-sortables';
 import { useExerciseRowGestures } from '../ui/gestureCoexistence';
 import { ElapsedTimeText } from '../ui/ElapsedTimeText';
+import { saveCrashLogSync } from '../../utils/crashLogger';
 
 const WebSafeAlert = {
   alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: string }[]) => {
@@ -1417,26 +1418,32 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Delete a set
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
-    setActiveExercises(prev => {
-      return prev.map((ex, eIdx) => {
-        if (eIdx !== exIdx) return ex;
-        return {
-          ...ex,
-          sets: ex.sets.filter((_, sIdx) => sIdx !== setIdx)
-        };
+    try {
+      setActiveExercises(prev => {
+        return prev.map((ex, eIdx) => {
+          if (eIdx !== exIdx) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.filter((_, sIdx) => sIdx !== setIdx)
+          };
+        });
       });
-    });
-    // Shift or clear active input if it matches the deleted set/exercise
-    setActiveInput(prev => {
-      if (prev && prev.exIdx === exIdx) {
-        if (prev.setIdx === setIdx) {
-          return null; // Focused set was deleted
-        } else if (prev.setIdx > setIdx) {
-          return { ...prev, setIdx: prev.setIdx - 1 }; // Shift index down
+      // Shift or clear active input if it matches the deleted set/exercise
+      setActiveInput(prev => {
+        if (prev && prev.exIdx === exIdx) {
+          if (prev.setIdx === setIdx) {
+            return null; // Focused set was deleted
+          } else if (prev.setIdx > setIdx) {
+            return { ...prev, setIdx: prev.setIdx - 1 }; // Shift index down
+          }
         }
-      }
-      return prev;
-    });
+        return prev;
+      });
+    } catch (err: any) {
+      const msg = `[ActiveWorkout] deleteSet(exIdx=${exIdx}, setIdx=${setIdx}) crashed: ${err?.message ?? err}`;
+      saveCrashLogSync(msg, err?.stack ?? '', false);
+      console.error(msg, err);
+    }
   }, []);
 
   // Handle custom keyboard "Next" button click

@@ -43,6 +43,7 @@ import { exerciseBlockStyles } from './exerciseBlockStyles';
 import { ExerciseCard } from './ExerciseCard';
 import Sortable from 'react-native-sortables';
 import { SwipeableRow } from './SwipeableRow';
+import { saveCrashLogSync } from '../../utils/crashLogger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SetRecord {
@@ -470,13 +471,19 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   }, [exercises]);
 
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
-    safeLayoutAnim();
-    setEditorExercises(prev => {
-      return prev.map((ex, eIdx) => {
-        if (eIdx !== exIdx) return ex;
-        return { ...ex, sets: ex.sets.filter((_, i) => i !== setIdx) };
+    try {
+      safeLayoutAnim();
+      setEditorExercises(prev => {
+        return prev.map((ex, eIdx) => {
+          if (eIdx !== exIdx) return ex;
+          return { ...ex, sets: ex.sets.filter((_, i) => i !== setIdx) };
+        });
       });
-    });
+    } catch (err: any) {
+      const msg = `[RoutineEditor] deleteSet(exIdx=${exIdx}, setIdx=${setIdx}) crashed: ${err?.message ?? err}`;
+      saveCrashLogSync(msg, err?.stack ?? '', false);
+      console.error(msg, err);
+    }
   }, []);
 
   const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {

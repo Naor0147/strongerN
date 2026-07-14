@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
 import { ExerciseRowGesturesContext } from '../ui/gestureCoexistence';
+import { saveCrashLogSync } from '../../utils/crashLogger';
 
 /**
  * SwipeableRow — slide a row left to reveal a delete underlay, then swipe
@@ -101,15 +102,27 @@ export const SwipeableRow: React.FC<{
     }
   }, []);
 
-  // Slide the row fully off-screen, then collapse height+opacity to 0, then
-  const handleDone = useCallback((onDone: () => void) => {
+  // Ref to hold the pending onDone callback — avoids passing a JS function
+  // as an argument to runOnJS (which is unreliable on Android/Hermes).
+  const onDoneRef = React.useRef<(() => void) | null>(null);
+
+  // Called on the JS thread after the collapse animation finishes.
+  const handleDone = useCallback(() => {
     if (cancelledRef.current) return;
-    onDone();
+    try {
+      const cb = onDoneRef.current;
+      onDoneRef.current = null;
+      if (cb) cb();
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      const stack = err?.stack ?? '';
+      saveCrashLogSync('[SwipeableRow] handleDone crash: ' + msg, stack, false);
+      console.error('[SwipeableRow] handleDone crash:', err);
+    }
   }, []);
 
   // Slide the row fully off-screen, then collapse height+opacity to 0, then
-  // invoke `onDone` on the JS thread. The row is already invisible/zero-height
-  // by the time `onDone` runs, so the parent's array removal is jump-free.
+  // invoke `handleDone` on the JS thread via runOnJS (no function arg needed).
   const slideOffThenCollapse = useCallback((onDone: () => void) => {
     'worklet';
     const w = width.value;
@@ -124,7 +137,7 @@ export const SwipeableRow: React.FC<{
         easing: Easing.in(Easing.quad),
       }, () => {
         'worklet';
-        runOnJS(handleDone)(onDone);
+        runOnJS(handleDone)();
       });
     });
   }, [handleDone]);
@@ -151,6 +164,9 @@ export const SwipeableRow: React.FC<{
     if (currentOnDeleteWithConfirm) {
       // Confirm/cancel flow. The parent decides; we animate only after confirm.
       const confirm = (onDone: () => void) => {
+        // Store the callback in the ref so the worklet can invoke handleDone()
+        // without passing a function across the thread boundary.
+        onDoneRef.current = onDone;
         slideOffThenCollapse(onDone);
       };
       const cancel = () => {
@@ -158,9 +174,9 @@ export const SwipeableRow: React.FC<{
       };
       currentOnDeleteWithConfirm(confirm, cancel);
     } else if (currentOnDelete) {
-      slideOffThenCollapse(() => {
-        currentOnDelete();
-      });
+      // Store the callback in the ref before starting the animation.
+      onDoneRef.current = currentOnDelete;
+      slideOffThenCollapse(currentOnDelete);
     }
   }, [triggerSuccessHaptic, slideOffThenCollapse, cancelSlide]);
 
