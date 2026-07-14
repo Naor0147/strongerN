@@ -13,6 +13,7 @@ import Animated, {
   runOnJS,
   Easing,
   cancelAnimation,
+  type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Path, Text as SvgText, Polygon, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { colors, font, ripple } from '../../theme';
@@ -87,6 +88,67 @@ export interface RestTimerPickerProps {
   onSave?: () => void;      // callback when save button is tapped
 }
 
+interface PickerLabelSlotProps {
+  index: number;
+  data?: { s: number; text: string; fill: string; fontFamily: string; dist: number };
+  displaySecsSV: SharedValue<number>;
+  labelSecsSV: SharedValue<number[]>;
+  dragProgressSV: SharedValue<number>;
+  cx: number;
+  R: number;
+  labelY: number;
+  rulerWidth: number;
+}
+
+const PickerLabelSlot = React.memo<PickerLabelSlotProps>(({
+  index,
+  data,
+  displaySecsSV,
+  labelSecsSV,
+  dragProgressSV,
+  cx,
+  R,
+  labelY,
+  rulerWidth,
+}) => {
+  const animatedProps = useAnimatedProps(() => {
+    const secs = displaySecsSV.value;
+    const labelSecs = labelSecsSV.value;
+    const s = labelSecs[index];
+    if (s === undefined) {
+      return { x: -9999, y: -9999, opacity: 0 };
+    }
+    const ppsPerSec = CFG.pps / CFG.tickStep;
+    const angle = (s - secs) * ppsPerSec / R;
+    if (Math.abs(angle) >= Math.PI / 2) {
+      return { x: -9999, y: -9999, opacity: 0 };
+    }
+    const x = cx + R * Math.sin(angle);
+    const scale = Math.cos(angle);
+    const fade = Math.pow(scale, 0.6);
+    const rounded = Math.round(secs / CFG.tickStep) * CFG.tickStep;
+    const glow = s === rounded ? 1 : 0;
+    const opacity = Math.min(1, fade * 1.1) * (1 - glow) + 1.0 * glow;
+
+    const dp = dragProgressSV.value;
+    const y = labelY - 10 * dp;
+    return { x, y, opacity };
+  }, [rulerWidth, cx, R, labelY, index]);
+
+  return (
+    <AnimatedSvgText
+      animatedProps={animatedProps}
+      y={labelY}
+      fill={data?.fill ?? colors.textSecondary}
+      fontSize={10}
+      fontFamily={data?.fontFamily ?? font.semibold}
+      textAnchor="middle"
+    >
+      {data?.text ?? ''}
+    </AnimatedSvgText>
+  );
+});
+
 const RestTimerPicker: React.FC<RestTimerPickerProps> = React.memo(({
   value,
   defaultValue,
@@ -110,16 +172,16 @@ const RestTimerPicker: React.FC<RestTimerPickerProps> = React.memo(({
 
   const isDraggingRef = useRef(false);
 
-  // Keep references to props updated to avoid closures capturing stale state
+  // Keep references to props updated directly during render execution to prevent hook overhead
   const onChangeRef = useRef(onChange);
   const onCommitRef = useRef(onCommit);
   const stepRef = useRef(step);
   const maxRef = useRef(max);
 
-  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
-  useEffect(() => { onCommitRef.current = onCommit; }, [onCommit]);
-  useEffect(() => { stepRef.current = step; }, [step]);
-  useEffect(() => { maxRef.current = max; }, [max]);
+  onChangeRef.current = onChange;
+  onCommitRef.current = onCommit;
+  stepRef.current = step;
+  maxRef.current = max;
 
   // Sync display value to the incoming value prop (only when not actively dragging)
   useEffect(() => {
@@ -316,33 +378,6 @@ const RestTimerPicker: React.FC<RestTimerPickerProps> = React.memo(({
     labelSecsSV.value = labelData.map(d => d.s);
   }, [labelData, labelSecsSV]);
 
-  // Pool of 32 animated label slots — each animates x + y + opacity on UI thread
-  const slotAnimatedProps = Array.from({ length: POOL_SIZE }, (_, i) =>
-    useAnimatedProps(() => {
-      const secs = displaySecsSV.value;
-      const labelSecs = labelSecsSV.value;
-      const s = labelSecs[i];
-      if (s === undefined) {
-        return { x: -9999, y: -9999, opacity: 0 };
-      }
-      const ppsPerSec = CFG.pps / CFG.tickStep;
-      const angle = (s - secs) * ppsPerSec / R;
-      if (Math.abs(angle) >= Math.PI / 2) {
-        return { x: -9999, y: -9999, opacity: 0 };
-      }
-      const x = cx + R * Math.sin(angle);
-      const scale = Math.cos(angle);
-      const fade = Math.pow(scale, 0.6);
-      const rounded = Math.round(secs / CFG.tickStep) * CFG.tickStep;
-      const glow = s === rounded ? 1 : 0;
-      const opacity = Math.min(1, fade * 1.1) * (1 - glow) + 1.0 * glow;
-
-      const dp = dragProgressSV.value;
-      const y = labelY - 10 * dp;
-      return { x, y, opacity };
-    }, [rulerWidth])
-  );
-
   const dragAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -6 * dragProgressSV.value }],
   }));
@@ -414,22 +449,20 @@ const RestTimerPicker: React.FC<RestTimerPickerProps> = React.memo(({
               strokeWidth={CFG.tickW}
             />
             {/* Labels */}
-            {Array.from({ length: POOL_SIZE }, (_, i) => {
-              const data = labelData[i];
-              return (
-                <AnimatedSvgText
-                  key={i}
-                  animatedProps={slotAnimatedProps[i]}
-                  y={labelY}
-                  fill={data?.fill ?? colors.textSecondary}
-                  fontSize={10}
-                  fontFamily={data?.fontFamily ?? font.semibold}
-                  textAnchor="middle"
-                >
-                  {data?.text ?? ''}
-                </AnimatedSvgText>
-              );
-            })}
+            {Array.from({ length: POOL_SIZE }, (_, i) => (
+              <PickerLabelSlot
+                key={i}
+                index={i}
+                data={labelData[i]}
+                displaySecsSV={displaySecsSV}
+                labelSecsSV={labelSecsSV}
+                dragProgressSV={dragProgressSV}
+                cx={cx}
+                R={R}
+                labelY={labelY}
+                rulerWidth={rulerWidth}
+              />
+            ))}
           </Svg>
         </Animated.View>
 

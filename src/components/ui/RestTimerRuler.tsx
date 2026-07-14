@@ -13,6 +13,7 @@ import Animated, {
   runOnJS,
   Easing,
   cancelAnimation,
+  type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Path, Text as SvgText, Polygon, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { colors, font } from '../../theme';
@@ -89,6 +90,66 @@ export interface RestTimerRulerProps {
   onStart: () => void;
 }
 
+interface RulerLabelSlotProps {
+  index: number;
+  data?: { s: number; text: string; fill: string; fontFamily: string; dist: number };
+  displaySecsSV: SharedValue<number>;
+  labelSecsSV: SharedValue<number[]>;
+  dragProgressSV: SharedValue<number>;
+  cx: number;
+  R: number;
+  labelY: number;
+  rulerWidth: number;
+}
+
+const RulerLabelSlot = React.memo<RulerLabelSlotProps>(({
+  index,
+  data,
+  displaySecsSV,
+  labelSecsSV,
+  dragProgressSV,
+  cx,
+  R,
+  labelY,
+  rulerWidth,
+}) => {
+  const animatedProps = useAnimatedProps(() => {
+    const secs = displaySecsSV.value;
+    const labelSecs = labelSecsSV.value;
+    const s = labelSecs[index];
+    if (s === undefined) {
+      return { x: -9999, y: -9999, opacity: 0 };
+    }
+    const angle = (s - secs) * CFG.pps / R;
+    if (Math.abs(angle) >= Math.PI / 2) {
+      return { x: -9999, y: -9999, opacity: 0 };
+    }
+    const x = cx + R * Math.sin(angle);
+    const scale = Math.cos(angle);
+    const fade = Math.pow(scale, 0.6);
+    const rounded = Math.round(secs);
+    const glow = s === rounded ? 1 : 0;
+    const opacity = Math.min(1, fade * 1.1) * (1 - glow) + 1.0 * glow;
+
+    const dp = dragProgressSV.value;
+    const y = labelY - 10 * dp;
+    return { x, y, opacity };
+  }, [rulerWidth, cx, R, labelY, index]);
+
+  return (
+    <AnimatedSvgText
+      animatedProps={animatedProps}
+      y={labelY}
+      fill={data?.fill ?? colors.textSecondary}
+      fontSize={10}
+      fontFamily={data?.fontFamily ?? font.semibold}
+      textAnchor="middle"
+    >
+      {data?.text ?? ''}
+    </AnimatedSvgText>
+  );
+});
+
 const RestTimerRuler: React.FC<RestTimerRulerProps> = React.memo(({
   currentSecs,
   defaultSecs,
@@ -128,7 +189,7 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = React.memo(({
   const isRunningRef = useRef(isRunning);
   const justReleasedRef = useRef(false);
 
-  // Keep references to props updated to avoid closures capturing stale state
+  // Keep references to props updated directly during render execution to prevent hook overhead
   const onSecsChangeRef = useRef(onSecsChange);
   const onSecsChangeCompleteRef = useRef(onSecsChangeComplete);
   const onDragStartRef = useRef(onDragStart);
@@ -137,15 +198,15 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = React.memo(({
   const onStopCompleteRef = useRef(onStopComplete);
   const onStartRef = useRef(onStart);
 
-  useEffect(() => { currentSecsRef.current = currentSecs; }, [currentSecs]);
-  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
-  useEffect(() => { onSecsChangeRef.current = onSecsChange; }, [onSecsChange]);
-  useEffect(() => { onSecsChangeCompleteRef.current = onSecsChangeComplete; }, [onSecsChangeComplete]);
-  useEffect(() => { onDragStartRef.current = onDragStart; }, [onDragStart]);
-  useEffect(() => { onDragEndRef.current = onDragEnd; }, [onDragEnd]);
-  useEffect(() => { onStopStartRef.current = onStopStart; }, [onStopStart]);
-  useEffect(() => { onStopCompleteRef.current = onStopComplete; }, [onStopComplete]);
-  useEffect(() => { onStartRef.current = onStart; }, [onStart]);
+  currentSecsRef.current = currentSecs;
+  isRunningRef.current = isRunning;
+  onSecsChangeRef.current = onSecsChange;
+  onSecsChangeCompleteRef.current = onSecsChangeComplete;
+  onDragStartRef.current = onDragStart;
+  onDragEndRef.current = onDragEnd;
+  onStopStartRef.current = onStopStart;
+  onStopCompleteRef.current = onStopComplete;
+  onStartRef.current = onStart;
 
   // Haptic feedback selection trigger logic (runs on UI thread, triggered max 1x/sec)
   const triggerTickHaptic = useCallback(() => {
@@ -494,32 +555,6 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = React.memo(({
     labelSecsSV.value = labelData.map(d => d.s);
   }, [labelData, labelSecsSV]);
 
-  // Pool of 32 animated label slots — each animates x + y + opacity on UI thread
-  const slotAnimatedProps = Array.from({ length: POOL_SIZE }, (_, i) =>
-    useAnimatedProps(() => {
-      const secs = displaySecsSV.value;
-      const labelSecs = labelSecsSV.value;
-      const s = labelSecs[i];
-      if (s === undefined) {
-        return { x: -9999, y: -9999, opacity: 0 };
-      }
-      const angle = (s - secs) * CFG.pps / R;
-      if (Math.abs(angle) >= Math.PI / 2) {
-        return { x: -9999, y: -9999, opacity: 0 };
-      }
-      const x = cx + R * Math.sin(angle);
-      const scale = Math.cos(angle);
-      const fade = Math.pow(scale, 0.6);
-      const rounded = Math.round(secs);
-      const glow = s === rounded ? 1 : 0;
-      const opacity = Math.min(1, fade * 1.1) * (1 - glow) + 1.0 * glow;
-
-      const dp = dragProgressSV.value;
-      const y = labelY - 10 * dp;
-      return { x, y, opacity };
-    }, [rulerWidth])
-  );
-
   // ── Derived styles ─────────────────────────────────────────────────────────
   const collapseStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: colY.value }],
@@ -590,22 +625,20 @@ const RestTimerRuler: React.FC<RestTimerRulerProps> = React.memo(({
               strokeWidth={CFG.tickW}
             />
             {/* Labels — cylindrical-projected, x + opacity animated on UI thread */}
-            {Array.from({ length: POOL_SIZE }, (_, i) => {
-              const data = labelData[i];
-              return (
-                <AnimatedSvgText
-                  key={i}
-                  animatedProps={slotAnimatedProps[i]}
-                  y={labelY}
-                  fill={data?.fill ?? colors.textSecondary}
-                  fontSize={10}
-                  fontFamily={data?.fontFamily ?? font.semibold}
-                  textAnchor="middle"
-                >
-                  {data?.text ?? ''}
-                </AnimatedSvgText>
-              );
-            })}
+            {Array.from({ length: POOL_SIZE }, (_, i) => (
+              <RulerLabelSlot
+                key={i}
+                index={i}
+                data={labelData[i]}
+                displaySecsSV={displaySecsSV}
+                labelSecsSV={labelSecsSV}
+                dragProgressSV={dragProgressSV}
+                cx={cx}
+                R={R}
+                labelY={labelY}
+                rulerWidth={rulerWidth}
+              />
+            ))}
           </Svg>
         </Animated.View>
 
