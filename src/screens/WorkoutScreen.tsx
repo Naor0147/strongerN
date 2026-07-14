@@ -454,19 +454,38 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     }
     try {
       let parsed: any;
-      if (importPayloadText.includes('routine=')) {
-        const query = importPayloadText.split('routine=')[1];
+      const trimmed = importPayloadText.trim();
+
+      // Deep link format: strongern://share?routine=...
+      if (trimmed.includes('routine=')) {
+        const query = trimmed.split('routine=')[1];
         parsed = JSON.parse(decodeURIComponent(query));
       } else {
-        parsed = JSON.parse(importPayloadText.trim());
+        parsed = JSON.parse(trimmed);
       }
-      
-      if (!parsed.name || !parsed.exercises) {
+
+      // Support QR compact format (keys: n, e, f, d)
+      if (!parsed.name && parsed.n) {
+        parsed = {
+          name: parsed.n,
+          exercises: parsed.e || [],
+          folder: parsed.f,
+          exercisesDetails: parsed.d,
+        };
+      }
+
+      if (!parsed.name || !Array.isArray(parsed.exercises)) {
         throw new Error(i18n.t('extras.invalidFormat'));
       }
-      
+
       if (onAddTemplate) {
-        onAddTemplate(parsed.name, parsed.exercises, parsed.folder);
+        onAddTemplate(
+          parsed.name,
+          parsed.exercises,
+          parsed.folder,
+          parsed.exercisesDetails,
+          parsed.notes,
+        );
         Alert.alert(i18n.t('common.success'), i18n.t('workout.routineImported', { name: parsed.name }));
         setImportPayloadText('');
         setIsImportModalVisible(false);
@@ -1143,17 +1162,24 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       {selectedTemplate && (
         <Modal
           visible={isActionSheetVisible}
-          animationType="fade"
+          animationType="slide"
           transparent
+          statusBarTranslucent
           onRequestClose={() => setIsActionSheetVisible(false)}
         >
           <Pressable
             style={styles.sheetBackdrop}
             onPress={() => setIsActionSheetVisible(false)}
           >
-            <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
+            <Pressable
+              style={[styles.sheetCard, { paddingBottom: insets.bottom + spacing.md }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Drag handle pill */}
+              <View style={styles.sheetHandle} />
+
               <Text style={styles.sheetTitle}>{selectedTemplate.name.toUpperCase()}</Text>
-              
+
               <Pressable
                 style={styles.sheetItem}
                 onPress={() => handleEditRoutine(selectedTemplate)}
@@ -1176,7 +1202,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 style={styles.sheetItem}
                 onPress={() => {
                   setIsActionSheetVisible(false);
-                  setIsSharingModalVisible(true);
+                  setTimeout(() => setIsSharingModalVisible(true), 300);
                 }}
                 android_ripple={rippleTokens.surface}
               >
@@ -1206,82 +1232,83 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         }}
       />
 
-      {/* Routine Import Modal */}
+      {/* Routine Import Modal — bottom sheet style */}
       <Modal
         visible={isImportModalVisible}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setIsImportModalVisible(false)}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={0}
         >
-          <Pressable style={styles.modalBackdrop} onPress={() => setIsImportModalVisible(false)}>
-            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{i18n.t('workout.importSharedRoutine')}</Text>
-                <IconButton
-                  name="close"
-                  size={22}
-                  color={colors.textSecondary}
-                  onPress={() => setIsImportModalVisible(false)}
-                />
-              </View>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setIsImportModalVisible(false)}>
+            <Pressable
+              style={[styles.importSheetCard, { paddingBottom: insets.bottom + spacing.md }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Drag handle */}
+              <View style={styles.sheetHandle} />
 
-              <View style={styles.modalForm}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
-                  <Text style={[styles.inputLabel, { marginTop: 0, flex: 1 }]}>
-                    {i18n.t('workout.pasteSharePayload', { defaultValue: 'Paste sharing link or JSON routine payload' })}
-                  </Text>
-                  <Pressable
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: colors.surface2,
-                      borderColor: colors.border,
-                      borderWidth: 1,
-                      borderRadius: radius.xs,
-                      paddingVertical: 5,
-                      paddingHorizontal: 8,
-                      columnGap: 4,
-                    }}
-                    onPress={handlePasteFromClipboard}
-                    android_ripple={rippleTokens.surface}
-                  >
-                    <Ionicons name="clipboard-outline" size={12} color={colors.accent} />
-                    <Text style={{
-                      color: colors.accent,
-                      fontSize: font.sizes.xs,
-                      fontFamily: font.bold,
-                    }}>
-                      Paste
-                    </Text>
-                  </Pressable>
+              <View style={styles.importSheetHeader}>
+                <View>
+                  <Text style={styles.importSheetTitle}>{i18n.t('workout.importSharedRoutine')}</Text>
+                  <Text style={styles.importSheetSub}>Paste a deep link or JSON payload below</Text>
                 </View>
-
-                <TextInput
-                  style={[styles.textInput, { height: 120, textAlignVertical: 'top' }]}
-                  placeholder={i18n.t('workout.pasteSharePlaceholder', { defaultValue: 'Paste deep link or routine JSON here...' })}
-                  placeholderTextColor={colors.textMuted}
-                  value={importPayloadText}
-                  onChangeText={setImportPayloadText}
-                  multiline
-                  keyboardAppearance="dark"
-                />
-
                 <Pressable
-                  style={styles.submitBtn}
-                  onPress={handleImportRoutine}
-                  android_ripple={rippleTokens.accent}
+                  style={styles.importSheetCloseBtn}
+                  onPress={() => setIsImportModalVisible(false)}
+                  android_ripple={rippleTokens.borderless}
                 >
-                  <Text style={styles.submitBtnText}>{i18n.t('workout.importRoutine')}</Text>
+                  <Ionicons name="close" size={20} color={colors.textSecondary} />
                 </Pressable>
               </View>
+
+              {/* Quick paste row */}
+              <Pressable
+                style={styles.importPasteRow}
+                onPress={handlePasteFromClipboard}
+                android_ripple={rippleTokens.surface}
+              >
+                <View style={styles.importPasteIcon}>
+                  <Ionicons name="clipboard" size={18} color={colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.importPasteTitle}>Paste from Clipboard</Text>
+                  <Text style={styles.importPasteSub}>Tap to paste your copied sharing link or JSON</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              </Pressable>
+
+              {/* Text input */}
+              <TextInput
+                style={styles.importTextInput}
+                placeholder={'strongern://share?routine=... or {"name":"...", "exercises":[...]}'}
+                placeholderTextColor={colors.textMuted}
+                value={importPayloadText}
+                onChangeText={setImportPayloadText}
+                multiline
+                keyboardAppearance="dark"
+                textAlignVertical="top"
+              />
+
+              {/* Import button */}
+              <Pressable
+                style={[styles.submitBtn, !importPayloadText.trim() && { opacity: 0.45 }]}
+                onPress={handleImportRoutine}
+                android_ripple={rippleTokens.accent}
+                disabled={!importPayloadText.trim()}
+              >
+                <Ionicons name="download-outline" size={16} color={colors.textInverse} />
+                <Text style={styles.submitBtnText}>{i18n.t('workout.importRoutine')}</Text>
+              </Pressable>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
-        </Modal>
+      </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -1960,6 +1987,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginTop: spacing.sm,
     ...(shadow.accentGlow as object),
   },
@@ -1973,36 +2002,46 @@ const styles = StyleSheet.create({
   // Ellipsis sheet
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(5, 7, 10, 0.5)',
+    backgroundColor: 'rgba(5, 7, 10, 0.65)',
     justifyContent: 'flex-end',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
   },
   sheetCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderTopWidth: 1,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: 20,
-    rowGap: spacing.sm,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    rowGap: spacing.xs,
   },
   sheetTitle: {
     color: colors.textMuted,
     fontSize: font.sizes.xs,
     fontFamily: font.bold,
-    letterSpacing: 1,
-    marginBottom: spacing.xs,
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   sheetItem: {
     flexDirection: 'row',
     alignItems: 'center',
     columnGap: spacing.md,
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   sheetItemText: {
     color: colors.textPrimary,
-    fontSize: font.sizes.sm,
+    fontSize: font.sizes.base,
     fontFamily: font.semibold,
   },
   sheetCancel: {
@@ -2015,6 +2054,82 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.sm,
     fontFamily: font.bold,
     letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+
+  // Import bottom sheet styles
+  importSheetCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderTopWidth: 1,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    rowGap: spacing.md,
+  },
+  importSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  importSheetTitle: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.lg,
+    fontFamily: font.bold,
+    letterSpacing: -0.3,
+  },
+  importSheetSub: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    marginTop: 3,
+  },
+  importSheetCloseBtn: {
+    padding: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface2,
+  },
+  importPasteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.md,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  importPasteIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accentGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importPasteTitle: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.semibold,
+  },
+  importPasteSub: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    marginTop: 2,
+  },
+  importTextInput: {
+    backgroundColor: colors.bg,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    color: colors.textPrimary,
+    padding: spacing.md,
+    fontSize: font.sizes.sm,
+    fontFamily: 'monospace',
+    height: 110,
+    textAlignVertical: 'top',
   },
 
   // Folder visual styling

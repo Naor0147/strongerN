@@ -64,6 +64,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
     n: template.name,
     e: template.exercises,
     ...(template.folder ? { f: template.folder } : {}),
+    ...(template.exercisesDetails?.length ? { d: template.exercisesDetails } : {}),
   });
 
   return (
