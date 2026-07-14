@@ -26,7 +26,7 @@ Each object in `exercisesDetails` can have:
 - `name`: (string) The exercise name.
 - `notes`: (string, optional) Exercise-specific notes, execution tips, seat settings, or target cues. Omit if not seen.
 - `superSetGroupId`: (string, optional) If this exercise is part of a superset (linked with other exercises), specify a matching group identifier (e.g., "ss-1"). Omit if not seen.
-- `sets`: (array of objects) Detailed sets representing how many sets there are and their order.
+- `sets`: (array of objects, optional) Detailed sets. Omit if sets are standard (read the Crucial Design Rules below).
 
 Each set in the `sets` array can have:
 - `category`: (string, optional) One of these characters depending on the type of set shown in the screenshot:
@@ -37,7 +37,9 @@ Each set in the `sets` array can have:
   Omit if it is a standard set and no special indicator is seen.
 - `isUnilateral`: (boolean, optional) Set to true only if the exercise is unilateral (performed separately on Left and Right sides, e.g., Dumbbell Bicep Curl, Bulgarian Split Squat, Single Leg Extension). Omit if false.
 
-*Crucial Design Rule:* DO NOT extract or save "weight" or "reps" (no weight, reps, leftWeight, leftReps, rightWeight, or rightReps) for any set. Just save the set order, count (the length of the array), category, and whether it is unilateral.
+### Crucial Design Rules:
+1. **DO NOT extract or save "weight" or "reps"** (no weight, reps, leftWeight, leftReps, rightWeight, or rightReps) for any set. Just save the category and unilateral flags.
+2. **OMIT THE "sets" FIELD ENTIRELY** if the exercise has only standard/normal sets (meaning all sets in the list would be empty objects like `{}`). If there are no warmup, drop, failure, or unilateral set indicators, do not include the `sets` field at all. The app will automatically default to standard sets.
 
 ### Rules for Extraction:
 1. Match exercise names to common terms (e.g., if you see "Incline DB Press", translate it to "Incline Dumbbell Bench Press").
@@ -66,17 +68,11 @@ Here are the screenshots:
       "name": "Incline Dumbbell Bench Press",
       "notes": "Seat angle at 30 degrees",
       "sets": [
-        { "category": "W" },
-        { "category": "S" },
-        { "category": "S" }
+        { "category": "W" }
       ]
     },
     {
-      "name": "Flat Barbell Bench Press",
-      "sets": [
-        {},
-        { "category": "D" }
-      ]
+      "name": "Flat Barbell Bench Press"
     },
     {
       "name": "Cable Lateral Raise",

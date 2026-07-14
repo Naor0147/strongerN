@@ -56,6 +56,7 @@ interface WorkoutScreenProps {
   onAddCustomExercise?: (name: string, muscle: string, equipment: string) => any;
   sessions?:         any[];
   exerciseNameLanguage?: 'en' | 'he';
+  onUpdateExerciseNotes?: (id: string, notes?: string) => void;
 }
 
 
@@ -190,6 +191,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   onAddCustomExercise,
   sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
+  onUpdateExerciseNotes,
 }) => {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -327,6 +329,19 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
   const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
     const folderVal = folder || undefined;
+
+    // Save exercise notes to the global library
+    if (exercisesDetails && Array.isArray(exercisesDetails)) {
+      exercisesDetails.forEach((detail: any) => {
+        if (detail.name && detail.notes !== undefined && onUpdateExerciseNotes) {
+          const match = exercises.find(e => e.name.toLowerCase() === detail.name.toLowerCase());
+          if (match) {
+            onUpdateExerciseNotes(match.id, detail.notes);
+          }
+        }
+      });
+    }
+
     if (routineEditorInitial.editingId) {
       if (onUpdateTemplate) {
         onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes);
@@ -479,6 +494,18 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       }
 
       if (onAddTemplate) {
+        // Save exercise notes to the global library if provided
+        if (parsed.exercisesDetails && Array.isArray(parsed.exercisesDetails)) {
+          parsed.exercisesDetails.forEach((detail: any) => {
+            if (detail.name && detail.notes && onUpdateExerciseNotes) {
+              const match = exercises.find(e => e.name.toLowerCase() === detail.name.toLowerCase());
+              if (match) {
+                onUpdateExerciseNotes(match.id, detail.notes);
+              }
+            }
+          });
+        }
+
         onAddTemplate(
           parsed.name,
           parsed.exercises,

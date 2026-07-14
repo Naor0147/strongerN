@@ -61,6 +61,7 @@ interface SetRecord {
 interface RoutineExercise {
   id: string;
   name: string;
+  notes?: string;
   sets: SetRecord[];
   superSetGroupId?: string;
 }
@@ -284,18 +285,25 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           return {
             id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
             name: ex.name,
+            notes: ex.notes || libEx?.notes || '',
             superSetGroupId: ex.superSetGroupId,
-            sets: ex.sets.map((s: any, sIdx: number) => ({
-              id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
-              weight: s.weight ? s.weight.toString() : '0',
-              reps: s.reps ? s.reps.toString() : '10',
-              category: s.category || 'S',
-              isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
-              leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
-              leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
-              rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
-              rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
-            })),
+            sets: (Array.isArray(ex.sets) && ex.sets.length > 0)
+              ? ex.sets.map((s: any, sIdx: number) => ({
+                  id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
+                  weight: s.weight ? s.weight.toString() : '0',
+                  reps: s.reps ? s.reps.toString() : '10',
+                  category: s.category || 'S',
+                  isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
+                  leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
+                  leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
+                  rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
+                  rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
+                }))
+              : [
+                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                ],
           };
         });
       } else {
@@ -305,6 +313,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           return {
             id: `ex-${idx}-${Date.now()}-${Math.random()}`,
             name,
+            notes: libEx?.notes || '',
             sets: [
               { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
               { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
@@ -331,18 +340,25 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           return {
             id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
             name: ex.name,
+            notes: ex.notes || libEx?.notes || '',
             superSetGroupId: ex.superSetGroupId,
-            sets: ex.sets.map((s: any, sIdx: number) => ({
-              id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
-              weight: s.weight ? s.weight.toString() : '0',
-              reps: s.reps ? s.reps.toString() : '10',
-              category: s.category || 'S',
-              isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
-              leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
-              leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
-              rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
-              rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
-            })),
+            sets: (Array.isArray(ex.sets) && ex.sets.length > 0)
+              ? ex.sets.map((s: any, sIdx: number) => ({
+                  id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
+                  weight: s.weight ? s.weight.toString() : '0',
+                  reps: s.reps ? s.reps.toString() : '10',
+                  category: s.category || 'S',
+                  isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
+                  leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
+                  leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
+                  rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
+                  rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
+                }))
+              : [
+                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                ],
           };
         });
       } else {
@@ -352,6 +368,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           return {
             id: `ex-${idx}-${Date.now()}-${Math.random()}`,
             name,
+            notes: libEx?.notes || '',
             sets: [
               { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
               { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
@@ -366,6 +383,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         folder: initialFolder || '',
         exercisesStr: JSON.stringify(initialComputed.map(ex => ({
           name: ex.name,
+          notes: ex.notes,
           superSetGroupId: ex.superSetGroupId,
           sets: ex.sets.map((s: any) => ({
             weight: s.weight,
@@ -391,6 +409,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
     const currentExercisesSimplified = editorExercises.map(ex => ({
       name: ex.name,
+      notes: ex.notes,
       superSetGroupId: ex.superSetGroupId,
       sets: ex.sets.map(s => ({
         weight: s.weight,
@@ -624,6 +643,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
     const exercisesDetails = editorExercises.map(ex => ({
       name: ex.name,
+      notes: ex.notes || undefined,
       superSetGroupId: ex.superSetGroupId,
       sets: ex.sets.map(s => ({
         weight: parseFloat(s.weight) || 0,

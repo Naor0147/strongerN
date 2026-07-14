@@ -1182,7 +1182,7 @@ function App() {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, name, muscleGroup, equipment, isUnilateral } : e));
   }, []);
 
-  const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
+  const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
     const newTpl = {
       id: `tpl-custom-${Date.now()}`,
       name,
@@ -1190,6 +1190,7 @@ function App() {
       exercisesDetails,
       lastUsed: new Date(),
       folder,
+      notes,
     };
     setTemplatesList(prev => [newTpl, ...prev]);
   }, []);
@@ -1198,8 +1199,8 @@ function App() {
     setTemplatesList(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleUpdateTemplate = React.useCallback((id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[]) => {
-    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails } : t));
+  const handleUpdateTemplate = React.useCallback((id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
+    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails, notes } : t));
   }, []);
 
   const handleReorderTemplates = React.useCallback((newTemplates: any[]) => {
@@ -1820,6 +1821,7 @@ function App() {
         onAddCustomExercise={handleAddExercise}
         sessions={sessionsList}
         exerciseNameLanguage={exerciseNameLanguage}
+        onUpdateExerciseNotes={handleUpdateExerciseNotes}
       />
     );
   }, [
@@ -1832,6 +1834,7 @@ function App() {
     handleUpdateTemplate,
     handleReorderTemplates,
     exercisesList,
+    handleUpdateExerciseNotes,
     foldersList,
     handleAddFolder,
     handleRemoveFolder,
