@@ -57,6 +57,7 @@ interface WorkoutScreenProps {
   sessions?:         any[];
   exerciseNameLanguage?: 'en' | 'he';
   onUpdateExerciseNotes?: (id: string, notes?: string) => void;
+  onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
 }
 
 
@@ -192,6 +193,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
   onUpdateExerciseNotes,
+  onUpdateExercise,
 }) => {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -1159,6 +1161,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         onAddCustomExercise={onAddCustomExercise}
         exerciseNameLanguage={exerciseNameLanguage}
         enableRoutineFolders={enableRoutineFolders}
+        onUpdateExercise={onUpdateExercise}
       />
 
       {/* Modal B: Create Folder Modal */}

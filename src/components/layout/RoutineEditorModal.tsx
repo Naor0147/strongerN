@@ -78,10 +78,11 @@ interface RoutineEditorModalProps {
   folders:               string[];
   onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
   onClose:               () => void;
-  onAddCustomExercise?:  (name: string, muscle: string, equipment: string) => any;
+  onAddCustomExercise?:  (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   sessions?:             any[];
   exerciseNameLanguage?: 'en' | 'he';
   enableRoutineFolders?: boolean;
+  onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
 }
 
 // Contiguous supersets verification & dissolution helper
@@ -223,6 +224,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   sessions = EMPTY_ANY_ARRAY,
   exerciseNameLanguage = 'en',
   enableRoutineFolders = false,
+  onUpdateExercise,
 }) => {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -465,9 +467,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     setEditorExercises(prev => {
       const next = [...prev];
       const exName = next[exIdx].name;
-      const libEx = exercises.find(e => e.name.toLowerCase() === exName.toLowerCase());
-      const isUnilateral = libEx?.isUnilateral || false;
       const last = next[exIdx].sets[next[exIdx].sets.length - 1];
+      const libEx = exercises.find(e => e.name.toLowerCase() === exName.toLowerCase());
+      const isUnilateral = last ? !!last.isUnilateral : (libEx?.isUnilateral || false);
       next[exIdx] = {
         ...next[exIdx],
         sets: [
@@ -997,6 +999,56 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               <Text style={edStyles.sheetItemText}>{i18n.t('extras.linkWithPrevious')}</Text>
                             </Pressable>
                           )}
+
+                          {/* Switch to Unilateral / Bilateral mode toggle option */}
+                          <Pressable
+                            style={edStyles.sheetItem}
+                            onPress={() => {
+                              const isCurrentlyUnilateral = currentEx.sets.some((s: any) => s.isUnilateral);
+                              const targetUnilateral = !isCurrentlyUnilateral;
+
+                              // 1. Update local editor state sets configuration
+                              setEditorExercises(prev => prev.map((ex, idx) => {
+                                if (idx !== exMenuIdx) return ex;
+                                return {
+                                  ...ex,
+                                  sets: ex.sets.map(s => {
+                                    const unilateral = targetUnilateral;
+                                    return {
+                                      ...s,
+                                      isUnilateral: unilateral,
+                                      leftWeight: unilateral ? (s.leftWeight !== undefined ? s.leftWeight : s.weight) : undefined,
+                                      leftReps: unilateral ? (s.leftReps !== undefined ? s.leftReps : s.reps) : undefined,
+                                      rightWeight: unilateral ? (s.rightWeight !== undefined ? s.rightWeight : s.weight) : undefined,
+                                      rightReps: unilateral ? (s.rightReps !== undefined ? s.rightReps : s.reps) : undefined,
+                                    };
+                                  })
+                                };
+                              }));
+
+                              // 2. Update global exercises list mode state
+                              const libEx = exercises.find(e => e.name.toLowerCase() === currentEx.name.toLowerCase());
+                              if (libEx && onUpdateExercise) {
+                                onUpdateExercise(
+                                  libEx.id,
+                                  libEx.name,
+                                  libEx.muscleGroup,
+                                  libEx.equipment || 'Other',
+                                  targetUnilateral
+                                );
+                              }
+
+                              setIsExMenuVisible(false);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="repeat-outline" size={20} color={colors.accent} />
+                            <Text style={edStyles.sheetItemText}>
+                              {currentEx.sets.some((s: any) => s.isUnilateral)
+                                ? i18n.t('extras.switchToBilateral')
+                                : i18n.t('extras.switchToUnilateral')}
+                            </Text>
+                          </Pressable>
                         </>
                       );
                     })()}

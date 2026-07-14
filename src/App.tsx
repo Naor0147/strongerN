@@ -1845,6 +1845,7 @@ function App() {
         sessions={sessionsList}
         exerciseNameLanguage={exerciseNameLanguage}
         onUpdateExerciseNotes={handleUpdateExerciseNotes}
+        onUpdateExercise={handleUpdateExercise}
       />
     );
   }, [
@@ -1858,6 +1859,7 @@ function App() {
     handleReorderTemplates,
     exercisesList,
     handleUpdateExerciseNotes,
+    handleUpdateExercise,
     foldersList,
     handleAddFolder,
     handleRemoveFolder,
