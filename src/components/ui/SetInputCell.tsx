@@ -111,7 +111,13 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         if (textRef.current) {
           // Native text inputs (Android/iOS)
           if (typeof (textRef.current as any).setNativeProps === 'function') {
-            (textRef.current as any).setNativeProps({ text: newValue || placeholder });
+            (textRef.current as any).setNativeProps({
+              text: newValue || placeholder,
+              style: {
+                color: newValue === '' ? colors.textSecondary : colors.textPrimary,
+                opacity: newValue === '' ? 0.5 : 1.0,
+              }
+            });
           }
           // Direct DOM node updates for web fallback
           const element = (textRef.current as any)._node || textRef.current;
@@ -121,6 +127,8 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
             } else if (typeof element.textContent !== 'undefined') {
               element.textContent = newValue || placeholder;
             }
+            element.style.color = newValue === '' ? colors.textSecondary : colors.textPrimary;
+            element.style.opacity = newValue === '' ? '0.5' : '1';
           }
         }
 
@@ -143,7 +151,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
     }
   }, [isActive, placeholder]);
 
-  const showPlaceholder = !isActive && value === '';
+  const showPlaceholder = value === '';
   const displayValue = value !== '' ? value : placeholder;
 
   return (
