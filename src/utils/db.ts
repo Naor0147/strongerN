@@ -21,7 +21,7 @@ export async function initDb(): Promise<boolean> {
 
   try {
     db = SQLite.openDatabaseSync('strongern.db');
-    db.execSync(`
+    await db.execAsync(`
       CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
         key TEXT PRIMARY KEY,
         value TEXT
@@ -42,7 +42,7 @@ export async function saveToDb(key: string, value: any): Promise<boolean> {
   // Native SQLite path
   if (!isWeb && db) {
     try {
-      db.runSync(
+      await db.runAsync(
         `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value) VALUES (?, ?);`,
         [key, serialized]
       );
@@ -69,7 +69,7 @@ export async function loadFromDb(key: string): Promise<any | null> {
   // Native SQLite path
   if (!isWeb && db) {
     try {
-      const row = db.getFirstSync(
+      const row = await db.getFirstAsync(
         `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
         [key]
       );
@@ -96,7 +96,7 @@ export async function deleteFromDb(key: string): Promise<boolean> {
   // Native SQLite path
   if (!isWeb && db) {
     try {
-      db.runSync(`DELETE FROM ${TABLE_NAME} WHERE key = ?;`, [key]);
+      await db.runAsync(`DELETE FROM ${TABLE_NAME} WHERE key = ?;`, [key]);
       return true;
     } catch (err) {
       console.error('[DB] SQLite delete error:', err);
@@ -122,7 +122,7 @@ export async function deleteFromDb(key: string): Promise<boolean> {
 async function clearDb(): Promise<boolean> {
   if (!isWeb && db) {
     try {
-      db.execSync(`DELETE FROM ${TABLE_NAME};`);
+      await db.execAsync(`DELETE FROM ${TABLE_NAME};`);
       return true;
     } catch (err) {
       console.error('[DB] SQLite clearDb error:', err);
@@ -138,3 +138,4 @@ async function clearDb(): Promise<boolean> {
   }
   return false;
 }
+

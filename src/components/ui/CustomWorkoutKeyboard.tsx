@@ -10,8 +10,92 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
 import i18n from '../../utils/i18n';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+interface KeyboardKeyProps {
+  onPress?: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+  style: any;
+  rippleColor?: string;
+  activeScale?: number;
+  children?: React.ReactNode;
+  [key: string]: any;
+}
+
+const KeyboardKey = React.memo(({
+  onPress,
+  onPressIn,
+  onPressOut,
+  style,
+  rippleColor = colors.surface2,
+  activeScale = 0.94,
+  children,
+  ...rest
+}: KeyboardKeyProps) => {
+  const scale = useSharedValue(1);
+  const rippleOpacity = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
+
+  const rippleAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: rippleOpacity.value,
+      backgroundColor: rippleColor,
+    };
+  });
+
+  const handlePressIn = () => {
+    scale.value = withTiming(activeScale, { duration: 50 });
+    rippleOpacity.value = withTiming(1, { duration: 50 });
+    if (onPressIn) onPressIn();
+  };
+
+  const handlePressOut = () => {
+    scale.value = withTiming(1, { duration: 90 });
+    rippleOpacity.value = withTiming(0, { duration: 120 });
+    if (onPressOut) onPressOut();
+  };
+
+  const flatStyle = StyleSheet.flatten(style) || {};
+
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+      style={{ flex: flatStyle.flex, height: flatStyle.height, width: flatStyle.width }}
+      {...rest}
+    >
+      <Animated.View
+        style={[
+          flatStyle,
+          { flex: 1, height: '100%' },
+          animatedStyle
+        ]}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { borderRadius: flatStyle.borderRadius || radius.sm },
+            rippleAnimatedStyle
+          ]}
+        />
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+});
+
 
 interface CustomWorkoutKeyboardProps {
   visible: boolean;
@@ -228,36 +312,36 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
                 }
                 if (key === '⌫') {
                   return (
-                    <Pressable
+                    <KeyboardKey
                       key={key}
-                      style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.surface2, transform: [{ scale: 0.95 }] }]}
+                      style={styles.key}
+                      rippleColor={colors.surface2}
                       onPressIn={handleBackspacePressIn}
                       onPressOut={handleBackspacePressOut}
-                      {...({ delayPressIn: 0 } as any)}
+                      delayPressIn={0}
                       hitSlop={KEY_HIT_SLOP}
                       pressRetentionOffset={PRESS_RETENTION}
-                      android_ripple={rippleTokens.surface}
                       accessibilityRole="button"
                       accessibilityLabel="Delete last digit"
                     >
                       <Ionicons name="backspace-outline" size={26} color={colors.textPrimary} />
-                    </Pressable>
+                    </KeyboardKey>
                   );
                 }
                 return (
-                  <Pressable
+                  <KeyboardKey
                     key={key}
-                    style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.surface2, transform: [{ scale: 0.95 }] }]}
+                    style={styles.key}
+                    rippleColor={colors.surface2}
                     onPress={() => handleKeyPress(key)}
-                    {...({ delayPressIn: 0 } as any)}
+                    delayPressIn={0}
                     hitSlop={KEY_HIT_SLOP}
                     pressRetentionOffset={PRESS_RETENTION}
-                    android_ripple={rippleTokens.surface}
                     accessibilityRole="button"
                     accessibilityLabel={key === '.' ? 'Decimal point' : `Digit ${key}`}
                   >
                     <Text style={styles.keyText}>{key}</Text>
-                  </Pressable>
+                  </KeyboardKey>
                 );
               })}
             </View>
@@ -266,12 +350,13 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
 
         <View style={styles.actionColumn}>
           {onChangeRpe ? (
-            <Pressable
-              style={({ pressed }) => [styles.actionKey, showRpeBar && styles.rpeKeyActive, pressed && { transform: [{ scale: 0.95 }] }]}
+            <KeyboardKey
+              key="rpe-bar-toggle"
+              style={[styles.actionKey, showRpeBar && styles.rpeKeyActive]}
+              rippleColor={colors.surface2}
               onPress={() => { playFeedback('tap'); setShowRpeBar(v => !v); }}
-              {...({ delayPressIn: 0 } as any)}
+              delayPressIn={0}
               hitSlop={KEY_HIT_SLOP}
-              android_ripple={rippleTokens.surface}
               accessibilityRole="button"
               accessibilityLabel={isRpeMode ? 'Select rating of perceived exertion' : 'Select repetitions in reserve'}
             >
@@ -279,37 +364,39 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
               <Text style={[styles.actionKeyText, showRpeBar && { color: colors.violet }]}>
                 {isRpeMode ? i18n.t('customKeyboard.selectRpe').replace('SELECT ', '') : i18n.t('customKeyboard.selectRir').replace('SELECT ', '')}
               </Text>
-            </Pressable>
+            </KeyboardKey>
           ) : (
             <View style={[styles.actionKey, { backgroundColor: 'transparent', borderColor: 'transparent' }]} />
           )}
 
           {onNext ? (
-            <Pressable
-              style={({ pressed }) => [styles.actionKey, styles.nextKey, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+            <KeyboardKey
+              key="next-field"
+              style={[styles.actionKey, styles.nextKey]}
+              rippleColor="rgba(255, 255, 255, 0.2)"
               onPress={() => { playFeedback('heavy'); onNext(); }}
-              {...({ delayPressIn: 0 } as any)}
+              delayPressIn={0}
               hitSlop={KEY_HIT_SLOP}
-              android_ripple={rippleTokens.accent}
               accessibilityRole="button"
               accessibilityLabel="Next field"
             >
               <Ionicons name="arrow-forward" size={20} color={colors.bg} />
               <Text style={styles.nextKeyText}>{i18n.t('customKeyboard.next')}</Text>
-            </Pressable>
+            </KeyboardKey>
           ) : (
-            <Pressable
-              style={({ pressed }) => [styles.actionKey, styles.doneKey, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+            <KeyboardKey
+              key="done-btn"
+              style={[styles.actionKey, styles.doneKey]}
+              rippleColor="rgba(255, 255, 255, 0.2)"
               onPress={() => { playFeedback('heavy'); onClose(); }}
-              {...({ delayPressIn: 0 } as any)}
+              delayPressIn={0}
               hitSlop={KEY_HIT_SLOP}
-              android_ripple={rippleTokens.accent}
               accessibilityRole="button"
               accessibilityLabel="Done"
             >
               <Ionicons name="checkmark" size={20} color={colors.bg} />
               <Text style={styles.doneKeyText}>{i18n.t('customKeyboard.done')}</Text>
-            </Pressable>
+            </KeyboardKey>
           )}
         </View>
       </View>

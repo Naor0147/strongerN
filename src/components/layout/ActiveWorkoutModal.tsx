@@ -1,6 +1,6 @@
 // components/layout/ActiveWorkoutModal.tsx
 // Premium full-featured active workout tracking screen (Layout Optimized)
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -61,6 +61,9 @@ import Sortable from 'react-native-sortables';
 import { useExerciseRowGestures } from '../ui/gestureCoexistence';
 import { ElapsedTimeText } from '../ui/ElapsedTimeText';
 import { saveCrashLogSync } from '../../utils/crashLogger';
+import { keyboardValueStore } from '../../utils/keyboardValueStore';
+import { activeInputStore } from '../../utils/activeInputStore';
+import { useTrackRender } from '../../utils/renderTracker';
 
 const WebSafeAlert = {
   alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: string }[]) => {
@@ -146,6 +149,8 @@ interface ActiveWorkoutModalProps {
   onUpdateComment?: (comment: string) => void;
   onUpdateStartTime?: (time: Date) => void;
   onUpdateDefaultRestDuration?: (durationSec: number) => void;
+  isPlateCalculatorEnabled?: boolean;
+  isKeyboardDismissOnNextEnabled?: boolean;
 }
 
 function formatElapsed(startTime: Date, offsetSeconds: number = 0): string {
@@ -201,7 +206,8 @@ const getBestPerformanceSuggestionForSet = (
   category: string,
   positionInCategory: number,
   sessions: any[],
-  isUnilateral: boolean
+  isUnilateral: boolean,
+  sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
   const parseWeight = (val: any): number => {
     if (val === undefined || val === null || val === '') return 0;
@@ -214,17 +220,22 @@ const getBestPerformanceSuggestionForSet = (
     return isNaN(num) ? 0 : num;
   };
 
-  const matchingSessions = (sessions || [])
-    .reduce<any[]>((acc, s) => {
-      if (s.exercises) {
-        const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-        if (ex) {
-          acc.push({ datetime: s.datetime, ex });
+  let matchingSessions: any[];
+  if (sessionsMap) {
+    matchingSessions = sessionsMap.get(exName.toLowerCase()) || [];
+  } else {
+    matchingSessions = (sessions || [])
+      .reduce<any[]>((acc, s) => {
+        if (s.exercises) {
+          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+          if (ex) {
+            acc.push({ datetime: s.datetime, ex });
+          }
         }
-      }
-      return acc;
-    }, [])
-    .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime()); // descending (most recent first)
+        return acc;
+      }, [])
+      .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime()); // descending (most recent first)
+  }
 
   const last5Sessions = matchingSessions.slice(0, 5);
 
@@ -601,45 +612,127 @@ const serializeState = (exercises: any[], note: string): string => {
   }
 };
 
-// Contiguous supersets verification & dissolution helper
+// Contiguous supersets verification & dissolution helper (Reference-Preserving for 60 FPS Reorders)
 function sanitizeSuperSets<T extends { superSetGroupId?: string }>(items: T[]): T[] {
+  if (!items || items.length === 0) return items;
+
   const seenGroups = new Set<string>();
   let lastGroupId: string | undefined = undefined;
-  
-  const result = items.map((item, idx) => {
+  const targetGroupIds: (string | undefined)[] = new Array(items.length);
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
     const gid = item.superSetGroupId;
     if (!gid) {
       lastGroupId = undefined;
-      return item;
+      targetGroupIds[idx] = undefined;
+      continue;
     }
-    
-    // If we've seen this group ID before, but it's not contiguous with the last one, split it!
+
     if (seenGroups.has(gid) && lastGroupId !== gid) {
       const newGid = `ss-split-${Date.now()}-${idx}-${Math.random()}`;
       lastGroupId = newGid;
-      return { ...item, superSetGroupId: newGid };
+      targetGroupIds[idx] = newGid;
+    } else {
+      seenGroups.add(gid);
+      lastGroupId = gid;
+      targetGroupIds[idx] = gid;
     }
-    
-    seenGroups.add(gid);
-    lastGroupId = gid;
-    return item;
-  });
-  
-  // Dissolve groups containing < 2 exercises
+  }
+
   const groupCounts: Record<string, number> = {};
-  result.forEach(item => {
-    if (item.superSetGroupId) {
-      groupCounts[item.superSetGroupId] = (groupCounts[item.superSetGroupId] || 0) + 1;
+  for (let idx = 0; idx < items.length; idx++) {
+    const tg = targetGroupIds[idx];
+    if (tg) {
+      groupCounts[tg] = (groupCounts[tg] || 0) + 1;
     }
-  });
-  
-  return result.map(item => {
-    if (item.superSetGroupId && groupCounts[item.superSetGroupId] < 2) {
-      return { ...item, superSetGroupId: undefined };
+  }
+
+  let hasChanges = false;
+  const result: T[] = new Array(items.length);
+
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    let finalGid = targetGroupIds[idx];
+
+    if (finalGid && groupCounts[finalGid] < 2) {
+      finalGid = undefined;
     }
-    return item;
-  });
+
+    if (item.superSetGroupId === finalGid) {
+      result[idx] = item;
+    } else {
+      hasChanges = true;
+      result[idx] = { ...item, superSetGroupId: finalGid };
+    }
+  }
+
+  return hasChanges ? result : items;
 }
+
+const ActiveWorkoutKeyboardWrapper = React.memo(({
+  activeExercises,
+  updateSetField,
+  isRpeMode,
+  handleNextField,
+  handleCloseKeyboard,
+  tempInputValueRef,
+}: {
+  activeExercises: ActiveExercise[];
+  updateSetField: any;
+  isRpeMode: boolean;
+  handleNextField: any;
+  handleCloseKeyboard: any;
+  tempInputValueRef: React.MutableRefObject<string>;
+}) => {
+  const [activeInput, setActiveInput] = useState<any>(null);
+
+  useEffect(() => {
+    return activeInputStore.subscribe(setActiveInput);
+  }, []);
+
+  // Stable onChange: only updates ref + store, never causes wrapper re-render
+  const handleChange = useCallback((newValue: string) => {
+    tempInputValueRef.current = newValue;
+  }, [tempInputValueRef]);
+
+  // Stable RPE handler via ref to avoid inline recreation
+  const activeInputRef = useRef<any>(null);
+  activeInputRef.current = activeInput;
+
+  const handleRpeChange = useCallback((newRpe: string) => {
+    const ai = activeInputRef.current;
+    if (ai) {
+      updateSetField(ai.exIdx, ai.setIdx, 'rpe', newRpe);
+    }
+  }, [updateSetField]);
+
+  if (!activeInput) return null;
+
+  const currentEx = activeExercises[activeInput.exIdx];
+  const title = currentEx ? currentEx.name : '';
+  const rpeValue = currentEx?.sets[activeInput.setIdx]?.rpe || '';
+  const fieldName = activeInput.fieldName;
+  const maxLength = fieldName.toLowerCase().includes('reps') ? 4 : 6;
+  const inputKey = `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}`;
+
+  return (
+    <CustomWorkoutKeyboard
+      visible={true}
+      inputKey={inputKey}
+      value={tempInputValueRef.current}
+      onChange={handleChange}
+      rpeValue={rpeValue}
+      onChangeRpe={handleRpeChange}
+      fieldName={fieldName}
+      maxLength={maxLength}
+      title={title}
+      isRpeMode={isRpeMode}
+      onNext={handleNextField}
+      onClose={handleCloseKeyboard}
+    />
+  );
+});
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
@@ -673,6 +766,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateDefaultRestDuration,
   onUpdateExercise,
 }) => {
+  useTrackRender('ActiveWorkoutModal');
   const insets = useSafeAreaInsets();
   // Track the actual resume/edit start time (when THIS session started, not the original workout)
   const resumeStartTime = useRef(isEditing ? new Date() : (startTime || new Date()));
@@ -693,18 +787,35 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const hasSyncedPropsRef = useRef(false);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
-  const [activeInput, setActiveInput] = useState<{
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const tempInputValueRef = useRef('');
+  const activeInputRef = useRef<{
     exIdx: number;
     setIdx: number;
     fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
     focusTime?: number;
   } | null>(null);
-  const [tempInputValue, setTempInputValue] = useState('');
-  const tempInputValueRef = useRef('');
-  const activeInputRef = useRef<typeof activeInput>(null);
-  useEffect(() => {
-    activeInputRef.current = activeInput;
-  }, [activeInput]);
+
+  useLayoutEffect(() => {
+    return activeInputStore.subscribe((input: any) => {
+      if (input !== null) {
+        try {
+          if (typeof performance !== 'undefined' && typeof performance.mark === 'function' && typeof performance.measure === 'function') {
+            performance.mark('focus-end');
+            performance.measure('Focus Transition Time', 'focus-start', 'focus-end');
+            const measures = performance.getEntriesByName('Focus Transition Time');
+            if (measures.length > 0) {
+              const duration = measures[measures.length - 1].duration;
+              console.log(`[BENCHMARK] Focus transition took: ${duration.toFixed(2)}ms`);
+            }
+            performance.clearMarks('focus-start');
+            performance.clearMarks('focus-end');
+            performance.clearMeasures('Focus Transition Time');
+          }
+        } catch (e) {}
+      }
+    });
+  }, []);
 
   useEffect(() => {
     setForegroundSuppression(visible);
@@ -916,6 +1027,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     activeExercisesRef.current = activeExercises;
   }, [activeExercises]);
 
+  const exerciseLibraryMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (exerciseLibrary) {
+      for (let i = 0; i < exerciseLibrary.length; i++) {
+        const item = exerciseLibrary[i];
+        if (item && item.name) {
+          map.set(item.name.toLowerCase(), item);
+        }
+      }
+    }
+    return map;
+  }, [exerciseLibrary]);
+
   // Plate calculator states
   const [isPlateCalcVisible, setIsPlateCalcVisible] = useState(false);
   const [plateCalcTargetWeight, setPlateCalcTargetWeight] = useState('60');
@@ -970,6 +1094,57 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     });
     return map;
   }, [activeExercises]);
+
+  const sessionsByExerciseMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    if (!sessions) return map;
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+      if (s && s.exercises) {
+        for (let j = 0; j < s.exercises.length; j++) {
+          const ex = s.exercises[j];
+          if (ex && ex.name) {
+            const key = ex.name.toLowerCase();
+            let list = map.get(key);
+            if (!list) {
+              list = [];
+              map.set(key, list);
+            }
+            list.push({ datetime: s.datetime, ex });
+          }
+        }
+      }
+    }
+    map.forEach(list => {
+      list.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+    });
+    return map;
+  }, [sessions]);
+
+  const [renderedCardLimit, setRenderedCardLimit] = useState(4);
+
+  useEffect(() => {
+    if (visible) {
+      setRenderedCardLimit(4);
+      let currentLimit = 4;
+      let animId: number;
+
+      const expandChunk = () => {
+        if (currentLimit < exercises.length) {
+          currentLimit = Math.min(exercises.length, currentLimit + 8);
+          setRenderedCardLimit(currentLimit);
+          if (currentLimit < exercises.length) {
+            animId = requestAnimationFrame(expandChunk);
+          }
+        }
+      };
+
+      animId = requestAnimationFrame(expandChunk);
+      return () => {
+        if (animId) cancelAnimationFrame(animId);
+      };
+    }
+  }, [visible, exercises.length]);
 
   const lastStartTimeRef = useRef<string | null>(null);
 
@@ -1044,7 +1219,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                  rightReps: ex.bestReps ? ex.bestReps.toString() : '10',
                };
                if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                 suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral);
+                 suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral, sessionsByExerciseMap);
                }
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
@@ -1071,22 +1246,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
          }).filter((ex): ex is ActiveExercise => Boolean(ex));
         setActiveExercises(initial);
 
-        // Capture initial state for change detection (to check if user made changes)
-        initialStateRef.current = {
-          exercises: serializeState(initial, editingComment || ''),
-          note: editingComment || ''
-        };
+        // Capture initial state asynchronously to avoid un-blocking mount frame
+        setTimeout(() => {
+          initialStateRef.current = {
+            exercises: serializeState(initial, editingComment || ''),
+            note: editingComment || ''
+          };
+        }, 50);
 
         hasSyncedPropsRef.current = true;
       }
     }
-  }, [visible, startTime, exercises, previousDurationMin, editingComment]);
+  }, [visible, startTime, exercises, previousDurationMin, editingComment, sessionsByExerciseMap]);
 
-  // Sync active exercises back to parent App state so they are stored
-  useEffect(() => {
-    if (!hasSyncedPropsRef.current) return;
+  const debounceSyncRef = useRef<NodeJS.Timeout | null>(null);
+
+  const flushExercisesToParent = useCallback((exs: ActiveExercise[]) => {
+    if (debounceSyncRef.current) {
+      clearTimeout(debounceSyncRef.current);
+    }
     if (onUpdateActiveExercises) {
-      const mapped = activeExercises.map(ex => {
+      const mapped = exs.map(ex => {
         const completedSets = ex.sets.filter(s => s.completed);
         const allWeights = completedSets.flatMap(s => {
           if (s.isUnilateral) {
@@ -1122,7 +1302,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       });
       onUpdateActiveExercises(mapped);
     }
-  }, [activeExercises]);
+  }, [onUpdateActiveExercises]);
+
+  // Sync active exercises back to parent App state so they are stored (debounced)
+  useEffect(() => {
+    if (!hasSyncedPropsRef.current) return;
+    
+    if (debounceSyncRef.current) {
+      clearTimeout(debounceSyncRef.current);
+    }
+
+    debounceSyncRef.current = setTimeout(() => {
+      flushExercisesToParent(activeExercisesRef.current);
+    }, 1000);
+
+    return () => {
+      if (debounceSyncRef.current) {
+        clearTimeout(debounceSyncRef.current);
+      }
+    };
+  }, [activeExercises, flushExercisesToParent]);
 
   // Keep refs of values needed by background notifications
   const localWorkoutNameRef = useRef(localWorkoutName);
@@ -1223,129 +1422,176 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     safeLayoutAnim();
     setActiveExercises(prev => {
-      return prev.map((ex, eIdx) => {
-        if (eIdx !== exIdx) return ex;
-        return {
-          ...ex,
-          sets: ex.sets.map((set, sIdx) => {
-            if (sIdx !== setIdx) return set;
-            let updated = { ...set, completed: willBeCompleted };
-            if (willBeCompleted) {
-              if (!updated.weight && (updated as any).suggestedWeight) {
-                updated.weight = (updated as any).suggestedWeight;
-              }
-              if (!updated.reps && (updated as any).suggestedReps) {
-                updated.reps = (updated as any).suggestedReps;
-              }
-              if (updated.isUnilateral) {
-                if (!updated.leftWeight && (updated as any).suggestedLeftWeight) {
-                  updated.leftWeight = (updated as any).suggestedLeftWeight;
-                }
-                if (!updated.leftReps && (updated as any).suggestedLeftReps) {
-                  updated.leftReps = (updated as any).suggestedLeftReps;
-                }
-                if (!updated.rightWeight && (updated as any).suggestedRightWeight) {
-                  updated.rightWeight = (updated as any).suggestedRightWeight;
-                }
-                if (!updated.rightReps && (updated as any).suggestedRightReps) {
-                  updated.rightReps = (updated as any).suggestedRightReps;
-                }
-              }
-            }
-            return updated;
-          })
-        };
-      });
+      if (!prev[exIdx]) return prev;
+      const targetEx = prev[exIdx];
+      if (!targetEx.sets[setIdx]) return prev;
+      const targetSet = targetEx.sets[setIdx];
+
+      let updatedSet = { ...targetSet, completed: willBeCompleted };
+      if (willBeCompleted) {
+        if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
+          updatedSet.weight = (updatedSet as any).suggestedWeight;
+        }
+        if (!updatedSet.reps && (updatedSet as any).suggestedReps) {
+          updatedSet.reps = (updatedSet as any).suggestedReps;
+        }
+        if (updatedSet.isUnilateral) {
+          if (!updatedSet.leftWeight && (updatedSet as any).suggestedLeftWeight) {
+            updatedSet.leftWeight = (updatedSet as any).suggestedLeftWeight;
+          }
+          if (!updatedSet.leftReps && (updatedSet as any).suggestedLeftReps) {
+            updatedSet.leftReps = (updatedSet as any).suggestedLeftReps;
+          }
+          if (!updatedSet.rightWeight && (updatedSet as any).suggestedRightWeight) {
+            updatedSet.rightWeight = (updatedSet as any).suggestedRightWeight;
+          }
+          if (!updatedSet.rightReps && (updatedSet as any).suggestedRightReps) {
+            updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
+          }
+        }
+      }
+
+      const nextSets = [...targetEx.sets];
+      nextSets[setIdx] = updatedSet;
+      const nextArr = [...prev];
+      nextArr[exIdx] = { ...targetEx, sets: nextSets };
+      return nextArr;
     });
   }, [isAutoTimerEnabled, defaultRestDuration]);
 
   // Set weight/reps/rpe/category updater
   const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
+    const currentVal = activeExercisesRef.current[exIdx]?.sets[setIdx]?.[field] ?? '';
+    if (String(currentVal) === value && field !== 'category') return;
+
     setActiveExercises(prev => {
-      return prev.map((ex, eIdx) => {
-        if (eIdx !== exIdx) return ex;
-        const firstPassSets = ex.sets.map((set, sIdx) => {
-          if (sIdx !== setIdx) return set;
-          const updated = { ...set, [field]: value };
-          if (field === 'weight') (updated as any).weightSuggested = false;
-          else if (field === 'reps') (updated as any).repsSuggested = false;
-          else if (field === 'leftWeight') (updated as any).leftWeightSuggested = false;
-          else if (field === 'leftReps') (updated as any).leftRepsSuggested = false;
-          else if (field === 'rightWeight') (updated as any).rightWeightSuggested = false;
-          else if (field === 'rightReps') (updated as any).rightRepsSuggested = false;
-          return updated;
+      if (!prev[exIdx]) return prev;
+      const targetEx = prev[exIdx];
+      if (!targetEx.sets[setIdx]) return prev;
+
+      const targetSet = targetEx.sets[setIdx];
+      const updatedSet = { ...targetSet, [field]: value };
+      if (field === 'weight') (updatedSet as any).weightSuggested = false;
+      else if (field === 'reps') (updatedSet as any).repsSuggested = false;
+      else if (field === 'leftWeight') (updatedSet as any).leftWeightSuggested = false;
+      else if (field === 'leftReps') (updatedSet as any).leftRepsSuggested = false;
+      else if (field === 'rightWeight') (updatedSet as any).rightWeightSuggested = false;
+      else if (field === 'rightReps') (updatedSet as any).rightRepsSuggested = false;
+
+      const nextSets = [...targetEx.sets];
+      nextSets[setIdx] = updatedSet;
+
+      if (field === 'category') {
+        const setsWithCategory = nextSets.map((s, sIdx) => {
+          const category = s.category || 'S';
+          let positionInCategory = 0;
+          for (let i = 0; i < sIdx; i++) {
+            if ((nextSets[i].category || 'S') === category) {
+              positionInCategory++;
+            }
+          }
+          let suggested: SetSuggestion = {
+            weight: '60',
+            reps: '10',
+            leftWeight: '60',
+            leftReps: '10',
+            rightWeight: '60',
+            rightReps: '10',
+          };
+          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+            suggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, s.isUnilateral || false);
+          }
+          return {
+            ...s,
+            suggestedWeight: suggested.weight,
+            suggestedReps: suggested.reps,
+            suggestedLeftWeight: s.isUnilateral ? suggested.leftWeight : undefined,
+            suggestedLeftReps: s.isUnilateral ? suggested.leftReps : undefined,
+            suggestedRightWeight: s.isUnilateral ? suggested.rightWeight : undefined,
+            suggestedRightReps: s.isUnilateral ? suggested.rightReps : undefined,
+          };
         });
 
-        if (field === 'category') {
-          return {
-            ...ex,
-            sets: firstPassSets.map((s, sIdx) => {
-              const category = s.category || 'S';
-              let positionInCategory = 0;
-              for (let i = 0; i < sIdx; i++) {
-                if ((firstPassSets[i].category || 'S') === category) {
-                  positionInCategory++;
-                }
-              }
-              let suggested: SetSuggestion = {
-                weight: '60',
-                reps: '10',
-                leftWeight: '60',
-                leftReps: '10',
-                rightWeight: '60',
-                rightReps: '10',
-              };
-              if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, s.isUnilateral || false);
-              }
-              return {
-                ...s,
-                suggestedWeight: suggested.weight,
-                suggestedReps: suggested.reps,
-                suggestedLeftWeight: s.isUnilateral ? suggested.leftWeight : undefined,
-                suggestedLeftReps: s.isUnilateral ? suggested.leftReps : undefined,
-                suggestedRightWeight: s.isUnilateral ? suggested.rightWeight : undefined,
-                suggestedRightReps: s.isUnilateral ? suggested.rightReps : undefined,
-              };
-            })
-          };
-        }
+        const nextArr = [...prev];
+        nextArr[exIdx] = { ...targetEx, sets: setsWithCategory };
+        return nextArr;
+      }
 
-        return {
-          ...ex,
-          sets: firstPassSets
-        };
-      });
+      const nextArr = [...prev];
+      nextArr[exIdx] = { ...targetEx, sets: nextSets };
+      return nextArr;
     });
   }, [isProgressiveOverloadEnabled, sessions]);
 
   // Stable keyboard close/dismiss handler
   const handleCloseKeyboard = useCallback(() => {
+    try {
+      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+        performance.mark('close-kb-start');
+      }
+    } catch (_) {}
     if (activeInputRef.current) {
       updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
     }
-    setActiveInput(null);
+    activeInputRef.current = null;
+    activeInputStore.setActiveInput(null);
+    setIsKeyboardVisible(false);
   }, [updateSetField]);
 
   // Stable input focus handler (must NOT be inside .map())
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
-    // Commit previous field value first
+    try {
+      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+        performance.mark('focus-start');
+      }
+    } catch (_) {}
+
+    // Commit previous field value first (only if modified)
     if (activeInputRef.current) {
-      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+      const prevEx = activeInputRef.current.exIdx;
+      const prevSet = activeInputRef.current.setIdx;
+      const prevField = activeInputRef.current.fieldName;
+      const currentStored = activeExercisesRef.current[prevEx]?.sets[prevSet]?.[prevField] ?? '';
+      if (String(currentStored) !== tempInputValueRef.current) {
+        updateSetField(prevEx, prevSet, prevField, tempInputValueRef.current);
+      }
     }
 
     // Set the new input value and focus
-    const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] || '';
+    const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] ?? '';
     const valStr = String(currentVal);
-    setTempInputValue(valStr);
     tempInputValueRef.current = valStr;
+    keyboardValueStore.setValue(valStr);
     
     const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
-    setActiveInput(newInput);
     activeInputRef.current = newInput;
+    activeInputStore.setActiveInput(newInput);
+    setIsKeyboardVisible(prev => prev ? prev : true);
   }, [updateSetField]);
 
-
+  useLayoutEffect(() => {
+    try {
+      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+        if (isKeyboardVisible) {
+          if (performance.getEntriesByName('focus-start').length > 0) {
+            performance.mark('kb-open-end');
+            const m = performance.measure('kb-open', 'focus-start', 'kb-open-end');
+            if (m) console.log(`[BENCHMARK] Keyboard open took: ${m.duration.toFixed(2)}ms`);
+            performance.clearMarks('focus-start');
+            performance.clearMarks('kb-open-end');
+          }
+        } else {
+          if (performance.getEntriesByName('close-kb-start').length > 0) {
+            performance.mark('kb-close-end');
+            const m = performance.measure('kb-close', 'close-kb-start', 'kb-close-end');
+            if (m) console.log(`[BENCHMARK] Keyboard close took: ${m.duration.toFixed(2)}ms`);
+            performance.clearMarks('close-kb-start');
+            performance.clearMarks('kb-close-end');
+          }
+        }
+      }
+    } catch (_) {}
+  }, [isKeyboardVisible]);
 
   useEffect(() => {
     if (visible) {
@@ -1354,69 +1600,76 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       if (activeInputRef.current) {
         updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
       }
-      setActiveInput(null);
+      activeInputRef.current = null;
+      activeInputStore.setActiveInput(null);
+      setIsKeyboardVisible(false);
+      if (hasSyncedPropsRef.current) {
+        flushExercisesToParent(activeExercisesRef.current);
+      }
     }
-  }, [visible, workoutName, updateSetField]);
+  }, [visible, workoutName, updateSetField, flushExercisesToParent]);
 
   // Add a set
   const addSet = useCallback((exIdx: number, isUnilateral?: boolean) => {
     safeLayoutAnim();
     setActiveExercises(prev => {
-      return prev.map((ex, eIdx) => {
-        if (eIdx !== exIdx) return ex;
-        const currentSets = ex.sets;
-        const lastSet = currentSets[currentSets.length - 1];
-        const category = lastSet?.category ?? 'S';
-        const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
-        const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
+      if (!prev[exIdx]) return prev;
+      const targetEx = prev[exIdx];
+      const currentSets = targetEx.sets;
+      const lastSet = currentSets[currentSets.length - 1];
+      const category = lastSet?.category ?? 'S';
+      const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
+      const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
 
-        let suggested: SetSuggestion = {
-          weight: '60',
-          reps: '10',
-          leftWeight: '60',
-          leftReps: '10',
-          rightWeight: '60',
-          rightReps: '10',
+      let suggested: SetSuggestion = {
+        weight: '60',
+        reps: '10',
+        leftWeight: '60',
+        leftReps: '10',
+        rightWeight: '60',
+        rightReps: '10',
+      };
+      if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+        suggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, unilateral);
+      } else {
+        const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
+        const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
+        suggested = {
+          weight: sugWeight,
+          reps: sugReps,
+          leftWeight: unilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
+          leftReps: unilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
+          rightWeight: unilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
+          rightReps: unilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
         };
-        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, unilateral);
-        } else {
-          const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
-          const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
-          suggested = {
-            weight: sugWeight,
-            reps: sugReps,
-            leftWeight: unilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
-            leftReps: unilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
-            rightWeight: unilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
-            rightReps: unilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
-          };
-        }
+      }
 
-        const newSet: SetRecord = {
-          id:        `set-${exIdx}-${Date.now()}-${Math.random()}`,
-          weight:    '',
-          reps:      '',
-          completed: false,
-          rpe:       '',
-          category:  category,
-          isUnilateral: unilateral,
-          leftWeight:   unilateral ? '' : undefined,
-          leftReps:     unilateral ? '' : undefined,
-          rightWeight:  unilateral ? '' : undefined,
-          rightReps:    unilateral ? '' : undefined,
-          suggestedWeight: suggested.weight,
-          suggestedReps: suggested.reps,
-          suggestedLeftWeight: unilateral ? suggested.leftWeight : undefined,
-          suggestedLeftReps: unilateral ? suggested.leftReps : undefined,
-          suggestedRightWeight: unilateral ? suggested.rightWeight : undefined,
-          suggestedRightReps: unilateral ? suggested.rightReps : undefined,
-        } as any;
-        return {
-          ...ex,
-          sets: [...currentSets, newSet]
-        };
-      });
+      const newSet: SetRecord = {
+        id:        `set-${exIdx}-${Date.now()}-${Math.random()}`,
+        weight:    '',
+        reps:      '',
+        completed: false,
+        rpe:       '',
+        category:  category,
+        isUnilateral: unilateral,
+        leftWeight:   unilateral ? '' : undefined,
+        leftReps:     unilateral ? '' : undefined,
+        rightWeight:  unilateral ? '' : undefined,
+        rightReps:    unilateral ? '' : undefined,
+        suggestedWeight: suggested.weight,
+        suggestedReps: suggested.reps,
+        suggestedLeftWeight: unilateral ? suggested.leftWeight : undefined,
+        suggestedLeftReps: unilateral ? suggested.leftReps : undefined,
+        suggestedRightWeight: unilateral ? suggested.rightWeight : undefined,
+        suggestedRightReps: unilateral ? suggested.rightReps : undefined,
+      } as any;
+
+      const nextArr = [...prev];
+      nextArr[exIdx] = {
+        ...targetEx,
+        sets: [...currentSets, newSet]
+      };
+      return nextArr;
     });
   }, [isProgressiveOverloadEnabled, sessions]);
 
@@ -1424,25 +1677,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const deleteSet = useCallback((exIdx: number, setIdx: number) => {
     try {
       setActiveExercises(prev => {
-        return prev.map((ex, eIdx) => {
-          if (eIdx !== exIdx) return ex;
-          return {
-            ...ex,
-            sets: ex.sets.filter((_, sIdx) => sIdx !== setIdx)
-          };
-        });
+        if (!prev[exIdx]) return prev;
+        const targetEx = prev[exIdx];
+        const nextSets = targetEx.sets.filter((_, sIdx) => sIdx !== setIdx);
+        const nextArr = [...prev];
+        nextArr[exIdx] = { ...targetEx, sets: nextSets };
+        return nextArr;
       });
       // Shift or clear active input if it matches the deleted set/exercise
-      setActiveInput(prev => {
-        if (prev && prev.exIdx === exIdx) {
-          if (prev.setIdx === setIdx) {
-            return null; // Focused set was deleted
-          } else if (prev.setIdx > setIdx) {
-            return { ...prev, setIdx: prev.setIdx - 1 }; // Shift index down
-          }
+      const curr = activeInputRef.current;
+      if (curr && curr.exIdx === exIdx) {
+        if (curr.setIdx === setIdx) {
+          activeInputRef.current = null;
+          activeInputStore.setActiveInput(null);
+          setIsKeyboardVisible(false);
+        } else if (curr.setIdx > setIdx) {
+          const nextVal = { ...curr, setIdx: curr.setIdx - 1 };
+          activeInputRef.current = nextVal;
+          activeInputStore.setActiveInput(nextVal);
         }
-        return prev;
-      });
+      }
     } catch (err: any) {
       const msg = `[ActiveWorkout] deleteSet(exIdx=${exIdx}, setIdx=${setIdx}) crashed: ${err?.message ?? err}`;
       saveCrashLogSync(msg, err?.stack ?? '', false);
@@ -1452,8 +1706,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Handle custom keyboard "Next" button click
   const handleNextField = useCallback(() => {
-    if (!activeInput) return;
-    const { exIdx, setIdx, fieldName } = activeInput;
+    const activeInputVal = activeInputRef.current;
+    if (!activeInputVal) return;
+    const { exIdx, setIdx, fieldName } = activeInputVal;
 
     // Commit current temp value before jumping
     updateSetField(exIdx, setIdx, fieldName, tempInputValueRef.current);
@@ -1471,16 +1726,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         }
         safeLayoutAnim();
         setActiveExercises(prev => {
-          return prev.map((ex, eIdx) => {
-            if (eIdx !== exIdx) return ex;
-            return {
-              ...ex,
-              sets: ex.sets.map((set, sIdx) => {
-                if (sIdx !== setIdx) return set;
-                return { ...set, completed: true };
-              })
-            };
-          });
+          if (!prev[exIdx]) return prev;
+          const targetEx = prev[exIdx];
+          if (!targetEx.sets[setIdx]) return prev;
+          const nextSets = [...targetEx.sets];
+          nextSets[setIdx] = { ...nextSets[setIdx], completed: true };
+          const nextArr = [...prev];
+          nextArr[exIdx] = { ...targetEx, sets: nextSets };
+          return nextArr;
         });
       }
     }
@@ -1548,7 +1801,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     // 6. Otherwise, close/blur
     handleCloseKeyboard();
-  }, [activeInput, activeExercises, isAutoFinishSetEnabled, isAutoTimerEnabled, defaultRestDuration, updateSetField, handleCloseKeyboard]);
+  }, [activeExercises, isAutoFinishSetEnabled, isAutoTimerEnabled, defaultRestDuration, updateSetField, handleCloseKeyboard]);
 
   // Calculate volume & sets for summary
   const handleFinishPress = () => {
@@ -1604,6 +1857,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     
     wasInitializedRef.current = false;
+    flushExercisesToParent(activeExercises);
     onFinish({
       totalVolume,
       totalSets,
@@ -1674,16 +1928,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               setActiveExercises(prev => prev.filter((_, idx) => idx !== targetIdx));
               setIsExMenuVisible(false);
               // Shift or clear active input if it matches the deleted exercise
-              setActiveInput(prev => {
-                if (prev) {
-                  if (prev.exIdx === targetIdx) {
-                    return null; // Focused exercise was deleted
-                  } else if (prev.exIdx > targetIdx) {
-                    return { ...prev, exIdx: prev.exIdx - 1 }; // Shift index down
-                  }
+              const curr = activeInputRef.current;
+              if (curr) {
+                if (curr.exIdx === targetIdx) {
+                  activeInputRef.current = null;
+                  activeInputStore.setActiveInput(null);
+                  setIsKeyboardVisible(false);
+                } else if (curr.exIdx > targetIdx) {
+                  const nextVal = { ...curr, exIdx: curr.exIdx - 1 };
+                  activeInputRef.current = nextVal;
+                  activeInputStore.setActiveInput(nextVal);
                 }
-                return prev;
-              });
+              }
               setActiveExerciseMenuIndex(null);
             }
           }
@@ -1691,6 +1947,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       );
     }
   };
+
+  const handleDeleteExercise = useCallback((exIdx: number) => {
+    setActiveExercises(prev => {
+      const filtered = prev.filter((_, idx) => idx !== exIdx);
+      return sanitizeSuperSets(filtered);
+    });
+    // Shift or clear active input if it matches the deleted exercise
+    const curr = activeInputRef.current;
+    if (curr) {
+      if (curr.exIdx === exIdx) {
+        activeInputRef.current = null;
+        activeInputStore.setActiveInput(null);
+        setIsKeyboardVisible(false);
+      } else if (curr.exIdx > exIdx) {
+        const nextVal = { ...curr, exIdx: curr.exIdx - 1 };
+        activeInputRef.current = nextVal;
+        activeInputStore.setActiveInput(nextVal);
+      }
+    }
+  }, []);
 
   const handleOpenReplace = () => {
     setIsReplaceMode(true);
@@ -1732,7 +2008,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
           suggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
         } else {
-          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+          const libEx = exerciseLibraryMap.get(exName.toLowerCase());
           if (libEx) {
             suggested.weight = (libEx.bestWeight || 60).toString();
             suggested.reps = (libEx.bestReps || 10).toString();
@@ -1778,7 +2054,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     } else {
       // Add mode: append all selected exercises
       const newOnes: ActiveExercise[] = names.map((exName, idx) => {
-        const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+        const libEx = exerciseLibraryMap.get(exName.toLowerCase());
         const isUnilateral = libEx?.isUnilateral || false;
         
         let setsCount = 3;
@@ -1890,6 +2166,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return exerciseLibrary.filter(ex => ex.name.toLowerCase().includes(librarySearch.toLowerCase().trim()));
   }, [exerciseLibrary, librarySearch]);
 
+  const scrollContentStyle = useMemo(() => [
+    styles.scrollContent,
+    isTimerSubMenuVisible ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl },
+    isKeyboardVisible ? { paddingBottom: 280 } : null
+  ], [isTimerSubMenuVisible, isKeyboardVisible]);
+
   return (
     <>
     <Modal
@@ -1928,7 +2210,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 />
                  {/* Plate Calculator button was removed from here */}
               </View>
- 
+
               <View pointerEvents="box-none" style={styles.headerCenter}>
                 <ElapsedTimeText
                   startTime={resumeStartTime.current}
@@ -1937,7 +2219,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   style={styles.headerTimerText}
                 />
               </View>
- 
+
               <View style={styles.headerRight}>
                 <Pressable
                   onPress={handleOpenAddExercise}
@@ -1973,11 +2255,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               ref={scrollRef}
               scrollEnabled={scrollEnabled}
               style={styles.scroll}
-              contentContainerStyle={[
-                styles.scrollContent,
-                isTimerSubMenuVisible ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl },
-                activeInput !== null && { paddingBottom: 280 }
-              ]}
+              contentContainerStyle={scrollContentStyle}
               showsVerticalScrollIndicator={false}
               overScrollMode="never"
               keyboardShouldPersistTaps="handled"
@@ -2063,67 +2341,58 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 width="fill"
                 customHandle
                 dragActivationDelay={0}
-                dragActivationFailOffset={5}
-                activeItemScale={1.02}
-                activeItemOpacity={1}
-                activeItemShadowOpacity={0.45}
+                dragActivationFailOffset={10}
+                activeItemScale={1.03}
+                activeItemOpacity={0.92}
+                activeItemShadowOpacity={0.5}
                 inactiveItemOpacity={1}
                 inactiveItemScale={1}
-                enableActiveItemSnap={false}
+                enableActiveItemSnap={true}
                 dimensionsAnimationType="layout"
                 itemsLayoutTransitionMode="reorder"
-                dropAnimationDuration={250}
+                dropAnimationDuration={180}
                 strategy="insert"
                 reorderTriggerOrigin="center"
                 overDrag="vertical"
                 hapticsEnabled
                 scrollableRef={scrollRef}
                 onDragStart={() => setScrollEnabled(false)}
-                onDragEnd={({ order }) => setActiveExercises(sanitizeSuperSets(order(activeExercises)))}
+                onDragEnd={({ order }) => {
+                  setScrollEnabled(true);
+                  setTimeout(() => {
+                    setActiveExercises(prev => sanitizeSuperSets(order(prev)));
+                  }, 180);
+                }}
                 onActiveItemDropped={() => setScrollEnabled(true)}
                 itemExiting={null}
               >
-                {activeExercises.map((exercise, exIdx) => {
+                {activeExercises.slice(0, renderedCardLimit).map((exercise, exIdx) => {
                   const isSuperSet = !!exercise.superSetGroupId;
                   const nextIsSameSuperSet = isSuperSet && exIdx < activeExercises.length - 1 && activeExercises[exIdx + 1].superSetGroupId === exercise.superSetGroupId;
                   const prevIsSameSuperSet = isSuperSet && exIdx > 0 && activeExercises[exIdx - 1].superSetGroupId === exercise.superSetGroupId;
                   const superSetColor = exercise.superSetGroupId ? (superSetColors[exercise.superSetGroupId] || colors.accent) : undefined;
 
                   return (
-                    <View key={exercise.id} style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg, width: listWidth }}>
-                      <SharedSwipeableRow
-                        onDelete={() => {
-                          setActiveExercises(prev => {
-                            const filtered = prev.filter((_, idx) => idx !== exIdx);
-                            return sanitizeSuperSets(filtered);
-                          });
-                        }}
-                        activeOffsetX={[-15, 15]}
-                        snapBackOnRelease={true}
-                        borderRadius={radius.md}
-                      >
-                        <ActiveExerciseRow
-                          exercise={exercise}
-                          exIdx={exIdx}
-                          exItemKey={exercise.id}
-                          isSuperSet={isSuperSet}
-                          nextIsSameSuperSet={nextIsSameSuperSet}
-                          prevIsSameSuperSet={prevIsSameSuperSet}
-                          superSetColor={superSetColor}
-                          handleExerciseMenuPress={handleExerciseMenuPress}
-                          exerciseLibrary={exerciseLibrary}
-                          activeInput={activeInput}
-                          handleSetFocus={handleSetFocus}
-                          updateSetField={updateSetField}
-                          deleteSet={deleteSet}
-                          toggleSetComplete={toggleSetComplete}
-                          inputRefs={inputRefs}
-                          isRpeMode={isRpeMode}
-                          addSet={addSet}
-                          tempInputValue={activeInput?.exIdx === exIdx ? tempInputValue : undefined}
-                        />
-                      </SharedSwipeableRow>
-                    </View>
+                    <ActiveExerciseCard
+                      key={exercise.id}
+                      exercise={exercise}
+                      exIdx={exIdx}
+                      listWidth={listWidth}
+                      nextIsSameSuperSet={nextIsSameSuperSet}
+                      prevIsSameSuperSet={prevIsSameSuperSet}
+                      isSuperSet={isSuperSet}
+                      superSetColor={superSetColor}
+                      handleDeleteExercise={handleDeleteExercise}
+                      handleExerciseMenuPress={handleExerciseMenuPress}
+                      exerciseLibraryMap={exerciseLibraryMap}
+                      handleSetFocus={handleSetFocus}
+                      updateSetField={updateSetField}
+                      deleteSet={deleteSet}
+                      toggleSetComplete={toggleSetComplete}
+                      inputRefs={inputRefs}
+                      isRpeMode={isRpeMode}
+                      addSet={addSet}
+                    />
                   );
                 })}
               </Sortable.Flex>
@@ -2132,6 +2401,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
               {/* Discard Workout button */}
               <Pressable
+                testID="discard-workout-btn"
                 style={({ pressed }) => [
                   styles.scrollDiscardBtn,
                   pressed && { transform: [{ scale: 0.96 }] }
@@ -2267,7 +2537,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       onPress={() => {
                         if (activeExerciseMenuIndex !== null) {
                           const exName = activeExercises[activeExerciseMenuIndex].name;
-                          const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+                          const libEx = exerciseLibraryMap.get(exName.toLowerCase());
                           setNoteText(libEx?.notes || '');
                           setIsExMenuVisible(false);
                           setIsNotesModalVisible(true);
@@ -2334,7 +2604,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           }));
 
                           // 2. Update global exercises list mode state
-                          const libEx = exerciseLibrary?.find((e: any) => e.name.toLowerCase() === currentEx.name.toLowerCase());
+                          const libEx = exerciseLibraryMap.get(currentEx.name.toLowerCase());
                           if (libEx && onUpdateExercise) {
                             onUpdateExercise(
                               libEx.id,
@@ -2480,7 +2750,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           style={[styles.modalBtnSave, { flex: 1 }]}
                           onPress={() => {
                             const exName = activeExercises[activeExerciseMenuIndex].name;
-                            const libEx = exerciseLibrary?.find(e => e.name.toLowerCase() === exName.toLowerCase());
+                            const libEx = exerciseLibraryMap.get(exName.toLowerCase());
                             if (libEx && onUpdateExerciseNotes) {
                               onUpdateExerciseNotes(libEx.id, noteText.trim() || undefined);
                               WebSafeAlert.alert('Success', 'Note saved successfully!');
@@ -2505,9 +2775,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               <ExerciseInsightsModal
                 visible={isExerciseInsightsVisible}
                 exerciseName={activeExercises[activeExerciseMenuIndex].name}
-                exerciseLibraryEntry={exerciseLibrary?.find(
-                  (e) => e.name.toLowerCase() === activeExercises[activeExerciseMenuIndex].name.toLowerCase()
-                )}
+                exerciseLibraryEntry={exerciseLibraryMap.get(activeExercises[activeExerciseMenuIndex].name.toLowerCase())}
                 sessions={sessions}
                 onClose={() => setIsExerciseInsightsVisible(false)}
                 onUpdateExerciseInsightsNotes={onUpdateExerciseInsightsNotes}
@@ -2875,45 +3143,30 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Modal>
             )}
 
-            <CustomWorkoutKeyboard
-              visible={activeInput !== null}
-              inputKey={activeInput ? `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}` : ''}
-              value={tempInputValue}
-              onChange={(newValue) => {
-                setTempInputValue(newValue);
-                tempInputValueRef.current = newValue;
-              }}
-              rpeValue={
-                activeInput
-                  ? activeExercises[activeInput.exIdx]?.sets[activeInput.setIdx]?.rpe || ''
-                  : ''
-              }
-              onChangeRpe={(newRpe) => {
-                if (activeInput) {
-                  updateSetField(activeInput.exIdx, activeInput.setIdx, 'rpe', newRpe);
-                }
-              }}
-              fieldName={activeInput?.fieldName}
-              maxLength={activeInput?.fieldName?.toLowerCase().includes('reps') ? 4 : 6}
-              title={activeInput ? activeExercises[activeInput.exIdx]?.name : ''}
+            <ActiveWorkoutKeyboardWrapper
+              activeExercises={activeExercises}
+              updateSetField={updateSetField}
               isRpeMode={isRpeMode}
-              onNext={handleNextField}
-              onClose={handleCloseKeyboard}
+              handleNextField={handleNextField}
+              handleCloseKeyboard={handleCloseKeyboard}
+              tempInputValueRef={tempInputValueRef}
             />
           </View>
         </View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
-    <AddExerciseScreen
-      visible={isLibraryVisible}
-      exercises={exerciseLibrary}
-      onConfirm={handleConfirmExercisesFromPicker}
-      onClose={() => setIsLibraryVisible(false)}
-      onAddCustomExercise={onAddCustomExercise}
-      singleSelect={isReplaceMode}
-      title={isReplaceMode ? 'REPLACE EXERCISE' : 'ADD EXERCISES'}
-    />
+    {isLibraryVisible && (
+      <AddExerciseScreen
+        visible={isLibraryVisible}
+        exercises={exerciseLibrary}
+        onConfirm={handleConfirmExercisesFromPicker}
+        onClose={() => setIsLibraryVisible(false)}
+        onAddCustomExercise={onAddCustomExercise}
+        singleSelect={isReplaceMode}
+        title={isReplaceMode ? 'REPLACE EXERCISE' : 'ADD EXERCISES'}
+      />
+    )}
     </>
   );
 };
@@ -2922,7 +3175,6 @@ interface ActiveSetRowItemProps {
   set: SetRecord;
   setIdx: number;
   exIdx: number;
-  activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps'; focusTime?: number } | null;
   onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => void;
   updateSetField: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => void;
   deleteSet: (exIdx: number, setIdx: number) => void;
@@ -2931,14 +3183,12 @@ interface ActiveSetRowItemProps {
   isPrevCompleted: boolean;
   isNextCompleted: boolean;
   isRpeMode?: boolean;
-  tempInputValue?: string;
 }
 
 const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   set,
   setIdx,
   exIdx,
-  activeInput,
   onFocus,
   updateSetField,
   deleteSet,
@@ -2947,15 +3197,29 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   isPrevCompleted,
   isNextCompleted,
   isRpeMode = true,
-  tempInputValue,
 }) => {
+  useTrackRender('ActiveSetRowItem', `${exIdx}-${setIdx}`);
   const { swipeGesture } = useExerciseRowGestures();
-  const isWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'weight';
-  const isRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'reps';
-  const isLeftWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftWeight';
-  const isLeftRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'leftReps';
-  const isRightWeightFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightWeight';
-  const isRightRepsFocused = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx && activeInput?.fieldName === 'rightReps';
+
+  const [activeField, setActiveField] = useState<'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps' | null>(null);
+
+  useEffect(() => {
+    return activeInputStore.subscribe((input: any) => {
+      const isMyRow = input !== null && input.exIdx === exIdx && input.setIdx === setIdx;
+      const field = isMyRow ? input.fieldName : null;
+      setActiveField((prev) => {
+        if (prev === field) return prev;
+        return field;
+      });
+    });
+  }, [exIdx, setIdx]);
+
+  const isWeightFocused = activeField === 'weight';
+  const isRepsFocused = activeField === 'reps';
+  const isLeftWeightFocused = activeField === 'leftWeight';
+  const isLeftRepsFocused = activeField === 'leftReps';
+  const isRightWeightFocused = activeField === 'rightWeight';
+  const isRightRepsFocused = activeField === 'rightReps';
 
   const isCompleted = set.completed;
   const showPrevConnected = false;
@@ -3038,11 +3302,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       set.completed && styles.inputCompleted,
                       isLeftWeightFocused && { borderColor: colors.accent },
                     ]}
-                    value={
-                      isLeftWeightFocused
-                        ? (tempInputValue ?? '')
-                        : String(set.leftWeight || set.weight || '')
-                    }
+                    value={String(set.leftWeight || set.weight || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'leftWeight')}
                     placeholder={set.suggestedLeftWeight || set.suggestedWeight || '0'}
                     isActive={isLeftWeightFocused}
@@ -3058,11 +3318,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isLeftRepsFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={
-                      isLeftRepsFocused
-                        ? (tempInputValue ?? '')
-                        : String(set.leftReps || set.reps || '')
-                    }
+                    value={String(set.leftReps || set.reps || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'leftReps')}
                     placeholder={set.suggestedLeftReps || set.suggestedReps || '0'}
                     isActive={isLeftRepsFocused}
@@ -3082,11 +3338,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       set.completed && styles.inputCompleted,
                       isRightWeightFocused && { borderColor: colors.accent },
                     ]}
-                    value={
-                      isRightWeightFocused
-                        ? (tempInputValue ?? '')
-                        : String(set.rightWeight || set.weight || '')
-                    }
+                    value={String(set.rightWeight || set.weight || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'rightWeight')}
                     placeholder={set.suggestedRightWeight || set.suggestedWeight || '0'}
                     isActive={isRightWeightFocused}
@@ -3102,11 +3354,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isRightRepsFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={
-                      isRightRepsFocused
-                        ? (tempInputValue ?? '')
-                        : String(set.rightReps || set.reps || '')
-                    }
+                    value={String(set.rightReps || set.reps || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'rightReps')}
                     placeholder={set.suggestedRightReps || set.suggestedReps || '0'}
                     isActive={isRightRepsFocused}
@@ -3201,17 +3449,14 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           {/* Weight Input */}
           <View style={[styles.colWeight, styles.inputWrapper]}>
             <SetInputCell
+              testID={`set-weight-${exIdx}-${setIdx}`}
               ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-weight`] = r; }}
               style={[
                 styles.input,
                 set.completed && styles.inputCompleted,
                 isWeightFocused && { borderColor: colors.accent },
               ]}
-              value={
-                isWeightFocused
-                  ? (tempInputValue ?? '')
-                  : String(set.weight || '')
-              }
+              value={String(set.weight || '')}
               onPress={() => onFocus(exIdx, setIdx, 'weight')}
               placeholder={set.suggestedWeight || '0'}
               isActive={isWeightFocused}
@@ -3229,14 +3474,11 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               ]}
             >
               <SetInputCell
+                testID={`set-reps-${exIdx}-${setIdx}`}
                 ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
                 style={styles.repsInput}
                 textStyle={set.completed && styles.textCompleted}
-                value={
-                  isRepsFocused
-                    ? (tempInputValue ?? '')
-                    : String(set.reps || '')
-                }
+                value={String(set.reps || '')}
                 onPress={() => onFocus(exIdx, setIdx, 'reps')}
                 placeholder={set.suggestedReps || '0'}
                 isActive={isRepsFocused}
@@ -3275,6 +3517,15 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
       )}
     </View>
   );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.setIdx === nextProps.setIdx &&
+    prevProps.exIdx === nextProps.exIdx &&
+    prevProps.isPrevCompleted === nextProps.isPrevCompleted &&
+    prevProps.isNextCompleted === nextProps.isNextCompleted &&
+    prevProps.isRpeMode === nextProps.isRpeMode &&
+    prevProps.set === nextProps.set
+  );
 });
 
 
@@ -3287,8 +3538,7 @@ interface ActiveExerciseRowProps {
   prevIsSameSuperSet: boolean;
   superSetColor: string | undefined;
   handleExerciseMenuPress: (idx: number) => void;
-  exerciseLibrary: any;
-  activeInput: any;
+  exerciseLibraryMap: Map<string, any>;
   handleSetFocus: any;
   updateSetField: any;
   deleteSet: any;
@@ -3296,7 +3546,6 @@ interface ActiveExerciseRowProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
-  tempInputValue?: string;
 }
 
 const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
@@ -3308,8 +3557,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   prevIsSameSuperSet,
   superSetColor,
   handleExerciseMenuPress,
-  exerciseLibrary,
-  activeInput,
+  exerciseLibraryMap,
   handleSetFocus,
   updateSetField,
   deleteSet,
@@ -3317,7 +3565,6 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   inputRefs,
   isRpeMode,
   addSet,
-  tempInputValue,
 }) => {
   const enterScale = useSharedValue(0.95);
   const enterOpacity = useSharedValue(0);
@@ -3346,6 +3593,17 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
       cancelAnimation(enterTranslateY);
     };
   }, []);
+
+  const [renderedSetsLimit, setRenderedSetsLimit] = useState(4);
+
+  useEffect(() => {
+    if (exercise.sets.length > renderedSetsLimit) {
+      const animId = requestAnimationFrame(() => {
+        setRenderedSetsLimit(prev => Math.min(exercise.sets.length, prev + 8));
+      });
+      return () => cancelAnimationFrame(animId);
+    }
+  }, [exercise.sets.length, renderedSetsLimit]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -3397,7 +3655,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           </View>
 
           {(() => {
-            const libEx = exerciseLibrary?.find((e: any) => e.name.toLowerCase() === exercise.name.toLowerCase());
+            const libEx = exerciseLibraryMap.get(exercise.name.toLowerCase());
             if (libEx?.notes) {
               return (
                 <View style={styles.notesContainer}>
@@ -3420,17 +3678,15 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           </View>
 
           {/* Sets Row List */}
-          {exercise.sets.map((set: any, setIdx: number) => {
+          {exercise.sets.slice(0, renderedSetsLimit).map((set: any, setIdx: number) => {
             const isPrevCompleted = setIdx > 0 && exercise.sets[setIdx - 1].completed;
             const isNextCompleted = setIdx < exercise.sets.length - 1 && exercise.sets[setIdx + 1].completed;
-            const isActiveRow = activeInput?.exIdx === exIdx && activeInput?.setIdx === setIdx;
             return (
               <ActiveSetRowItem
                 key={set.id}
                 set={set}
                 setIdx={setIdx}
                 exIdx={exIdx}
-                activeInput={activeInput}
                 onFocus={handleSetFocus}
                 updateSetField={updateSetField}
                 deleteSet={deleteSet}
@@ -3439,7 +3695,6 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 isPrevCompleted={isPrevCompleted}
                 isNextCompleted={isNextCompleted}
                 isRpeMode={isRpeMode}
-                tempInputValue={isActiveRow ? tempInputValue : undefined}
               />
             );
           })}
@@ -3460,6 +3715,106 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           </Pressable>
         </View>
     </Animated.View>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.exIdx === nextProps.exIdx &&
+    prevProps.exItemKey === nextProps.exItemKey &&
+    prevProps.isSuperSet === nextProps.isSuperSet &&
+    prevProps.nextIsSameSuperSet === nextProps.nextIsSameSuperSet &&
+    prevProps.prevIsSameSuperSet === nextProps.prevIsSameSuperSet &&
+    prevProps.superSetColor === nextProps.superSetColor &&
+    prevProps.isRpeMode === nextProps.isRpeMode &&
+    prevProps.exercise === nextProps.exercise &&
+    prevProps.exerciseLibraryMap === nextProps.exerciseLibraryMap
+  );
+});
+
+
+interface ActiveExerciseCardProps {
+  exercise: any;
+  exIdx: number;
+  listWidth: number;
+  nextIsSameSuperSet: boolean;
+  prevIsSameSuperSet: boolean;
+  isSuperSet: boolean;
+  superSetColor: string | undefined;
+  handleDeleteExercise: (idx: number) => void;
+  handleExerciseMenuPress: (idx: number) => void;
+  exerciseLibraryMap: Map<string, any>;
+  handleSetFocus: any;
+  updateSetField: any;
+  deleteSet: any;
+  toggleSetComplete: any;
+  inputRefs: any;
+  isRpeMode: boolean;
+  addSet: (idx: number, unilateral?: boolean) => void;
+}
+
+const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
+  exercise,
+  exIdx,
+  listWidth,
+  nextIsSameSuperSet,
+  prevIsSameSuperSet,
+  isSuperSet,
+  superSetColor,
+  handleDeleteExercise,
+  handleExerciseMenuPress,
+  exerciseLibraryMap,
+  handleSetFocus,
+  updateSetField,
+  deleteSet,
+  toggleSetComplete,
+  inputRefs,
+  isRpeMode,
+  addSet,
+}) => {
+  useTrackRender('ActiveExerciseCard', exercise.id);
+  const handleDelete = useCallback(() => {
+    handleDeleteExercise(exIdx);
+  }, [handleDeleteExercise, exIdx]);
+
+  return (
+    <View style={{ marginBottom: nextIsSameSuperSet ? 0 : spacing.lg, width: listWidth }}>
+      <SharedSwipeableRow
+        onDelete={handleDelete}
+        activeOffsetX={[-15, 15]}
+        snapBackOnRelease={true}
+        borderRadius={radius.md}
+      >
+        <ActiveExerciseRow
+          exercise={exercise}
+          exIdx={exIdx}
+          exItemKey={exercise.id}
+          isSuperSet={isSuperSet}
+          nextIsSameSuperSet={nextIsSameSuperSet}
+          prevIsSameSuperSet={prevIsSameSuperSet}
+          superSetColor={superSetColor}
+          handleExerciseMenuPress={handleExerciseMenuPress}
+          exerciseLibraryMap={exerciseLibraryMap}
+          handleSetFocus={handleSetFocus}
+          updateSetField={updateSetField}
+          deleteSet={deleteSet}
+          toggleSetComplete={toggleSetComplete}
+          inputRefs={inputRefs}
+          isRpeMode={isRpeMode}
+          addSet={addSet}
+        />
+      </SharedSwipeableRow>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.exIdx === nextProps.exIdx &&
+    prevProps.listWidth === nextProps.listWidth &&
+    prevProps.nextIsSameSuperSet === nextProps.nextIsSameSuperSet &&
+    prevProps.prevIsSameSuperSet === nextProps.prevIsSameSuperSet &&
+    prevProps.isSuperSet === nextProps.isSuperSet &&
+    prevProps.superSetColor === nextProps.superSetColor &&
+    prevProps.isRpeMode === nextProps.isRpeMode &&
+    prevProps.exercise === nextProps.exercise &&
+    prevProps.exerciseLibraryMap === nextProps.exerciseLibraryMap
   );
 });
 

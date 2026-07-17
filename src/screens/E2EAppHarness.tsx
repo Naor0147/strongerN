@@ -115,6 +115,84 @@ export default function E2EAppHarness() {
     addLog('Started Empty Workout');
   };
 
+  const handleStartLargeWorkout = () => {
+    const tpl = {
+      id: 'tpl-large',
+      name: 'Extreme Heavy 20-Exercise Workout',
+      exercises: [
+        'Bench Press', 'Incline Dumbbell Press', 'Cable Fly', 'Push-ups',
+        'Overhead Press', 'Lateral Raise', 'Dumbbell Front Raise', 'Rear Delt Fly',
+        'Barbell Row', 'Lat Pulldown', 'Dumbbell Row', 'Face Pull',
+        'Bicep Curl', 'Hammer Curl', 'Tricep Extension', 'Skull Crushers',
+        'Back Squat', 'Leg Press', 'Leg Extension', 'Standing Calf Raise'
+      ],
+      exercisesDetails: Array.from({ length: 20 }).map((_, exIdx) => {
+        const names = [
+          'Bench Press', 'Incline Dumbbell Press', 'Cable Fly', 'Push-ups',
+          'Overhead Press', 'Lateral Raise', 'Dumbbell Front Raise', 'Rear Delt Fly',
+          'Barbell Row', 'Lat Pulldown', 'Dumbbell Row', 'Face Pull',
+          'Bicep Curl', 'Hammer Curl', 'Tricep Extension', 'Skull Crushers',
+          'Back Squat', 'Leg Press', 'Leg Extension', 'Standing Calf Raise'
+        ];
+        const isUnilateral = [5, 6, 10, 13, 18].includes(exIdx);
+        const superSetGroupId = (exIdx === 2 || exIdx === 3) ? 'ss-group-1' : (exIdx === 10 || exIdx === 11) ? 'ss-group-2' : undefined;
+        const numSets = (exIdx === 5 || exIdx === 16 || exIdx === 19) ? 5 : 4;
+
+        return {
+          name: names[exIdx],
+          superSetGroupId,
+          sets: Array.from({ length: numSets }).map((__, setIdx) => ({
+            weight: String(40 + (exIdx * 5) + (setIdx * 2)),
+            reps: String(8 + (setIdx % 4)),
+            category: setIdx === 0 ? 'W' : 'S',
+            isUnilateral,
+            leftWeight: isUnilateral ? String(20 + exIdx) : undefined,
+            leftReps: isUnilateral ? String(10) : undefined,
+            rightWeight: isUnilateral ? String(20 + exIdx) : undefined,
+            rightReps: isUnilateral ? String(10) : undefined,
+          }))
+        };
+      })
+    };
+    setWorkoutName(tpl.name);
+    setStartTime(new Date());
+    
+    const initialExercises: ExerciseSet[] = (tpl.exercisesDetails || []).map(ed => {
+      return {
+        name: ed.name,
+        sets: ed.sets.length,
+        bestWeight: 70,
+        bestReps: 10,
+        superSetGroupId: ed.superSetGroupId,
+        setsDetails: ed.sets.map(s => {
+          const w = parseFloat(s.weight);
+          const r = parseInt(s.reps, 10);
+          const lw = s.leftWeight ? parseFloat(s.leftWeight) : undefined;
+          const lr = s.leftReps ? parseInt(s.leftReps, 10) : undefined;
+          const rw = s.rightWeight ? parseFloat(s.rightWeight) : undefined;
+          const rr = s.rightReps ? parseInt(s.rightReps, 10) : undefined;
+          return {
+            weight: Number.isFinite(w) ? w : 0,
+            reps: Number.isFinite(r) ? r : 0,
+            completed: false,
+            category: (s.category && ['W', 'S', 'D', 'F'].includes(s.category) ? s.category : 'S') as 'W' | 'S' | 'D' | 'F',
+            isUnilateral: s.isUnilateral || false,
+            leftWeight: lw !== undefined && Number.isFinite(lw) ? lw : undefined,
+            leftReps: lr !== undefined && Number.isFinite(lr) ? lr : undefined,
+            rightWeight: rw !== undefined && Number.isFinite(rw) ? rw : undefined,
+            rightReps: rr !== undefined && Number.isFinite(rr) ? rr : undefined,
+          };
+        })
+      };
+    });
+
+    setWorkoutExercises(initialExercises);
+    setActiveWorkoutComment('');
+    setIsWorkoutActive(true);
+    setIsWorkoutModalVisible(true);
+    addLog(`Started Heavy Workout: ${tpl.name}`);
+  };
+
   const handleStartTemplateWorkout = () => {
     const tpl = mockTemplates[0];
     setWorkoutName(tpl.name);
@@ -226,6 +304,15 @@ export default function E2EAppHarness() {
                   testID="start-template-workout"
                 >
                   <Text style={styles.controlBtnText}>Start "Push & Pull"</Text>
+                </Pressable>
+              </View>
+              <View style={{ marginTop: spacing.md }}>
+                <Pressable
+                  style={[styles.controlBtn, styles.btnTemplate, { backgroundColor: colors.accent }]}
+                  onPress={handleStartLargeWorkout}
+                  testID="start-large-workout"
+                >
+                  <Text style={[styles.controlBtnText, { color: '#0D0F14' }]}>Start Heavy Workout (20 Ex / 80+ Sets)</Text>
                 </Pressable>
               </View>
             </View>

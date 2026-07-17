@@ -7,7 +7,7 @@
 
 import { scan } from 'react-scan';
 
-export const REACT_SCAN_ENABLED = true;
+export const REACT_SCAN_ENABLED = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_E2E === 'true' ? false : true;
 
 /**
  * Initializes React Scan overlay for web browsers.

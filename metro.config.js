@@ -6,7 +6,14 @@ const config = getDefaultConfig(__dirname);
 // 1. Add support for wasm assets
 config.resolver.assetExts.push('wasm');
 
-// 2. Add COEP and COOP headers to support SharedArrayBuffer
+// 2. Ignore test-results from Metro watch list to prevent watch crash during E2E runs
+config.resolver.blockList = [
+  /[/\\]test-results[/\\]/,
+  /[/\\]cpu_profile_.*\.json$/,
+  /[/\\]benchmark_results\.json$/,
+];
+
+// 3. Add COEP and COOP headers to support SharedArrayBuffer
 config.server.enhanceMiddleware = (middleware) => {
   return (req, res, next) => {
     res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
