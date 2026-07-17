@@ -1731,7 +1731,30 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const targetEx = prev[exIdx];
           if (!targetEx.sets[setIdx]) return prev;
           const nextSets = [...targetEx.sets];
-          nextSets[setIdx] = { ...nextSets[setIdx], completed: true };
+          
+          let updatedSet = { ...nextSets[setIdx], completed: true };
+          if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
+            updatedSet.weight = (updatedSet as any).suggestedWeight;
+          }
+          if (!updatedSet.reps && (updatedSet as any).suggestedReps) {
+            updatedSet.reps = (updatedSet as any).suggestedReps;
+          }
+          if (updatedSet.isUnilateral) {
+            if (!updatedSet.leftWeight && (updatedSet as any).suggestedLeftWeight) {
+              updatedSet.leftWeight = (updatedSet as any).suggestedLeftWeight;
+            }
+            if (!updatedSet.leftReps && (updatedSet as any).suggestedLeftReps) {
+              updatedSet.leftReps = (updatedSet as any).suggestedLeftReps;
+            }
+            if (!updatedSet.rightWeight && (updatedSet as any).suggestedRightWeight) {
+              updatedSet.rightWeight = (updatedSet as any).suggestedRightWeight;
+            }
+            if (!updatedSet.rightReps && (updatedSet as any).suggestedRightReps) {
+              updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
+            }
+          }
+          
+          nextSets[setIdx] = updatedSet;
           const nextArr = [...prev];
           nextArr[exIdx] = { ...targetEx, sets: nextSets };
           return nextArr;
@@ -2349,9 +2372,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 inactiveItemOpacity={1}
                 inactiveItemScale={1}
                 enableActiveItemSnap={true}
-                dimensionsAnimationType="layout"
+                dimensionsAnimationType="worklet"
                 itemsLayoutTransitionMode="reorder"
-                dropAnimationDuration={180}
+                dropAnimationDuration={120}
                 strategy="insert"
                 reorderTriggerOrigin="center"
                 overDrag="vertical"
@@ -2362,7 +2385,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   setScrollEnabled(true);
                   setTimeout(() => {
                     setActiveExercises(prev => sanitizeSuperSets(order(prev)));
-                  }, 180);
+                  }, 120);
                 }}
                 onActiveItemDropped={() => setScrollEnabled(true)}
                 itemExiting={null}

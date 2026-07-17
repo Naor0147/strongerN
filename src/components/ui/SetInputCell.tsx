@@ -1,5 +1,5 @@
 import React, { useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
-import { Pressable, View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { Pressable, View, Text, TextInput, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -109,10 +109,18 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
       return keyboardValueStore.subscribe((newValue: string) => {
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
-          if (typeof (textRef.current as any).textContent !== 'undefined') {
-            (textRef.current as any).textContent = newValue || placeholder;
-          } else if (typeof (textRef.current as any).setNativeProps === 'function') {
+          // Native text inputs (Android/iOS)
+          if (typeof (textRef.current as any).setNativeProps === 'function') {
             (textRef.current as any).setNativeProps({ text: newValue || placeholder });
+          }
+          // Direct DOM node updates for web fallback
+          const element = (textRef.current as any)._node || textRef.current;
+          if (element) {
+            if (typeof element.value !== 'undefined') {
+              element.value = newValue || placeholder;
+            } else if (typeof element.textContent !== 'undefined') {
+              element.textContent = newValue || placeholder;
+            }
           }
         }
 
@@ -150,17 +158,20 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
       disabled={isCompleted}
     >
       <View style={styles.row}>
-        <Text
+        <TextInput
           ref={textRef}
+          editable={false}
+          pointerEvents="none"
+          underlineColorAndroid="transparent"
+          defaultValue={displayValue}
           style={[
             styles.text,
             textStyle,
             showPlaceholder && styles.placeholderText,
             isCompleted && styles.completedText,
+            { padding: 0, textAlign: 'center' },
           ]}
-        >
-          {displayValue}
-        </Text>
+        />
         {isActive && <Caret />}
       </View>
     </Pressable>

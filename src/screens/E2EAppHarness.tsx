@@ -91,7 +91,7 @@ export default function E2EAppHarness() {
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = useState(true);
 
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = useState(true);
-  const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = useState(false);
+  const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = useState(true);
 
   const [isRpeMode, setIsRpeMode] = useState(true);
   const [exerciseNameLanguage, setExerciseNameLanguage] = useState<'en' | 'he'>('en');
