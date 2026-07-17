@@ -1,12 +1,12 @@
 {
   "baseline": {
-    "modalMountMs": 9435,
+    "modalMountMs": 9765,
     "focusTransition": {
-      "mean": 0.15,
+      "mean": 0.18,
       "min": 0,
       "max": 0.3,
       "p50": 0.2,
-      "p95": 0.2,
+      "p95": 0.3,
       "p99": 0.3,
       "stdDev": 0.07,
       "samples": 49
@@ -14,12 +14,12 @@
     "keystrokeRender": {
       "mean": 0.02,
       "min": 0,
-      "max": 0.1,
+      "max": 0.2,
       "p50": 0,
       "p95": 0.1,
       "p99": 0.1,
       "stdDev": 0.04,
-      "samples": 49
+      "samples": 109
     },
     "keyboardOpen": {
       "mean": 0,
@@ -43,26 +43,26 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 19774,
+    "modalMountMs": 26211,
     "focusTransition": {
-      "mean": 0.78,
-      "min": 0.5,
-      "max": 1.5,
-      "p50": 0.8,
-      "p95": 1,
-      "p99": 1.5,
-      "stdDev": 0.17,
+      "mean": 0.92,
+      "min": 0.7,
+      "max": 1.3,
+      "p50": 0.9,
+      "p95": 1.1,
+      "p99": 1.3,
+      "stdDev": 0.12,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 0.11,
+      "mean": 0.14,
       "min": 0,
-      "max": 0.3,
-      "p50": 0.1,
+      "max": 0.8,
+      "p50": 0.2,
       "p95": 0.3,
-      "p99": 0.3,
-      "stdDev": 0.1,
-      "samples": 49
+      "p99": 0.4,
+      "stdDev": 0.12,
+      "samples": 109
     },
     "keyboardOpen": {
       "mean": 0,
@@ -86,26 +86,26 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 39041,
+    "modalMountMs": 52343,
     "focusTransition": {
-      "mean": 1.23,
-      "min": 1,
-      "max": 1.9,
-      "p50": 1.2,
-      "p95": 1.5,
-      "p99": 1.9,
-      "stdDev": 0.16,
+      "mean": 1.52,
+      "min": 1.2,
+      "max": 2.1,
+      "p50": 1.5,
+      "p95": 1.8,
+      "p99": 2.1,
+      "stdDev": 0.18,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 0.18,
-      "min": 0,
-      "max": 0.4,
+      "mean": 0.28,
+      "min": 0.1,
+      "max": 2.1,
       "p50": 0.2,
-      "p95": 0.3,
-      "p99": 0.4,
-      "stdDev": 0.09,
-      "samples": 49
+      "p95": 0.5,
+      "p99": 1,
+      "stdDev": 0.21,
+      "samples": 109
     },
     "keyboardOpen": {
       "mean": 0,
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-17T09:27:40.853Z"
+  "timestamp": "2026-07-17T09:58:18.916Z"
 }

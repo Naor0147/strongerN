@@ -694,6 +694,7 @@ const ActiveWorkoutKeyboardWrapper = React.memo(({
   // Stable onChange: only updates ref + store, never causes wrapper re-render
   const handleChange = useCallback((newValue: string) => {
     tempInputValueRef.current = newValue;
+    keyboardValueStore.setValue(newValue);
   }, [tempInputValueRef]);
 
   // Stable RPE handler via ref to avoid inline recreation
