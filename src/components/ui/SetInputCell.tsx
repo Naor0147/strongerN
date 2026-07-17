@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { colors, font } from '../../theme';
 import { keyboardValueStore } from '../../utils/keyboardValueStore';
+import { activeInputStore } from '../../utils/activeInputStore';
 
 export interface SetInputCellHandle {
   focus: () => void;
@@ -24,6 +25,9 @@ interface SetInputCellProps {
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   testID?: string;
+  exIdx?: number;
+  setIdx?: number;
+  fieldName?: string;
 }
 
 const Caret = () => {
@@ -93,6 +97,9 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
   style,
   textStyle,
   testID,
+  exIdx,
+  setIdx,
+  fieldName,
 }, ref) => {
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -107,6 +114,17 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
   useEffect(() => {
     if (isActive) {
       return keyboardValueStore.subscribe((newValue: string) => {
+        const currentActive = activeInputStore.getActiveInput();
+        if (
+          currentActive &&
+          exIdx !== undefined &&
+          setIdx !== undefined &&
+          fieldName !== undefined &&
+          (currentActive.exIdx !== exIdx || currentActive.setIdx !== setIdx || currentActive.fieldName !== fieldName)
+        ) {
+          return;
+        }
+
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
           // Native text inputs (Android/iOS)
@@ -151,7 +169,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         } catch (_) {}
       });
     }
-  }, [isActive, placeholder]);
+  }, [isActive, placeholder, exIdx, setIdx, fieldName]);
 
   const showPlaceholder = value === '';
   const displayValue = value !== '' ? value : placeholder;
@@ -186,7 +204,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
             editable={false}
             pointerEvents="none"
             underlineColorAndroid="transparent"
-            defaultValue={displayValue}
+            value={displayValue}
             style={[
               styles.text,
               textStyle,

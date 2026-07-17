@@ -1562,11 +1562,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] ?? '';
     const valStr = String(currentVal);
     tempInputValueRef.current = valStr;
-    keyboardValueStore.setValue(valStr);
     
     const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
     activeInputRef.current = newInput;
     activeInputStore.setActiveInput(newInput);
+    keyboardValueStore.setValue(valStr);
     setIsKeyboardVisible(prev => prev ? prev : true);
   }, [updateSetField]);
 
@@ -3331,6 +3331,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     placeholder={set.suggestedLeftWeight || set.suggestedWeight || '0'}
                     isActive={isLeftWeightFocused}
                     isCompleted={set.completed}
+                    exIdx={exIdx}
+                    setIdx={setIdx}
+                    fieldName="leftWeight"
                   />
                 </View>
                 <View style={styles.unilateralInputWrapper}>
@@ -3347,6 +3350,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     placeholder={set.suggestedLeftReps || set.suggestedReps || '0'}
                     isActive={isLeftRepsFocused}
                     isCompleted={set.completed}
+                    exIdx={exIdx}
+                    setIdx={setIdx}
+                    fieldName="leftReps"
                   />
                 </View>
               </View>
@@ -3367,6 +3373,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     placeholder={set.suggestedRightWeight || set.suggestedWeight || '0'}
                     isActive={isRightWeightFocused}
                     isCompleted={set.completed}
+                    exIdx={exIdx}
+                    setIdx={setIdx}
+                    fieldName="rightWeight"
                   />
                 </View>
                 <View style={styles.unilateralInputWrapper}>
@@ -3383,6 +3392,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                     placeholder={set.suggestedRightReps || set.suggestedReps || '0'}
                     isActive={isRightRepsFocused}
                     isCompleted={set.completed}
+                    exIdx={exIdx}
+                    setIdx={setIdx}
+                    fieldName="rightReps"
                   />
                 </View>
               </View>
@@ -3485,6 +3497,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               placeholder={set.suggestedWeight || '0'}
               isActive={isWeightFocused}
               isCompleted={set.completed}
+              exIdx={exIdx}
+              setIdx={setIdx}
+              fieldName="weight"
             />
           </View>
 
@@ -3507,6 +3522,9 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 placeholder={set.suggestedReps || '0'}
                 isActive={isRepsFocused}
                 isCompleted={set.completed}
+                exIdx={exIdx}
+                setIdx={setIdx}
+                fieldName="reps"
               />
               {set.rpe ? (
                 <Text style={[styles.rpeInlineText, set.completed && styles.textCompleted]}>
