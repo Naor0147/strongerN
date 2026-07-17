@@ -3326,6 +3326,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       set.completed && styles.inputCompleted,
                       isLeftWeightFocused && { borderColor: colors.accent },
                     ]}
+                    textStyle={set.completed && styles.textCompleted}
                     value={String(set.leftWeight || set.weight || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'leftWeight')}
                     placeholder={set.suggestedLeftWeight || set.suggestedWeight || '0'}
@@ -3368,6 +3369,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       set.completed && styles.inputCompleted,
                       isRightWeightFocused && { borderColor: colors.accent },
                     ]}
+                    textStyle={set.completed && styles.textCompleted}
                     value={String(set.rightWeight || set.weight || '')}
                     onPress={() => onFocus(exIdx, setIdx, 'rightWeight')}
                     placeholder={set.suggestedRightWeight || set.suggestedWeight || '0'}
@@ -3492,6 +3494,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 set.completed && styles.inputCompleted,
                 isWeightFocused && { borderColor: colors.accent },
               ]}
+              textStyle={set.completed && styles.textCompleted}
               value={String(set.weight || '')}
               onPress={() => onFocus(exIdx, setIdx, 'weight')}
               placeholder={set.suggestedWeight || '0'}

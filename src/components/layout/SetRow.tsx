@@ -139,6 +139,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   style={[
                     s.unilateralInput,
                     isCompleted && s.inputCompleted,
+                    isCompleted && s.textCompleted,
                     isLeftWeightFocused && { borderColor: colors.accent, borderWidth: 1 },
                   ]}
                   showSoftInputOnFocus={false}
@@ -180,6 +181,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   style={[
                     s.unilateralInput,
                     isCompleted && s.inputCompleted,
+                    isCompleted && s.textCompleted,
                     isRightWeightFocused && { borderColor: colors.accent, borderWidth: 1 },
                   ]}
                   showSoftInputOnFocus={false}
@@ -299,6 +301,7 @@ unstable_pressDelay={0}
             style={[
               s.input,
               isCompleted && s.inputCompleted,
+              isCompleted && s.textCompleted,
               isWeightFocused && { borderColor: colors.accent },
             ]}
             showSoftInputOnFocus={false}

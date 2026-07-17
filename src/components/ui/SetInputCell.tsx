@@ -127,12 +127,17 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
+          const targetColor = isCompleted
+            ? colors.textMuted
+            : newValue === ''
+            ? colors.textSecondary
+            : colors.textPrimary;
           // Native text inputs (Android/iOS)
           if (typeof (textRef.current as any).setNativeProps === 'function') {
             (textRef.current as any).setNativeProps({
               text: newValue || placeholder,
               style: {
-                color: newValue === '' ? colors.textSecondary : colors.textPrimary,
+                color: targetColor,
                 opacity: newValue === '' ? 0.5 : 1.0,
               }
             });
@@ -146,7 +151,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
               element.textContent = newValue || placeholder;
             }
             if (element.style) {
-              element.style.color = newValue === '' ? colors.textSecondary : colors.textPrimary;
+              element.style.color = targetColor;
               element.style.opacity = newValue === '' ? '0.5' : '1';
             }
           }
@@ -169,7 +174,32 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         } catch (_) {}
       });
     }
-  }, [isActive, placeholder, exIdx, setIdx, fieldName]);
+  }, [isActive, placeholder, exIdx, setIdx, fieldName, isCompleted]);
+
+  useEffect(() => {
+    if (textRef.current) {
+      const targetColor = isCompleted
+        ? colors.textMuted
+        : value === ''
+        ? colors.textSecondary
+        : colors.textPrimary;
+      const targetOpacity = value === '' ? 0.5 : 1.0;
+
+      if (typeof (textRef.current as any).setNativeProps === 'function') {
+        (textRef.current as any).setNativeProps({
+          style: {
+            color: targetColor,
+            opacity: targetOpacity,
+          }
+        });
+      }
+      const element = (textRef.current as any)._node || textRef.current;
+      if (element && element.style) {
+        element.style.color = targetColor;
+        element.style.opacity = String(targetOpacity);
+      }
+    }
+  }, [isCompleted, value, isActive]);
 
   const showPlaceholder = value === '';
   const displayValue = value !== '' ? value : placeholder;
