@@ -1,5 +1,5 @@
 import React, { useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
-import { Pressable, View, Text, TextInput, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { Pressable, View, Text, TextInput, Platform, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -158,20 +158,34 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
       disabled={isCompleted}
     >
       <View style={styles.row}>
-        <TextInput
-          ref={textRef}
-          editable={false}
-          pointerEvents="none"
-          underlineColorAndroid="transparent"
-          defaultValue={displayValue}
-          style={[
-            styles.text,
-            textStyle,
-            showPlaceholder && styles.placeholderText,
-            isCompleted && styles.completedText,
-            { padding: 0, textAlign: 'center' },
-          ]}
-        />
+        {Platform.OS === 'web' ? (
+          <Text
+            ref={textRef}
+            style={[
+              styles.text,
+              textStyle,
+              showPlaceholder && styles.placeholderText,
+              isCompleted && styles.completedText,
+            ]}
+          >
+            {displayValue}
+          </Text>
+        ) : (
+          <TextInput
+            ref={textRef}
+            editable={false}
+            pointerEvents="none"
+            underlineColorAndroid="transparent"
+            defaultValue={displayValue}
+            style={[
+              styles.text,
+              textStyle,
+              showPlaceholder && styles.placeholderText,
+              isCompleted && styles.completedText,
+              { padding: 0, textAlign: 'center' },
+            ]}
+          />
+        )}
         {isActive && <Caret />}
       </View>
     </Pressable>

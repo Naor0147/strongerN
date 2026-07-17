@@ -20,13 +20,14 @@ export async function initDb(): Promise<boolean> {
   if (db) return true; // Already initialized
 
   try {
-    db = SQLite.openDatabaseSync('strongern.db');
-    await db.execAsync(`
+    const openedDb = await SQLite.openDatabaseAsync('strongern.db');
+    await openedDb.execAsync(`
       CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
         key TEXT PRIMARY KEY,
         value TEXT
       );
     `);
+    db = openedDb;
     console.log('[DB] SQLite initialized successfully.');
     return true;
   } catch (err) {
