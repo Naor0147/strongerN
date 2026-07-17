@@ -127,8 +127,10 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
             } else if (typeof element.textContent !== 'undefined') {
               element.textContent = newValue || placeholder;
             }
-            element.style.color = newValue === '' ? colors.textSecondary : colors.textPrimary;
-            element.style.opacity = newValue === '' ? '0.5' : '1';
+            if (element.style) {
+              element.style.color = newValue === '' ? colors.textSecondary : colors.textPrimary;
+              element.style.opacity = newValue === '' ? '0.5' : '1';
+            }
           }
         }
 

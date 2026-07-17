@@ -2,7 +2,6 @@ import { Platform, Share, Clipboard } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import * as Application from 'expo-application';
-import { saveToDb, loadFromDb } from './db';
 
 export interface CrashLog {
   id: string;
@@ -18,20 +17,61 @@ const CRASH_LOGS_KEY = 'crash_logs';
 const CURRENT_APP_VERSION = Application.nativeApplicationVersion || '1.0.0.98';
 
 export async function getCrashLogs(): Promise<CrashLog[]> {
+  const isWeb = Platform.OS === 'web';
+  if (isWeb) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem(CRASH_LOGS_KEY);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  }
+
   try {
-    const logs = await loadFromDb(CRASH_LOGS_KEY);
-    return Array.isArray(logs) ? logs : [];
+    const sqliteDb = await SQLite.openDatabaseAsync('strongern_crashes.db');
+    // Ensure table is created even if reading first
+    await sqliteDb.execAsync(`
+      CREATE TABLE IF NOT EXISTS strongern_kv_store (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+    const row = await sqliteDb.getFirstAsync(
+      `SELECT value FROM strongern_kv_store WHERE key = ?;`,
+      [CRASH_LOGS_KEY]
+    );
+    return row ? JSON.parse((row as any).value) : [];
   } catch (e) {
-    console.error('[CrashLogger] Failed to read crash logs from DB:', e);
+    console.error('[CrashLogger] Failed to read crash logs from SQLite:', e);
     return [];
   }
 }
 
 export async function saveCrashLogs(logs: CrashLog[]): Promise<boolean> {
+  const isWeb = Platform.OS === 'web';
+  const serialized = JSON.stringify(logs);
+  if (isWeb) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CRASH_LOGS_KEY, serialized);
+      return true;
+    }
+    return false;
+  }
+
   try {
-    return await saveToDb(CRASH_LOGS_KEY, logs);
+    const sqliteDb = await SQLite.openDatabaseAsync('strongern_crashes.db');
+    await sqliteDb.execAsync(`
+      CREATE TABLE IF NOT EXISTS strongern_kv_store (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+    await sqliteDb.runAsync(
+      `INSERT OR REPLACE INTO strongern_kv_store (key, value) VALUES (?, ?);`,
+      [CRASH_LOGS_KEY, serialized]
+    );
+    return true;
   } catch (e) {
-    console.error('[CrashLogger] Failed to save crash logs to DB:', e);
+    console.error('[CrashLogger] Failed to save crash logs to SQLite:', e);
     return false;
   }
 }
@@ -74,7 +114,7 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
       // Native SQLite path
       let sqliteDb: any = null;
       try {
-        sqliteDb = SQLite.openDatabaseSync('strongern.db');
+        sqliteDb = SQLite.openDatabaseSync('strongern_crashes.db');
         sqliteDb.execSync(`
           CREATE TABLE IF NOT EXISTS strongern_kv_store (
             key TEXT PRIMARY KEY,
