@@ -127,18 +127,22 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
+          const isValEmpty = newValue === '';
           const targetColor = isCompleted
             ? colors.textMuted
-            : newValue === ''
+            : isValEmpty
             ? colors.textSecondary
             : colors.textPrimary;
+          const targetOpacity = isValEmpty ? 0.5 : 1.0;
+          const targetText = isValEmpty ? placeholder : newValue;
+
           // Native text inputs (Android/iOS)
           if (typeof (textRef.current as any).setNativeProps === 'function') {
             (textRef.current as any).setNativeProps({
-              text: newValue || placeholder,
+              text: targetText,
               style: {
                 color: targetColor,
-                opacity: newValue === '' ? 0.5 : 1.0,
+                opacity: targetOpacity,
               }
             });
           }
@@ -146,13 +150,14 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
           const element = (textRef.current as any)._node || textRef.current;
           if (element) {
             if (typeof element.value !== 'undefined') {
-              element.value = newValue || placeholder;
-            } else if (typeof element.textContent !== 'undefined') {
-              element.textContent = newValue || placeholder;
+              element.value = targetText;
+            }
+            if (typeof element.textContent !== 'undefined') {
+              element.textContent = targetText;
             }
             if (element.style) {
               element.style.color = targetColor;
-              element.style.opacity = newValue === '' ? '0.5' : '1';
+              element.style.opacity = String(targetOpacity);
             }
           }
         }
@@ -178,15 +183,18 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
   useEffect(() => {
     if (textRef.current) {
+      const isValEmpty = value === '';
       const targetColor = isCompleted
         ? colors.textMuted
-        : value === ''
+        : isValEmpty
         ? colors.textSecondary
         : colors.textPrimary;
-      const targetOpacity = value === '' ? 0.5 : 1.0;
+      const targetOpacity = isValEmpty ? 0.5 : 1.0;
+      const targetText = isValEmpty ? placeholder : value;
 
       if (typeof (textRef.current as any).setNativeProps === 'function') {
         (textRef.current as any).setNativeProps({
+          text: targetText,
           style: {
             color: targetColor,
             opacity: targetOpacity,
@@ -194,12 +202,20 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         });
       }
       const element = (textRef.current as any)._node || textRef.current;
-      if (element && element.style) {
-        element.style.color = targetColor;
-        element.style.opacity = String(targetOpacity);
+      if (element) {
+        if (typeof element.value !== 'undefined') {
+          element.value = targetText;
+        }
+        if (typeof element.textContent !== 'undefined') {
+          element.textContent = targetText;
+        }
+        if (element.style) {
+          element.style.color = targetColor;
+          element.style.opacity = String(targetOpacity);
+        }
       }
     }
-  }, [isCompleted, value, isActive]);
+  }, [isCompleted, value, placeholder, isActive]);
 
   const showPlaceholder = value === '';
   const displayValue = value !== '' ? value : placeholder;

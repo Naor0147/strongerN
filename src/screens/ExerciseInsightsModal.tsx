@@ -323,8 +323,8 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
           {activeTab === 'history' && (
             <View style={styles.tabContent}>
               {(() => {
-                const history = mockExerciseHistory.filter(
-                  (h) => h.exerciseId === exerciseLibraryEntry?.id
+                const history = (mockExerciseHistory || []).filter(
+                  (h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0
                 );
 
                 if (history.length === 0) {
@@ -339,32 +339,27 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                 }
 
                 // Sort history by date descending
-                const sortedHistory = [...history].sort(
-                  (a, b) => b.date.getTime() - a.date.getTime()
+                const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
+                const sortedHistory = [...validHistory].sort(
+                  (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
                 );
-
-                // Find all-time maximum estimated 1RM for this exercise
-                const allTimeMax1RM = history.reduce((max, h) => {
-                  const sessionMax = Math.max(...h.sets.map((s) => estimate1RM(s.weightKg, s.reps)));
-                  return sessionMax > max ? sessionMax : max;
-                }, 0);
 
                 return (
                   <View style={styles.historyList}>
                     {sortedHistory.map((entry, idx) => {
-                      const sessionEst1RM = Math.max(...entry.sets.map((s) => estimate1RM(s.weightKg, s.reps)));
-
-                      // Find best set (highest estimated 1RM)
-                      let bestSet = entry.sets[0];
+                      const sets = entry.sets || [];
+                      let bestSet = sets[0] || { weightKg: 0, reps: 0 };
                       let bestSet1RM = 0;
-                      entry.sets.forEach((s) => {
+                      sets.forEach((s) => {
+                        if (!s) return;
                         const s1RM = estimate1RM(s.weightKg, s.reps);
-                        if (s1RM > bestSet1RM) {
+                        if (!isNaN(s1RM) && s1RM >= bestSet1RM) {
                           bestSet1RM = s1RM;
                           bestSet = s;
                         }
                       });
 
+                      const sessionEst1RM = Math.max(0, bestSet1RM);
                       const isExpanded = !!expandedSessions[entry.id];
 
                       const day = String(entry.date.getDate()).padStart(2, '0');

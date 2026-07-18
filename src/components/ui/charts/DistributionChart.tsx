@@ -183,29 +183,35 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
     return paddingLeft + idx * (barWidth + barGap);
   };
 
-  // Find which bar the user falls into
-  const userBarIdx = Math.min(N - 1, Math.max(0, Math.floor(percentile * N)));
+  // Sanitize percentile input
+  const safePercentile = typeof percentile === 'number' && !isNaN(percentile)
+    ? Math.min(0.99, Math.max(0.01, percentile))
+    : 0.5;
 
-  const pct = Math.round(percentile * 100);
+  // Find which bar the user falls into
+  const userBarIdx = Math.min(N - 1, Math.max(0, Math.floor(safePercentile * N)));
+
+  const pct = Math.round(safePercentile * 100);
   const percentText = `${pct}%`;
   
   // Dynamic subtitle copy
-  const subtitleText = percentile >= 0.5 
+  const subtitleText = safePercentile >= 0.5 
     ? `Stronger than ${pct}% of lifters in this lift`
     : `Top ${Math.max(1, 100 - pct)}% of lifters in this lift`;
 
   const maxBarH = height - paddingTop - paddingBottom;
   
   // Calculate heights pixel-wise: middle bar (idx 3) is 20% taller in pixels, others stay at baseline
-  const getBarHeightInPixels = (idx: number, originalH: number) => {
-    const baselineH = (originalH / 100) * maxBarH;
+  const getBarHeightInPixels = (idx: number, originalH: number = 20) => {
+    const orig = typeof originalH === 'number' && !isNaN(originalH) ? originalH : 20;
+    const baselineH = (orig / 100) * maxBarH;
     if (idx === 3) {
       return maxBarH * (1 + extraPercent);
     }
     return baselineH;
   };
 
-  const targetBarH = getBarHeightInPixels(userBarIdx, barHeights[userBarIdx]);
+  const targetBarH = getBarHeightInPixels(userBarIdx, barHeights[userBarIdx] || 20);
   const targetX = width > 100 ? getBarX(userBarIdx) + barWidth / 2 : 0;
   const pinBottomY = height - paddingBottom - targetBarH;
   const pinTopY = 22; // top height target for flag

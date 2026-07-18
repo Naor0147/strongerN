@@ -205,7 +205,12 @@ const LineChart: React.FC<LineChartProps> = ({
     });
   }, [data]);
 
-  if (!data || data.length < 2) {
+  const validData = React.useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    return data.filter((d) => d && typeof d.x === 'number' && !isNaN(d.x) && typeof d.y === 'number' && !isNaN(d.y));
+  }, [data]);
+
+  if (validData.length < 2) {
     return (
       <View style={[styles.container, styles.emptyContainer, { height: height + 30, backgroundColor: colors.surfaceHigh }]}>
         {title && <Text style={[styles.chartTitle, { width: '100%' }]}>{title}</Text>}
@@ -224,15 +229,15 @@ const LineChart: React.FC<LineChartProps> = ({
   const paddingRight = 20;
 
   // Limits
-  const xValues = data.map((d) => d.x);
-  const yValues = data.map((d) => d.y);
+  const xValues = validData.map((d) => d.x);
+  const yValues = validData.map((d) => d.y);
   
   const xMin = Math.min(...xValues);
   const xMax = Math.max(...xValues);
   
   const yMinVal = Math.min(...yValues);
   const yMaxVal = Math.max(...yValues);
-  const yRange = yMaxVal - yMinVal;
+  const yRange = isNaN(yMaxVal - yMinVal) ? 0 : yMaxVal - yMinVal;
   
   // Pad the y-axis range so that there is a comfortable baseline height.
   const yPadMin = Math.max(5, yRange * 1.2);
@@ -244,26 +249,28 @@ const LineChart: React.FC<LineChartProps> = ({
   const plotPaddingHorizontal = 16;
 
   const getX = (xVal: number) => {
-    if (xMax === xMin) return paddingLeft + (width - paddingLeft - paddingRight) / 2;
-    return paddingLeft + plotPaddingHorizontal + 
+    if (xMax === xMin || isNaN(xMin) || isNaN(xMax)) return paddingLeft + (width - paddingLeft - paddingRight) / 2;
+    const res = paddingLeft + plotPaddingHorizontal + 
       ((xVal - xMin) / (xMax - xMin)) * (width - paddingLeft - paddingRight - 2 * plotPaddingHorizontal);
+    return isNaN(res) ? paddingLeft : res;
   };
 
   const getY = (yVal: number) => {
-    if (yMax === yMin) return paddingTop + (height - paddingTop - paddingBottom) / 2;
-    return height - paddingBottom - ((yVal - yMin) / (yMax - yMin)) * (height - paddingTop - paddingBottom);
+    if (yMax === yMin || isNaN(yMin) || isNaN(yMax)) return paddingTop + (height - paddingTop - paddingBottom) / 2;
+    const res = height - paddingBottom - ((yVal - yMin) / (yMax - yMin)) * (height - paddingTop - paddingBottom);
+    return isNaN(res) ? height - paddingBottom : res;
   };
 
   // Animated props for the line path
   const animatedLineProps = useAnimatedProps(() => {
     const progress = entryProgress.value;
-    const N = data.length;
-    const path = data.map((d, i) => {
+    const N = validData.length;
+    const path = validData.map((d, i) => {
       const x = getX(d.x);
       const targetY = getY(d.y);
       const baselineY = height - paddingBottom;
       
-      const delay = (i / (N - 1)) * 0.25;
+      const delay = (i / Math.max(1, N - 1)) * 0.25;
       const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
       const pointProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
       
@@ -277,13 +284,13 @@ const LineChart: React.FC<LineChartProps> = ({
   // Animated props for the line drop shadow path (offset down by 3px)
   const animatedShadowProps = useAnimatedProps(() => {
     const progress = entryProgress.value;
-    const N = data.length;
-    const path = data.map((d, i) => {
+    const N = validData.length;
+    const path = validData.map((d, i) => {
       const x = getX(d.x);
       const targetY = getY(d.y) + 3; // offset down
       const baselineY = height - paddingBottom + 3;
       
-      const delay = (i / (N - 1)) * 0.25;
+      const delay = (i / Math.max(1, N - 1)) * 0.25;
       const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
       const pointProgress = t * t * (3 - 2 * t);
       
@@ -297,13 +304,13 @@ const LineChart: React.FC<LineChartProps> = ({
   // Animated props for the gradient fill path
   const animatedFillProps = useAnimatedProps(() => {
     const progress = entryProgress.value;
-    const N = data.length;
-    const linePoints = data.map((d, i) => {
+    const N = validData.length;
+    const linePoints = validData.map((d, i) => {
       const x = getX(d.x);
       const targetY = getY(d.y);
       const baselineY = height - paddingBottom;
       
-      const delay = (i / (N - 1)) * 0.25;
+      const delay = (i / Math.max(1, N - 1)) * 0.25;
       const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
       const pointProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
       
@@ -311,7 +318,7 @@ const LineChart: React.FC<LineChartProps> = ({
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
     
-    const path = `${linePoints} L ${getX(data[data.length - 1].x)} ${height - paddingBottom} L ${getX(data[0].x)} ${height - paddingBottom} Z`;
+    const path = `${linePoints} L ${getX(validData[validData.length - 1].x)} ${height - paddingBottom} L ${getX(validData[0].x)} ${height - paddingBottom} Z`;
     return { d: path };
   });
 
@@ -321,10 +328,10 @@ const LineChart: React.FC<LineChartProps> = ({
   }, [yMin, yMax]);
 
   const xTicksIndices = React.useMemo(() => {
-    return data.length <= 4 
-      ? data.map((_, i) => i) 
-      : [0, Math.floor((data.length - 1) / 3), Math.floor((data.length - 1) * 2 / 3), data.length - 1];
-  }, [data.length]);
+    return validData.length <= 4 
+      ? validData.map((_, i) => i) 
+      : [0, Math.floor((validData.length - 1) / 3), Math.floor((validData.length - 1) * 2 / 3), validData.length - 1];
+  }, [validData.length]);
 
   return (
     <View style={styles.container} onLayout={onLayout}>
@@ -424,25 +431,25 @@ const LineChart: React.FC<LineChartProps> = ({
         <AnimatedPath animatedProps={animatedLineProps} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
 
         {/* Data points (circles) */}
-        {data.map((d, i) => (
+        {validData.map((d, i) => (
           <CircleItem
             key={i}
             point={d}
             idx={i}
-            totalPoints={data.length}
+            totalPoints={validData.length}
             getX={getX}
             getY={getY}
             height={height}
             paddingBottom={paddingBottom}
             color={color}
             entryProgress={entryProgress}
-            isLast={i === data.length - 1}
+            isLast={i === validData.length - 1}
           />
         ))}
 
         {/* x-axis labels */}
         {xTicksIndices.map((idx) => {
-          const d = data[idx];
+          const d = validData[idx];
           if (!d) return null;
           const xPos = getX(d.x);
           const label = d.label || (xAxisFormatter ? xAxisFormatter(d.x) : String(d.x));

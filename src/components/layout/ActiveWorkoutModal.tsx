@@ -1211,16 +1211,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
                const positionInCategory = setIdx;
+               const bestW = (ex.bestWeight ?? 0).toString();
+               const bestR = (ex.bestReps ?? 0).toString();
                let suggested: SetSuggestion = {
-                 weight: ex.bestWeight ? ex.bestWeight.toString() : '60',
-                 reps: ex.bestReps ? ex.bestReps.toString() : '10',
-                 leftWeight: ex.bestWeight ? ex.bestWeight.toString() : '60',
-                 leftReps: ex.bestReps ? ex.bestReps.toString() : '10',
-                 rightWeight: ex.bestWeight ? ex.bestWeight.toString() : '60',
-                 rightReps: ex.bestReps ? ex.bestReps.toString() : '10',
+                 weight: bestW,
+                 reps: bestR,
+                 leftWeight: bestW,
+                 leftReps: bestR,
+                 rightWeight: bestW,
+                 rightReps: bestR,
                };
                if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                 suggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral, sessionsByExerciseMap);
+                 const perfSuggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral, sessionsByExerciseMap);
+                 if (perfSuggested.weight || perfSuggested.reps) {
+                   suggested = perfSuggested;
+                 }
                }
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
@@ -1622,27 +1627,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
       const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
 
+      const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '0') : '0';
+      const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '0') : '0';
       let suggested: SetSuggestion = {
-        weight: '60',
-        reps: '10',
-        leftWeight: '60',
-        leftReps: '10',
-        rightWeight: '60',
-        rightReps: '10',
+        weight: sugWeight,
+        reps: sugReps,
+        leftWeight: sugWeight,
+        leftReps: sugReps,
+        rightWeight: sugWeight,
+        rightReps: sugReps,
       };
       if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-        suggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, unilateral);
-      } else {
-        const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '60') : '60';
-        const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '10') : '10';
-        suggested = {
-          weight: sugWeight,
-          reps: sugReps,
-          leftWeight: unilateral ? (lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight) : undefined,
-          leftReps: unilateral ? (lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps) : undefined,
-          rightWeight: unilateral ? (lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight) : undefined,
-          rightReps: unilateral ? (lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps) : undefined,
-        };
+        const perfSuggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, unilateral);
+        if (perfSuggested.weight || perfSuggested.reps) {
+          suggested = perfSuggested;
+        }
+      }
+      if (unilateral) {
+        suggested.leftWeight = lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight;
+        suggested.leftReps = lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps;
+        suggested.rightWeight = lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight;
+        suggested.rightReps = lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps;
       }
 
       const newSet: SetRecord = {
@@ -2021,25 +2026,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             positionInCategory++;
           }
         }
+        const libEx = exerciseLibraryMap.get(exName.toLowerCase());
+        const defaultW = (libEx?.bestWeight ?? 0).toString();
+        const defaultR = (libEx?.bestReps ?? 0).toString();
         let suggested: SetSuggestion = {
-          weight: '60',
-          reps: '10',
-          leftWeight: '60',
-          leftReps: '10',
-          rightWeight: '60',
-          rightReps: '10',
+          weight: defaultW,
+          reps: defaultR,
+          leftWeight: defaultW,
+          leftReps: defaultR,
+          rightWeight: defaultW,
+          rightReps: defaultR,
         };
         if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          suggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
-        } else {
-          const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-          if (libEx) {
-            suggested.weight = (libEx.bestWeight || 60).toString();
-            suggested.reps = (libEx.bestReps || 10).toString();
-            suggested.leftWeight = suggested.weight;
-            suggested.leftReps = suggested.reps;
-            suggested.rightWeight = suggested.weight;
-            suggested.rightReps = suggested.reps;
+          const perfSuggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
+          if (perfSuggested.weight || perfSuggested.reps) {
+            suggested = perfSuggested;
           }
         }
         return {
@@ -2095,23 +2096,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
           const category = 'S';
           const positionInCategory = sIdx;
+          const defaultW = (libEx?.bestWeight ?? 0).toString();
+          const defaultR = (libEx?.bestReps ?? 0).toString();
           let suggested: SetSuggestion = {
-            weight: '60',
-            reps: '10',
-            leftWeight: '60',
-            leftReps: '10',
-            rightWeight: '60',
-            rightReps: '10',
+            weight: defaultW,
+            reps: defaultR,
+            leftWeight: defaultW,
+            leftReps: defaultR,
+            rightWeight: defaultW,
+            rightReps: defaultR,
           };
           if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-            suggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
-          } else if (libEx) {
-            suggested.weight = (libEx.bestWeight || 60).toString();
-            suggested.reps = (libEx.bestReps || 10).toString();
-            suggested.leftWeight = suggested.weight;
-            suggested.leftReps = suggested.reps;
-            suggested.rightWeight = suggested.weight;
-            suggested.rightReps = suggested.reps;
+            const perfSuggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
+            if (perfSuggested.weight || perfSuggested.reps) {
+              suggested = perfSuggested;
+            }
           }
           return {
             id: `set-new-${idx}-${sIdx}-${Date.now()}`,

@@ -1,13 +1,14 @@
 import { WorkoutSession } from '../data/mockData';
 
 // Monday of the week helper
-function getMonday(date: Date): Date {
+function getMonday(date: Date): Date | null {
   const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
   const monday = new Date(d.setDate(diff));
   monday.setHours(0, 0, 0, 0);
-  return monday;
+  return isNaN(monday.getTime()) ? null : monday;
 }
 
 /**
@@ -17,26 +18,31 @@ export function setsPerWeek(
   exName: string,
   sessions: WorkoutSession[]
 ): { weekStart: Date; count: number }[] {
+  if (!exName || !Array.isArray(sessions) || sessions.length === 0) return [];
   const weekMap: Record<string, number> = {};
 
   for (const session of sessions) {
+    if (!session || !session.datetime || !Array.isArray(session.exercises)) continue;
     const exSet = session.exercises.find(
-      (e) => e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase() === exName.toLowerCase()
     );
-    if (!exSet || !exSet.setsDetails) continue;
+    if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
-    const completedSets = exSet.setsDetails.filter((s) => s.completed).length;
+    const completedSets = exSet.setsDetails.filter((s) => s && s.completed).length;
     if (completedSets === 0) continue;
 
     const monday = getMonday(new Date(session.datetime));
-    const key = monday.toISOString().split('T')[0];
-    weekMap[key] = (weekMap[key] || 0) + completedSets;
+    if (!monday) continue;
+    try {
+      const key = monday.toISOString().split('T')[0];
+      weekMap[key] = (weekMap[key] || 0) + completedSets;
+    } catch (_) {}
   }
 
   const result = Object.entries(weekMap).map(([dateStr, count]) => ({
     weekStart: new Date(dateStr),
     count,
-  }));
+  })).filter((item) => !isNaN(item.weekStart.getTime()));
 
   return result.sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime());
 }
@@ -48,29 +54,38 @@ export function avgRepsPerWorkout(
   exName: string,
   sessions: WorkoutSession[]
 ): { date: Date; avg: number }[] {
+  if (!exName || !Array.isArray(sessions) || sessions.length === 0) return [];
   const result: { date: Date; avg: number }[] = [];
 
-  // Sort sessions chronologically (oldest to newest)
-  const sortedSessions = [...sessions].sort((a, b) => {
+  const validSessions = sessions.filter((s) => s && s.datetime && !isNaN(new Date(s.datetime).getTime()));
+  const sortedSessions = [...validSessions].sort((a, b) => {
     return new Date(a.datetime).getTime() - new Date(b.datetime).getTime();
   });
 
   for (const session of sortedSessions) {
+    if (!Array.isArray(session.exercises)) continue;
     const exSet = session.exercises.find(
-      (e) => e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase() === exName.toLowerCase()
     );
-    if (!exSet || !exSet.setsDetails) continue;
+    if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
-    const completed = exSet.setsDetails.filter((s) => s.completed);
+    const completed = exSet.setsDetails.filter((s) => s && s.completed);
     if (completed.length === 0) continue;
 
-    const totalReps = completed.reduce((sum, s) => sum + s.reps, 0);
+    const totalReps = completed.reduce((sum, s) => {
+      const r = typeof s.reps === 'number' ? s.reps : parseInt(String(s.reps), 10);
+      return sum + (isNaN(r) ? 0 : r);
+    }, 0);
     const avg = totalReps / completed.length;
+    if (isNaN(avg)) continue;
 
-    result.push({
-      date: new Date(session.datetime),
-      avg: Math.round(avg * 10) / 10,
-    });
+    const d = new Date(session.datetime);
+    if (!isNaN(d.getTime())) {
+      result.push({
+        date: d,
+        avg: Math.round(avg * 10) / 10,
+      });
+    }
   }
 
   return result;
