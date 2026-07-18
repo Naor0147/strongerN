@@ -100,9 +100,29 @@ const LineChart: React.FC<LineChartProps> = ({
   const fillPath = `${linePath} L ${getX(validData[validData.length - 1].x)} ${height - paddingBottom} L ${getX(validData[0].x)} ${height - paddingBottom} Z`;
 
   const yTicks = [yMin, yMin + (yMax - yMin) / 2, yMax];
-  const xTicksIndices = validData.length <= 4 
-    ? validData.map((_, i) => i) 
-    : [0, Math.floor((validData.length - 1) / 3), Math.floor((validData.length - 1) * 2 / 3), validData.length - 1];
+  
+  const xTickPoints = React.useMemo(() => {
+    if (validData.length === 0) return [];
+    const points: { xPos: number; label: string }[] = [];
+    let lastX = -999;
+    
+    validData.forEach((d, i) => {
+      const xPos = getX(d.x);
+      const label = d.label || (xAxisFormatter ? xAxisFormatter(d.x) : String(d.x));
+      const isFirst = i === 0;
+      const isLast = i === validData.length - 1;
+
+      if (isFirst || (xPos - lastX >= 60 && (width - paddingRight - xPos) >= 45) || isLast) {
+        if (isLast && points.length > 1 && (xPos - lastX < 50)) {
+          points.pop();
+        }
+        points.push({ xPos, label });
+        lastX = xPos;
+      }
+    });
+
+    return points;
+  }, [validData, width, getX, xAxisFormatter, paddingRight]);
 
   return (
     <View style={styles.container} onLayout={onLayout}>
@@ -222,25 +242,19 @@ const LineChart: React.FC<LineChartProps> = ({
         })}
 
         {/* x-axis labels */}
-        {xTicksIndices.map((idx) => {
-          const d = validData[idx];
-          if (!d) return null;
-          const xPos = getX(d.x);
-          const label = d.label || (xAxisFormatter ? xAxisFormatter(d.x) : String(d.x));
-          return (
-            <SvgText
-              key={idx}
-              x={xPos}
-              y={height - 8}
-              fill={colors.textSecondary}
-              fontSize={9}
-              fontFamily={font.regular}
-              textAnchor="middle"
-            >
-              {label}
-            </SvgText>
-          );
-        })}
+        {xTickPoints.map((pt, idx) => (
+          <SvgText
+            key={idx}
+            x={pt.xPos}
+            y={height - 8}
+            fill={colors.textSecondary}
+            fontSize={9}
+            fontFamily={font.regular}
+            textAnchor="middle"
+          >
+            {pt.label}
+          </SvgText>
+        ))}
       </Svg>
     </View>
   );

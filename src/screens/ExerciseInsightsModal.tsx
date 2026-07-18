@@ -364,49 +364,73 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
             {activeTab === 'history' && (
               <View style={styles.tabContent}>
                 {(() => {
-                  const historyFromSessions = (sessions || []).reduce<any[]>((acc, session) => {
-                    if (!session || !session.exercises) return acc;
-                    const ex = session.exercises.find((e: any) => 
-                      (e.name && e.name.toLowerCase() === exerciseName.toLowerCase()) ||
-                      (e.id && exerciseLibraryEntry?.id && e.id === exerciseLibraryEntry.id)
-                    );
-                    if (ex) {
-                      const rawSets = ex.sets || ex.setsDetails || [];
-                      const normalizedSets = rawSets.map((s: any) => ({
-                        weightKg: Number(s.weightKg ?? s.weight ?? 0),
-                        reps: Number(s.reps ?? 0),
-                      })).filter((s: any) => s.reps > 0 || s.weightKg > 0);
+                  try {
+                    const historyFromSessions = Array.isArray(sessions) ? sessions.reduce<any[]>((acc, session) => {
+                      if (!session || !Array.isArray(session.exercises)) return acc;
+                      const ex = session.exercises.find((e: any) => 
+                        e && (
+                          (typeof e.name === 'string' && e.name.toLowerCase() === exerciseName.toLowerCase()) ||
+                          (e.id && exerciseLibraryEntry?.id && e.id === exerciseLibraryEntry.id)
+                        )
+                      );
+                      if (ex) {
+                        const rawSets = Array.isArray(ex.sets) ? ex.sets : (Array.isArray(ex.setsDetails) ? ex.setsDetails : []);
+                        const normalizedSets = rawSets
+                          .filter((s: any) => s != null)
+                          .map((s: any) => ({
+                            weightKg: Number(s.weightKg ?? s.weight ?? 0),
+                            reps: Number(s.reps ?? 0),
+                          }))
+                          .filter((s: any) => !isNaN(s.reps) && !isNaN(s.weightKg) && (s.reps > 0 || s.weightKg > 0));
 
-                      if (normalizedSets.length > 0) {
-                        const dt = session.datetime ? new Date(session.datetime) : (session.date ? new Date(session.date) : new Date());
-                        acc.push({
-                          id: session.id || `sess-${dt.getTime()}-${Math.random()}`,
-                          date: dt,
-                          sets: normalizedSets,
-                        });
+                        if (normalizedSets.length > 0) {
+                          const dt = session.datetime ? new Date(session.datetime) : (session.date ? new Date(session.date) : new Date());
+                          const validDate = isNaN(dt.getTime()) ? new Date() : dt;
+                          acc.push({
+                            id: session.id || `sess-${validDate.getTime()}-${Math.random()}`,
+                            date: validDate,
+                            sets: normalizedSets,
+                          });
+                        }
                       }
+                      return acc;
+                    }, []) : [];
+
+                    const historyFromMock = (Array.isArray(mockExerciseHistory) ? mockExerciseHistory : [])
+                      .filter((h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0)
+                      .map((h) => ({
+                        id: h.id,
+                        date: new Date(h.date),
+                        sets: h.sets.map((s: any) => ({ weightKg: Number(s.weightKg ?? 0), reps: Number(s.reps ?? 0) })),
+                      }));
+
+                    const combinedHistoryMap = new Map<string, any>();
+                    [...historyFromSessions, ...historyFromMock].forEach((item) => {
+                      if (!item || !item.date || isNaN(item.date.getTime())) return;
+                      const timeKey = `${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
+                      if (!combinedHistoryMap.has(timeKey)) {
+                        combinedHistoryMap.set(timeKey, item);
+                      }
+                    });
+                    const history = Array.from(combinedHistoryMap.values());
+
+                    if (history.length === 0) {
+                      return (
+                        <View style={styles.emptyHistoryContainer}>
+                          <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+                          <Text style={styles.emptyHistoryText}>
+                            No training history found for this exercise.
+                          </Text>
+                        </View>
+                      );
                     }
-                    return acc;
-                  }, []);
 
-                  const historyFromMock = (mockExerciseHistory || [])
-                    .filter((h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0)
-                    .map((h) => ({
-                      id: h.id,
-                      date: new Date(h.date),
-                      sets: h.sets.map((s: any) => ({ weightKg: Number(s.weightKg ?? 0), reps: Number(s.reps ?? 0) })),
-                    }));
-
-                  const combinedHistoryMap = new Map<string, any>();
-                  [...historyFromSessions, ...historyFromMock].forEach((item) => {
-                    const timeKey = `${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
-                    if (!combinedHistoryMap.has(timeKey)) {
-                      combinedHistoryMap.set(timeKey, item);
-                    }
-                  });
-                  const history = Array.from(combinedHistoryMap.values());
-
-                  if (history.length === 0) {
+                    const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
+                    const sortedHistory = [...validHistory].sort(
+                      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+                    );
+                  } catch (err) {
+                    console.error('Error computing exercise history:', err);
                     return (
                       <View style={styles.emptyHistoryContainer}>
                         <Ionicons name="time-outline" size={48} color={colors.textMuted} />
@@ -416,11 +440,6 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       </View>
                     );
                   }
-
-                  const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
-                  const sortedHistory = [...validHistory].sort(
-                    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-                  );
 
                   return (
                     <View style={styles.historyList}>
