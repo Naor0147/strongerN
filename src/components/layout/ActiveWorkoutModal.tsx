@@ -256,11 +256,14 @@ const getBestPerformanceSuggestionForSet = (
 
   for (const session of last5Sessions) {
     const histEx = session.ex;
-    const sets = histEx.setsDetails || [];
+    const sets = histEx.setsDetails || histEx.sets || [];
     const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
-    const matchedSet = matchingSets[positionInCategory];
+    const matchedSet = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
 
     if (matchedSet) {
+      const setWeight = matchedSet.weight ?? matchedSet.weightKg;
+      const setReps = matchedSet.reps;
+
       // Left side extraction with fallbacks
       let lw = matchedSet.leftWeight;
       let lr = matchedSet.leftReps;
@@ -269,8 +272,8 @@ const getBestPerformanceSuggestionForSet = (
         lr = matchedSet.rightReps;
       }
       if (lw === undefined || lw === null) {
-        lw = matchedSet.weight;
-        lr = matchedSet.reps;
+        lw = setWeight;
+        lr = setReps;
       }
 
       if (lw !== undefined && lw !== null) {
@@ -291,8 +294,8 @@ const getBestPerformanceSuggestionForSet = (
         rr = matchedSet.leftReps;
       }
       if (rw === undefined || rw === null) {
-        rw = matchedSet.weight;
-        rr = matchedSet.reps;
+        rw = setWeight;
+        rr = setReps;
       }
 
       if (rw !== undefined && rw !== null) {
@@ -306,12 +309,12 @@ const getBestPerformanceSuggestionForSet = (
       }
 
       // Bilateral extraction
-      if (matchedSet.weight !== undefined && matchedSet.weight !== null) {
+      if (setWeight !== undefined && setWeight !== null) {
         bilateralCandidates.push({
-          weight: parseWeight(matchedSet.weight),
-          reps: parseReps(matchedSet.reps),
-          originalWeight: matchedSet.weight,
-          originalReps: matchedSet.reps,
+          weight: parseWeight(setWeight),
+          reps: parseReps(setReps),
+          originalWeight: setWeight,
+          originalReps: setReps,
           datetime: session.datetime,
         });
       }

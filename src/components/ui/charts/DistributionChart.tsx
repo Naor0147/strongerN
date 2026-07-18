@@ -39,11 +39,11 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
     if (w > 0) setWidth(w);
   };
 
-  const height = 135;
+  const height = 165;
   const paddingLeft = 20;
   const paddingRight = 20;
-  const paddingTop = 38;
-  const paddingBottom = 12;
+  const paddingTop = 58;
+  const paddingBottom = 16;
 
   const N = 7;
   const barHeights = [6, 20, 65, 100, 65, 20, 6];
@@ -82,7 +82,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   const targetBarH = getBarHeightInPixels(userBarIdx, barHeights[userBarIdx] || 20);
   const targetX = width > 100 ? getBarX(userBarIdx) + barWidth / 2 : 0;
   const pinBottomY = height - paddingBottom - targetBarH;
-  const pinTopY = 22;
+  const pinTopY = 40;
 
   const flagWidth = 56;
   const flagHeight = 22;

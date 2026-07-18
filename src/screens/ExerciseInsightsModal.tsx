@@ -12,16 +12,6 @@ import {
   Alert,
   Image,
 } from 'react-native';
-
-const WebSafeAlert = {
-  alert: (title: string, message?: string) => {
-    if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${message}`);
-    } else {
-      Alert.alert(title, message);
-    }
-  }
-};
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -69,7 +59,6 @@ class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { 
   }
 }
 
-// Helper functions for normal distribution percentile estimation
 function normalCDF(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
   const d = 0.3989423 * Math.exp(-z * z / 2);
@@ -142,35 +131,71 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     return getExercisePercentile(exerciseName, current1RM);
   }, [exerciseName, sessions]);
 
-  // Sync state if exercise or insightsNotes prop changes
   useEffect(() => {
     setNotes(exerciseLibraryEntry?.insightsNotes || '');
   }, [exerciseLibraryEntry]);
 
-  // Tab definitions
   const tabs = [
     { key: 'info', label: 'Info', icon: 'information-circle-outline' },
     { key: 'data', label: 'Data', icon: 'analytics-outline' },
     { key: 'history', label: 'History', icon: 'time-outline' },
   ];
 
-  // Chart datasets (Data Tab)
   const chartData = useMemo(() => {
-    // 1RM series: Map dates to timestamps for line chart x-axis
-    const series1RM = exercise1RMSeries(exerciseName, sessions).map((pt) => ({
+    const rawSeries1RM = exercise1RMSeries(exerciseName, sessions).map((pt) => ({
       x: pt.date.getTime(),
       y: pt.value,
       label: pt.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     }));
 
-    // Sets per week series: Map weekStart date to timestamp
+    // 6-dot time-bucket sampling for line chart
+    const sampleTopDots = (rawPoints: { x: number; y: number; label: string }[], maxDots = 6) => {
+      if (rawPoints.length <= maxDots) return rawPoints;
+
+      const minX = rawPoints[0].x;
+      const maxX = rawPoints[rawPoints.length - 1].x;
+      const timeSpan = maxX - minX;
+
+      if (timeSpan <= 0) return rawPoints.slice(-maxDots);
+
+      const bucketSize = timeSpan / maxDots;
+      const sampled: { x: number; y: number; label: string }[] = [];
+
+      for (let i = 0; i < maxDots; i++) {
+        const bucketStart = minX + i * bucketSize;
+        const bucketEnd = i === maxDots - 1 ? maxX + 1 : bucketStart + bucketSize;
+
+        const pointsInBucket = rawPoints.filter((pt) => pt.x >= bucketStart && pt.x < bucketEnd);
+        if (pointsInBucket.length > 0) {
+          let best = pointsInBucket[0];
+          for (const pt of pointsInBucket) {
+            if (pt.y > best.y) {
+              best = pt;
+            }
+          }
+          sampled.push(best);
+        }
+      }
+
+      const lastPoint = rawPoints[rawPoints.length - 1];
+      if (!sampled.some((pt) => pt.x === lastPoint.x)) {
+        if (sampled.length >= maxDots) {
+          sampled.pop();
+        }
+        sampled.push(lastPoint);
+      }
+
+      return sampled;
+    };
+
+    const series1RM = sampleTopDots(rawSeries1RM, 6);
+
     const weeklySetsSeries = setsPerWeek(exerciseName, sessions).map((pt) => ({
       x: pt.weekStart.getTime(),
       y: pt.count,
       label: pt.weekStart.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' }),
     }));
 
-    // Average reps series
     const repsSeries = avgRepsPerWorkout(exerciseName, sessions).map((pt) => ({
       x: pt.date.getTime(),
       y: pt.avg,
@@ -178,6 +203,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     }));
 
     return {
+      has1RMData: rawSeries1RM.length > 0 && rawSeries1RM.some((pt) => pt.y > 0),
       series1RM,
       weeklySetsSeries,
       repsSeries,
@@ -193,20 +219,10 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     if (!exerciseLibraryEntry?.id) return;
     if (onUpdateExerciseInsightsNotes) {
       onUpdateExerciseInsightsNotes(exerciseLibraryEntry.id, notes);
+      setSavedJustNow(true);
+      setTimeout(() => setSavedJustNow(false), 2000);
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setSavedJustNow(true);
-  }, [notes, exerciseLibraryEntry, onUpdateExerciseInsightsNotes]);
-
-  // Fade out saved toast after 1.5s
-  useEffect(() => {
-    if (savedJustNow) {
-      const timer = setTimeout(() => {
-        setSavedJustNow(false);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [savedJustNow]);
+  }, [exerciseLibraryEntry, notes, onUpdateExerciseInsightsNotes]);
 
   return (
     <Modal
@@ -219,18 +235,24 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <Pressable
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
             onPress={handleClose}
+            style={styles.closeButton}
+            android_ripple={ripple.borderless}
             testID="insights-back-btn"
           >
-            <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+            <Ionicons name="close" size={24} color={colors.textPrimary} />
           </Pressable>
-
-          <View style={styles.titleContainer}>
-            <Text style={styles.title} numberOfLines={1}>
-              {exerciseName.toUpperCase()}
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {exerciseName}
             </Text>
+            {exerciseLibraryEntry?.bodyPart && (
+              <Text style={styles.headerSubtitle}>
+                {exerciseLibraryEntry.bodyPart.toUpperCase()}
+              </Text>
+            )}
           </View>
+          <View style={{ width: 40 }} />
         </View>
 
         {/* Segmented Control Tab Bar */}
@@ -243,239 +265,261 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
           <TabErrorBoundary key={activeTab}>
             {activeTab === 'info' && (
               <View style={styles.tabContent}>
-              {/* Image placeholder / barbell icon */}
-              <View style={styles.imagePlaceholder}>
-                {exerciseLibraryEntry?.imageUri ? (
-                  <Image
-                    source={{ uri: exerciseLibraryEntry.imageUri }}
-                    style={styles.exerciseImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.noImageContainer}>
-                    <Ionicons name="barbell" size={36} color={colors.textMuted} />
-                    <Text style={styles.noImageText}>No image</Text>
-                  </View>
+                <View style={styles.imagePlaceholder}>
+                  {exerciseLibraryEntry?.imageUri ? (
+                    <Image
+                      source={{ uri: exerciseLibraryEntry.imageUri }}
+                      style={styles.exerciseImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.noImageContainer}>
+                      <Ionicons name="barbell" size={36} color={colors.textMuted} />
+                    </View>
+                  )}
+                </View>
+
+                {exerciseLibraryEntry?.instructions && exerciseLibraryEntry.instructions.length > 0 && (
+                  <Card style={styles.sectionCard}>
+                    <Text style={styles.sectionTitle}>INSTRUCTIONS</Text>
+                    {exerciseLibraryEntry.instructions.map((step, idx) => (
+                      <View key={idx} style={styles.instructionStep}>
+                        <View style={styles.stepBadge}>
+                          <Text style={styles.stepBadgeText}>{idx + 1}</Text>
+                        </View>
+                        <Text style={styles.instructionText}>{step}</Text>
+                      </View>
+                    ))}
+                  </Card>
+                )}
+
+                {exerciseLibraryEntry?.id && (
+                  <Card style={styles.sectionCard}>
+                    <View style={styles.notesHeader}>
+                      <Text style={styles.sectionTitle}>EXERCISE INSIGHTS NOTES</Text>
+                      {savedJustNow && (
+                        <Text style={styles.savedBadgeText}>Saved</Text>
+                      )}
+                    </View>
+                    <TextInput
+                      style={styles.notesInput}
+                      value={notes}
+                      onChangeText={setNotes}
+                      onBlur={handleAutoSaveNotes}
+                      placeholder="Add personal cues, seat settings, or notes for this exercise..."
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                      testID="insights-notes-input"
+                    />
+                  </Card>
                 )}
               </View>
+            )}
 
-              {/* Instructions card */}
-              <Card padding={spacing.md} style={styles.instructionsCard}>
-                <Text style={styles.instructionsTitle}>Instructions</Text>
-                <Text style={styles.instructionsText}>
-                  {exerciseLibraryEntry?.instructions || 'No instructions provided.'}
-                </Text>
-              </Card>
-
-              {/* Body Part + Category labels */}
-              <View style={styles.pillsRow}>
-                <View style={styles.pillCard}>
-                  <Text style={styles.pillLabel}>BODY PART</Text>
-                  <Text style={styles.pillValue}>
-                    {exerciseLibraryEntry?.muscleGroup?.toUpperCase() || 'N/A'}
-                  </Text>
-                </View>
-                <View style={styles.pillCard}>
-                  <Text style={styles.pillLabel}>CATEGORY</Text>
-                  <Text style={styles.pillValue}>
-                    {exerciseLibraryEntry?.equipment?.toUpperCase() || 'GENERAL'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Inline Notes Editor */}
-              {exerciseLibraryEntry && (
-                <Card padding={spacing.lg} style={styles.notesContainer}>
-                  <View style={styles.notesHeader}>
-                    <Text style={styles.sectionTitle}>Exercise Insights Notes</Text>
-                    {savedJustNow && (
-                      <Text style={styles.savedToast}>Saved</Text>
-                    )}
+            {activeTab === 'data' && (
+              <View style={styles.tabContent}>
+                {chartData.has1RMData && (
+                  <View style={styles.chartWrapper}>
+                    <DistributionChart
+                      title="Estimated 1RM Strength Distribution"
+                      percentile={strengthPercentile}
+                    />
                   </View>
-                  <TextInput
-                    style={styles.notesInput}
-                    value={notes}
-                    onChangeText={setNotes}
-                    onEndEditing={handleAutoSaveNotes}
-                    onBlur={handleAutoSaveNotes}
-                    placeholder="Enter training notes, setup details, seat height, etc..."
-                    placeholderTextColor={colors.textMuted}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                    testID="insights-notes-input"
+                )}
+
+                <View style={styles.chartWrapper}>
+                  <LineChart
+                    title="Estimated 1RM over Time (kg)"
+                    data={chartData.series1RM}
+                    color={colors.accent}
+                    height={150}
+                    yAxisFormatter={(val) => `${Math.round(val)}kg`}
                   />
-                </Card>
-              )}
-            </View>
-          )}
+                </View>
 
-          {activeTab === 'data' && (
-            <View style={styles.tabContent}>
-              {/* Distribution Chart */}
-              <View style={styles.chartWrapper}>
-                <DistributionChart
-                  title="Estimated 1RM Strength Distribution"
-                  percentile={strengthPercentile}
-                />
+                <View style={styles.chartWrapper}>
+                  <LineChart
+                    title="Sets Completed Per Week"
+                    data={chartData.weeklySetsSeries}
+                    color={colors.accent}
+                    height={150}
+                    yAxisFormatter={(val) => `${Math.round(val)} sets`}
+                  />
+                </View>
+
+                <View style={styles.chartWrapper}>
+                  <LineChart
+                    title="Average Reps Per Workout"
+                    data={chartData.repsSeries}
+                    color={colors.highlight}
+                    height={150}
+                    yAxisFormatter={(val) => `${Math.round(val * 10) / 10}`}
+                  />
+                </View>
               </View>
+            )}
 
-              {/* Charts Section */}
-              <View style={styles.chartWrapper}>
-                <LineChart
-                  title="Estimated 1RM over Time (kg)"
-                  data={chartData.series1RM}
-                  color={colors.accent}
-                  height={150}
-                  yAxisFormatter={(val) => `${Math.round(val)}kg`}
-                />
-              </View>
+            {activeTab === 'history' && (
+              <View style={styles.tabContent}>
+                {(() => {
+                  const historyFromSessions = (sessions || []).reduce<any[]>((acc, session) => {
+                    if (!session || !session.exercises) return acc;
+                    const ex = session.exercises.find((e: any) => 
+                      (e.name && e.name.toLowerCase() === exerciseName.toLowerCase()) ||
+                      (e.id && exerciseLibraryEntry?.id && e.id === exerciseLibraryEntry.id)
+                    );
+                    if (ex) {
+                      const rawSets = ex.sets || ex.setsDetails || [];
+                      const normalizedSets = rawSets.map((s: any) => ({
+                        weightKg: Number(s.weightKg ?? s.weight ?? 0),
+                        reps: Number(s.reps ?? 0),
+                      })).filter((s: any) => s.reps > 0 || s.weightKg > 0);
 
-              <View style={styles.chartWrapper}>
-                <LineChart
-                  title="Sets Completed Per Week"
-                  data={chartData.weeklySetsSeries}
-                  color={colors.accent}
-                  height={150}
-                  yAxisFormatter={(val) => `${Math.round(val)} sets`}
-                />
-              </View>
+                      if (normalizedSets.length > 0) {
+                        const dt = session.datetime ? new Date(session.datetime) : (session.date ? new Date(session.date) : new Date());
+                        acc.push({
+                          id: session.id || `sess-${dt.getTime()}-${Math.random()}`,
+                          date: dt,
+                          sets: normalizedSets,
+                        });
+                      }
+                    }
+                    return acc;
+                  }, []);
 
-              <View style={styles.chartWrapper}>
-                <LineChart
-                  title="Average Reps Per Workout"
-                  data={chartData.repsSeries}
-                  color={colors.highlight}
-                  height={150}
-                  yAxisFormatter={(val) => `${Math.round(val * 10) / 10}`}
-                />
-              </View>
-            </View>
-          )}
+                  const historyFromMock = (mockExerciseHistory || [])
+                    .filter((h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0)
+                    .map((h) => ({
+                      id: h.id,
+                      date: new Date(h.date),
+                      sets: h.sets.map((s: any) => ({ weightKg: Number(s.weightKg ?? 0), reps: Number(s.reps ?? 0) })),
+                    }));
 
-          {activeTab === 'history' && (
-            <View style={styles.tabContent}>
-              {(() => {
-                const history = (mockExerciseHistory || []).filter(
-                  (h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0
-                );
+                  const combinedHistoryMap = new Map<string, any>();
+                  [...historyFromSessions, ...historyFromMock].forEach((item) => {
+                    const timeKey = `${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
+                    if (!combinedHistoryMap.has(timeKey)) {
+                      combinedHistoryMap.set(timeKey, item);
+                    }
+                  });
+                  const history = Array.from(combinedHistoryMap.values());
 
-                if (history.length === 0) {
-                  return (
-                    <View style={styles.emptyHistoryContainer}>
-                      <Ionicons name="time-outline" size={48} color={colors.textMuted} />
-                      <Text style={styles.emptyHistoryText}>
-                        No training history found for this exercise.
-                      </Text>
-                    </View>
+                  if (history.length === 0) {
+                    return (
+                      <View style={styles.emptyHistoryContainer}>
+                        <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+                        <Text style={styles.emptyHistoryText}>
+                          No training history found for this exercise.
+                        </Text>
+                      </View>
+                    );
+                  }
+
+                  const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
+                  const sortedHistory = [...validHistory].sort(
+                    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
                   );
-                }
 
-                // Sort history by date descending
-                const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
-                const sortedHistory = [...validHistory].sort(
-                  (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-                );
+                  return (
+                    <View style={styles.historyList}>
+                      {sortedHistory.map((entry, idx) => {
+                        const sets = entry.sets || [];
+                        let bestSet = sets[0] || { weightKg: 0, reps: 0 };
+                        let bestSet1RM = 0;
+                        sets.forEach((s: any) => {
+                          if (!s) return;
+                          const s1RM = estimate1RM(s.weightKg, s.reps);
+                          if (!isNaN(s1RM) && s1RM >= bestSet1RM) {
+                            bestSet1RM = s1RM;
+                            bestSet = s;
+                          }
+                        });
 
-                return (
-                  <View style={styles.historyList}>
-                    {sortedHistory.map((entry, idx) => {
-                      const sets = entry.sets || [];
-                      let bestSet = sets[0] || { weightKg: 0, reps: 0 };
-                      let bestSet1RM = 0;
-                      sets.forEach((s) => {
-                        if (!s) return;
-                        const s1RM = estimate1RM(s.weightKg, s.reps);
-                        if (!isNaN(s1RM) && s1RM >= bestSet1RM) {
-                          bestSet1RM = s1RM;
-                          bestSet = s;
-                        }
-                      });
+                        const sessionEst1RM = Math.max(0, bestSet1RM);
+                        const isExpanded = !!expandedSessions[entry.id];
 
-                      const sessionEst1RM = Math.max(0, bestSet1RM);
-                      const isExpanded = !!expandedSessions[entry.id];
+                        const day = String(entry.date.getDate()).padStart(2, '0');
+                        const month = String(entry.date.getMonth() + 1).padStart(2, '0');
+                        const year = entry.date.getFullYear();
+                        const dateString = `${day}.${month}.${year}`;
 
-                      const day = String(entry.date.getDate()).padStart(2, '0');
-                      const month = String(entry.date.getMonth() + 1).padStart(2, '0');
-                      const year = entry.date.getFullYear();
-                      const dateString = `${day}.${month}.${year}`;
+                        const chevronElement = (
+                          <View style={styles.bottomChevronContainer}>
+                            <Ionicons
+                              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                              size={14}
+                              color={colors.textMuted}
+                            />
+                          </View>
+                        );
 
-                      const chevronElement = (
-                        <View style={styles.bottomChevronContainer}>
-                          <Ionicons
-                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={14}
-                            color={colors.textMuted}
-                          />
-                        </View>
-                      );
-
-                      return (
-                        <Card
-                          key={entry.id}
-                          padding={0}
-                          style={styles.historyCard}
-                        >
-                          <Pressable
-                            onPress={() => toggleSessionExpand(entry.id)}
-                            android_ripple={ripple.surface}
-                            style={({ pressed }) => [
-                              styles.cardPressable,
-                              pressed && Platform.OS === 'ios' && { opacity: 0.7 }
-                            ]}
+                        return (
+                          <Card
+                            key={entry.id}
+                            padding={0}
+                            style={styles.historyCard}
                           >
-                            <View style={styles.metricsContainerCompact}>
-                              <View style={[styles.metricColumnLeft, { alignItems: 'center' }]}>
-                                <Text style={styles.metricLabel}>BEST SET</Text>
-                                <Text style={styles.metricValue}>
-                                  {bestSet.weightKg}kg × {bestSet.reps}
-                                </Text>
-                              </View>
-                              <View style={[styles.metricColumnCenter, { alignItems: 'center' }]}>
-                                <Text style={styles.metricLabel}>DATE</Text>
-                                <Text style={styles.dateTextLargePrimary}>{dateString}</Text>
-                              </View>
-                              <View style={[styles.metricColumnRight, { alignItems: 'center' }]}>
-                                <Text style={styles.metricLabel}>EST. 1RM</Text>
-                                <Text style={styles.metricValue}>
-                                  {Math.round(sessionEst1RM)}kg
-                                </Text>
-                              </View>
-                            </View>
-                            {chevronElement}
-
-                            {/* Expanded set list details */}
-                            {isExpanded && (
-                              <View style={styles.expandedContainer}>
-                                <View style={styles.expandedSetsList}>
-                                  {entry.sets.map((set, setIdx) => {
-                                    return (
-                                      <View key={setIdx} style={styles.expandedSetRow}>
-                                        <Text style={styles.expandedSetIndexText}>
-                                          {setIdx + 1}
-                                        </Text>
-                                        <Text style={styles.expandedSetDetailsText}>
-                                          <Text style={styles.expandedSetValueText}>{set.reps}</Text>
-                                          <Text style={styles.expandedSetUnitText}> reps</Text>
-                                          <Text style={styles.expandedSetTimesText}>  ×  </Text>
-                                          <Text style={styles.expandedSetValueText}>{set.weightKg}</Text>
-                                          <Text style={styles.expandedSetUnitText}> kg</Text>
-                                        </Text>
-                                      </View>
-                                    );
-                                  })}
+                            <Pressable
+                              onPress={() => toggleSessionExpand(entry.id)}
+                              android_ripple={ripple.surface}
+                              style={({ pressed }) => [
+                                styles.cardPressable,
+                                pressed && Platform.OS === 'ios' && { opacity: 0.7 }
+                              ]}
+                            >
+                              <View style={styles.metricsContainerCompact}>
+                                <View style={[styles.metricColumnLeft, { alignItems: 'center' }]}>
+                                  <Text style={styles.metricLabel}>BEST SET</Text>
+                                  <Text style={styles.metricValue}>
+                                    {bestSet.weightKg}kg × {bestSet.reps}
+                                  </Text>
+                                </View>
+                                <View style={[styles.metricColumnCenter, { alignItems: 'center' }]}>
+                                  <Text style={styles.metricLabel}>DATE</Text>
+                                  <Text style={styles.dateTextLargePrimary}>{dateString}</Text>
+                                </View>
+                                <View style={[styles.metricColumnRight, { alignItems: 'center' }]}>
+                                  <Text style={styles.metricLabel}>EST. 1RM</Text>
+                                  <Text style={styles.metricValue}>
+                                    {Math.round(sessionEst1RM)}kg
+                                  </Text>
                                 </View>
                               </View>
-                            )}
-                          </Pressable>
-                        </Card>
-                      );
-                    })}
-                  </View>
-                );
-              })()}
-            </View>
-          )}
+                              {chevronElement}
+
+                              {isExpanded && (
+                                <View style={styles.expandedContainer}>
+                                  <View style={styles.expandedSetsList}>
+                                    {entry.sets.map((set: any, setIdx: number) => {
+                                      return (
+                                        <View key={setIdx} style={styles.expandedSetRow}>
+                                          <Text style={styles.expandedSetIndexText}>
+                                            {setIdx + 1}
+                                          </Text>
+                                          <Text style={styles.expandedSetDetailsText}>
+                                            <Text style={styles.expandedSetValueText}>{set.reps}</Text>
+                                            <Text style={styles.expandedSetUnitText}> reps</Text>
+                                            <Text style={styles.expandedSetTimesText}>  ×  </Text>
+                                            <Text style={styles.expandedSetValueText}>{set.weightKg}</Text>
+                                            <Text style={styles.expandedSetUnitText}> kg</Text>
+                                          </Text>
+                                        </View>
+                                      );
+                                    })}
+                                  </View>
+                                </View>
+                              )}
+                            </Pressable>
+                          </Card>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
+              </View>
+            )}
           </TabErrorBoundary>
         </ScrollView>
       </SafeAreaView>
@@ -491,227 +535,178 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderColor: colors.border,
   },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: spacing.md,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xs,
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+  closeButton: {
+    padding: spacing.xs,
   },
-  titleContainer: {
+  headerTitleContainer: {
     flex: 1,
+    alignItems: 'center',
   },
-  title: {
-    color: colors.textPrimary,
+  headerTitle: {
     fontSize: font.sizes.lg,
     fontFamily: font.bold,
-    letterSpacing: -0.5,
+    color: colors.textPrimary,
+  },
+  headerSubtitle: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   tabsWrapper: {
-    paddingHorizontal: 24,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.bg,
   },
   scrollContent: {
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
   },
   tabContent: {
-    marginTop: spacing.sm,
+    gap: spacing.lg,
   },
   imagePlaceholder: {
-    height: 160,
     width: '100%',
-    backgroundColor: colors.surface2,
+    height: 180,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
   },
   exerciseImage: {
     width: '100%',
     height: '100%',
   },
   noImageContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noImageText: {
-    color: colors.textMuted,
-    fontFamily: font.medium,
-    fontSize: font.sizes.xs,
-    marginTop: spacing.xs,
-  },
-  instructionsCard: {
-    backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-  },
-  instructionsTitle: {
-    color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.sm,
-    marginBottom: spacing.xs,
-  },
-  instructionsText: {
-    color: colors.textSecondary,
-    fontFamily: font.regular,
-    fontSize: font.sizes.sm,
-    lineHeight: 20,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  pillCard: {
     flex: 1,
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  pillLabel: {
-    color: colors.textMuted,
-    fontFamily: font.semibold,
-    fontSize: font.sizes.xs - 1,
-    letterSpacing: 0.5,
-    marginBottom: 2,
+  sectionCard: {
+    padding: spacing.md,
   },
-  pillValue: {
-    color: colors.textPrimary,
+  sectionTitle: {
+    fontSize: font.sizes.xs,
     fontFamily: font.bold,
-    fontSize: font.sizes.sm,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
   },
-  notesContainer: {
-    backgroundColor: colors.surface,
+  instructionStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  stepBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceHigh,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepBadgeText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    color: colors.textPrimary,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: font.sizes.sm,
+    fontFamily: font.regular,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   notesHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
-  sectionTitle: {
-    color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.md,
-    marginBottom: 0,
-  },
-  savedToast: {
-    color: colors.success,
-    fontFamily: font.semibold,
+  savedBadgeText: {
     fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    color: colors.success,
   },
   notesInput: {
-    backgroundColor: colors.surface2,
-    borderColor: colors.border,
-    borderWidth: 1,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
+    padding: spacing.md,
     color: colors.textPrimary,
     fontFamily: font.regular,
     fontSize: font.sizes.sm,
-    padding: spacing.md,
-    height: 72,
-    marginBottom: 0,
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   chartWrapper: {
-    marginTop: spacing.md,
+    width: '100%',
+  },
+  emptyHistoryContainer: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
+  emptyHistoryText: {
+    fontSize: font.sizes.sm,
+    fontFamily: font.medium,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   historyList: {
-    gap: spacing.xs,
+    gap: spacing.md,
   },
   historyCard: {
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
+    overflow: 'hidden',
   },
   cardPressable: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    padding: spacing.md,
   },
-  cardHeaderRow: {
+  metricsContainerCompact: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardHeaderDate: {
-    color: colors.textSecondary,
-    fontFamily: font.semibold,
-    fontSize: font.sizes.sm,
-  },
-  cardHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  metricsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
   },
   metricColumnLeft: {
     flex: 1,
-    alignItems: 'flex-start',
+  },
+  metricColumnCenter: {
+    flex: 1,
   },
   metricColumnRight: {
     flex: 1,
-    alignItems: 'flex-end',
   },
   metricLabel: {
+    fontSize: 10,
+    fontFamily: font.bold,
     color: colors.textMuted,
-    fontFamily: font.semibold,
-    fontSize: font.sizes.xs - 1,
     letterSpacing: 0.5,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   metricValue: {
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
     color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.base,
   },
-  metricValueAccent: {
-    color: colors.accent,
-    fontFamily: font.bold,
-    fontSize: font.sizes.base,
-  },
-  metricSub: {
-    color: colors.textMuted,
-    fontFamily: font.regular,
-    fontSize: font.sizes.xs,
-    marginTop: 2,
-  },
-  deltaText: {
+  dateTextLargePrimary: {
+    fontSize: font.sizes.sm,
     fontFamily: font.semibold,
-    fontSize: font.sizes.xs - 1,
-    marginTop: 1,
+    color: colors.textSecondary,
+  },
+  bottomChevronContainer: {
+    alignItems: 'center',
+    marginTop: spacing.xs,
   },
   expandedContainer: {
-    backgroundColor: colors.bg,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderColor: colors.border,
   },
   expandedSetsList: {
     gap: spacing.xs,
@@ -719,109 +714,28 @@ const styles = StyleSheet.create({
   expandedSetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.xs,
+    paddingVertical: 4,
   },
   expandedSetIndexText: {
-    color: colors.textMuted,
-    fontFamily: font.semibold,
-    fontSize: font.sizes.xs,
     width: 24,
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    color: colors.textMuted,
   },
   expandedSetDetailsText: {
     fontSize: font.sizes.sm,
+    fontFamily: font.medium,
   },
   expandedSetValueText: {
     color: colors.textPrimary,
-    fontFamily: font.bold,
+    fontFamily: font.semibold,
   },
   expandedSetUnitText: {
     color: colors.textSecondary,
-    fontFamily: font.medium,
   },
   expandedSetTimesText: {
     color: colors.textMuted,
-    fontFamily: font.regular,
-  },
-  emptyHistoryContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xxl,
-  },
-  emptyHistoryText: {
-    color: colors.textMuted,
-    fontFamily: font.medium,
-    fontSize: font.sizes.sm,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  bottomChevronContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xs,
-    paddingBottom: 0,
-  },
-  previewControlBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  previewArrow: {
-    padding: spacing.xs,
-    backgroundColor: colors.surface2,
-    borderRadius: radius.xs,
-  },
-  previewLabel: {
-    color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.sm,
-  },
-  metricsContainerCompact: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: 0,
-  },
-  metricColumnCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  dateTextLargePrimary: {
-    color: colors.textPrimary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.base,
-  },
-  dateTextLargeHighlight: {
-    color: colors.highlight,
-    fontFamily: font.bold,
-    fontSize: font.sizes.base,
-  },
-  dateTextLargeMuted: {
-    color: colors.textSecondary,
-    fontFamily: font.bold,
-    fontSize: font.sizes.base,
-  },
-  centeredDateBadgeCompact: {
-    backgroundColor: colors.surface2,
-    borderRadius: radius.xs,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-  },
-  metricLabelBelow: {
-    color: colors.textMuted,
-    fontFamily: font.semibold,
-    fontSize: font.sizes.xs - 2,
-    letterSpacing: 0.5,
-    marginTop: 2,
   },
 });
 
-export default ExerciseInsightsModal;
+export default React.memo(ExerciseInsightsModal);

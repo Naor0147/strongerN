@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "modalMountMs": 11836,
+    "modalMountMs": 9690,
     "focusTransition": {
       "mean": 0.01,
       "min": 0,
@@ -12,13 +12,13 @@
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 7.43,
+      "mean": 4.14,
       "min": 0,
-      "max": 24.3,
+      "max": 13.9,
       "p50": 0.1,
-      "p95": 21.8,
-      "p99": 24.3,
-      "stdDev": 9.59,
+      "p95": 11.8,
+      "p99": 13,
+      "stdDev": 5.32,
       "samples": 109
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 46842,
+    "modalMountMs": 23954,
     "focusTransition": {
-      "mean": 0.06,
+      "mean": 0.04,
       "min": 0,
       "max": 0.3,
       "p50": 0,
       "p95": 0.2,
       "p99": 0.3,
-      "stdDev": 0.09,
+      "stdDev": 0.07,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 45.22,
+      "mean": 28.31,
       "min": 0,
-      "max": 153.1,
-      "p50": 0.5,
-      "p95": 138.8,
-      "p99": 152.6,
-      "stdDev": 58.44,
+      "max": 81.6,
+      "p50": 0.3,
+      "p95": 80.1,
+      "p99": 81.3,
+      "stdDev": 36.28,
       "samples": 109
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 57704,
+    "modalMountMs": 48169,
     "focusTransition": {
-      "mean": 0.1,
+      "mean": 0.08,
       "min": 0,
-      "max": 0.4,
-      "p50": 0.1,
+      "max": 0.3,
+      "p50": 0,
       "p95": 0.3,
-      "p99": 0.4,
-      "stdDev": 0.1,
+      "p99": 0.3,
+      "stdDev": 0.11,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 64.31,
+      "mean": 49.07,
       "min": 0.1,
-      "max": 268.7,
-      "p50": 0.5,
-      "p95": 241.3,
-      "p99": 263,
-      "stdDev": 87.07,
+      "max": 184.8,
+      "p50": 0.4,
+      "p95": 135.7,
+      "p99": 144.5,
+      "stdDev": 63.12,
       "samples": 109
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-18T16:04:07.082Z"
+  "timestamp": "2026-07-18T16:41:59.661Z"
 }
