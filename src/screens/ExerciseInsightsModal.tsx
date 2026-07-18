@@ -37,6 +37,38 @@ import {
   avgRepsPerWorkout,
 } from '../utils/exerciseStats';
 
+class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('ExerciseInsightsModal TabErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ padding: spacing.xl, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <Text style={{ color: colors.textPrimary, fontFamily: font.bold, fontSize: font.sizes.base, marginTop: spacing.md }}>
+            Unable to load chart data
+          </Text>
+          <Text style={{ color: colors.textMuted, fontFamily: font.regular, fontSize: font.sizes.sm, textAlign: 'center', marginTop: spacing.xs }}>
+            An error occurred while rendering performance insights. Your workout is safe.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Helper functions for normal distribution percentile estimation
 function normalCDF(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
@@ -208,8 +240,9 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
 
         {/* Tab Scroll Content */}
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {activeTab === 'info' && (
-            <View style={styles.tabContent}>
+          <TabErrorBoundary key={activeTab}>
+            {activeTab === 'info' && (
+              <View style={styles.tabContent}>
               {/* Image placeholder / barbell icon */}
               <View style={styles.imagePlaceholder}>
                 {exerciseLibraryEntry?.imageUri ? (
@@ -443,6 +476,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
               })()}
             </View>
           )}
+          </TabErrorBoundary>
         </ScrollView>
       </SafeAreaView>
     </Modal>

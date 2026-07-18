@@ -76,6 +76,7 @@ const CircleItem = React.memo(({
   }, [isLast, totalPoints]);
 
   const animatedProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const targetY = getY(point.y);
     const baselineY = height - paddingBottom;
@@ -94,6 +95,7 @@ const CircleItem = React.memo(({
   });
 
   const animatedGlowRingProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const targetY = getY(point.y);
     const baselineY = height - paddingBottom;
@@ -111,6 +113,7 @@ const CircleItem = React.memo(({
   });
 
   const animatedHaloProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const pulse = pulseProgress.value;
     const targetY = getY(point.y);
@@ -249,6 +252,7 @@ const LineChart: React.FC<LineChartProps> = ({
   const plotPaddingHorizontal = 16;
 
   const getX = (xVal: number) => {
+    'worklet';
     if (xMax === xMin || isNaN(xMin) || isNaN(xMax)) return paddingLeft + (width - paddingLeft - paddingRight) / 2;
     const res = paddingLeft + plotPaddingHorizontal + 
       ((xVal - xMin) / (xMax - xMin)) * (width - paddingLeft - paddingRight - 2 * plotPaddingHorizontal);
@@ -256,6 +260,7 @@ const LineChart: React.FC<LineChartProps> = ({
   };
 
   const getY = (yVal: number) => {
+    'worklet';
     if (yMax === yMin || isNaN(yMin) || isNaN(yMax)) return paddingTop + (height - paddingTop - paddingBottom) / 2;
     const res = height - paddingBottom - ((yVal - yMin) / (yMax - yMin)) * (height - paddingTop - paddingBottom);
     return isNaN(res) ? height - paddingBottom : res;
@@ -263,6 +268,7 @@ const LineChart: React.FC<LineChartProps> = ({
 
   // Animated props for the line path
   const animatedLineProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const N = validData.length;
     const path = validData.map((d, i) => {
@@ -283,6 +289,7 @@ const LineChart: React.FC<LineChartProps> = ({
 
   // Animated props for the line drop shadow path (offset down by 3px)
   const animatedShadowProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const N = validData.length;
     const path = validData.map((d, i) => {
@@ -303,6 +310,7 @@ const LineChart: React.FC<LineChartProps> = ({
 
   // Animated props for the gradient fill path
   const animatedFillProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const N = validData.length;
     const linePoints = validData.map((d, i) => {

@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "modalMountMs": 9716,
+    "modalMountMs": 10023,
     "focusTransition": {
       "mean": 0.01,
       "min": 0,
@@ -8,17 +8,17 @@
       "p50": 0,
       "p95": 0.1,
       "p99": 0.1,
-      "stdDev": 0.02,
+      "stdDev": 0.03,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 4.33,
+      "mean": 4.43,
       "min": 0,
-      "max": 23.3,
+      "max": 16.5,
       "p50": 0.1,
-      "p95": 12.7,
-      "p99": 16.6,
-      "stdDev": 5.72,
+      "p95": 13.1,
+      "p99": 15,
+      "stdDev": 5.74,
       "samples": 109
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 23941,
+    "modalMountMs": 25350,
     "focusTransition": {
-      "mean": 0.04,
+      "mean": 0.03,
       "min": 0,
-      "max": 0.3,
+      "max": 0.2,
       "p50": 0,
       "p95": 0.2,
-      "p99": 0.3,
-      "stdDev": 0.08,
+      "p99": 0.2,
+      "stdDev": 0.06,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 28.11,
+      "mean": 28.93,
       "min": 0,
-      "max": 98.7,
+      "max": 103.5,
       "p50": 0.3,
-      "p95": 78.7,
-      "p99": 88.7,
-      "stdDev": 36.08,
+      "p95": 80.9,
+      "p99": 86.4,
+      "stdDev": 37.12,
       "samples": 109
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 47240,
+    "modalMountMs": 47668,
     "focusTransition": {
-      "mean": 0.09,
+      "mean": 0.05,
       "min": 0,
       "max": 0.3,
       "p50": 0,
-      "p95": 0.3,
+      "p95": 0.2,
       "p99": 0.3,
-      "stdDev": 0.1,
+      "stdDev": 0.08,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 50.31,
+      "mean": 47.34,
       "min": 0.1,
-      "max": 169.7,
-      "p50": 0.4,
-      "p95": 145.5,
-      "p99": 168.2,
-      "stdDev": 64.74,
+      "max": 199.9,
+      "p50": 0.5,
+      "p95": 135.2,
+      "p99": 183.9,
+      "stdDev": 61.44,
       "samples": 109
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-18T15:45:56.438Z"
+  "timestamp": "2026-07-18T15:56:05.914Z"
 }

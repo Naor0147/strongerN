@@ -47,16 +47,19 @@ const BarItem = React.memo(({
   pulseProgress,
 }: any) => {
   const getBarPath = (x: number, y: number, w: number, hVal: number) => {
+    'worklet';
     const r = Math.min(6, w / 2, hVal / 2);
     return `M ${x} ${y + hVal} L ${x} ${y + r} Q ${x} ${y} ${x + r} ${y} L ${x + w - r} ${y} Q ${x + w} ${y} ${x + w} ${y + r} L ${x + w} ${y + hVal} Z`;
   };
 
   const getCapPath = (x: number, y: number, w: number, hVal: number) => {
+    'worklet';
     const r = Math.min(6, w / 2, hVal / 2);
     return `M ${x} ${y + r} Q ${x} ${y} ${x + r} ${y} L ${x + w - r} ${y} Q ${x + w} ${y} ${x + w} ${y + r}`;
   };
 
   const animatedProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     
     // Stagger progress from left to right with smoothstep
@@ -73,6 +76,7 @@ const BarItem = React.memo(({
   });
 
   const animatedCapProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     
     const delay = (idx / 6) * 0.25;
@@ -88,6 +92,7 @@ const BarItem = React.memo(({
   });
 
   const animatedGlowProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const pulse = pulseProgress.value;
     
@@ -247,6 +252,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
 
   // Animated Props for Glow & Pin Elements (delayed until the sweep reaches the user's bar)
   const ambientGlowProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const pulse = pulseProgress.value;
     
@@ -261,6 +267,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   });
 
   const pinLineProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     
     const userDelay = (userBarIdx / 6) * 0.25;
@@ -276,6 +283,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   });
 
   const pinBaseOuterProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const pulse = pulseProgress.value;
     
@@ -290,6 +298,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   });
 
   const pinBaseMiddleProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     const pulse = pulseProgress.value;
     
@@ -304,6 +313,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   });
 
   const pinBaseInnerProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     
     const userDelay = (userBarIdx / 6) * 0.25;
@@ -317,16 +327,14 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   });
 
   const tooltipProps = useAnimatedProps(() => {
+    'worklet';
     const progress = entryProgress.value;
     
     const userDelay = (userBarIdx / 6) * 0.25;
     const t = Math.max(0, Math.min(1, (progress - userDelay) / 0.75));
     const userProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
     
-    const scale = userProgress;
-    const transform = `translate(${targetX}, ${pinTopY}) scale(${scale}) translate(${-targetX}, ${-pinTopY})`;
     return {
-      transform,
       opacity: userProgress,
     };
   });
