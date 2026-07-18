@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "modalMountMs": 10023,
+    "modalMountMs": 11836,
     "focusTransition": {
       "mean": 0.01,
       "min": 0,
@@ -12,13 +12,13 @@
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 4.43,
+      "mean": 7.43,
       "min": 0,
-      "max": 16.5,
+      "max": 24.3,
       "p50": 0.1,
-      "p95": 13.1,
-      "p99": 15,
-      "stdDev": 5.74,
+      "p95": 21.8,
+      "p99": 24.3,
+      "stdDev": 9.59,
       "samples": 109
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 25350,
+    "modalMountMs": 46842,
     "focusTransition": {
-      "mean": 0.03,
+      "mean": 0.06,
       "min": 0,
-      "max": 0.2,
+      "max": 0.3,
       "p50": 0,
       "p95": 0.2,
-      "p99": 0.2,
-      "stdDev": 0.06,
+      "p99": 0.3,
+      "stdDev": 0.09,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 28.93,
+      "mean": 45.22,
       "min": 0,
-      "max": 103.5,
-      "p50": 0.3,
-      "p95": 80.9,
-      "p99": 86.4,
-      "stdDev": 37.12,
+      "max": 153.1,
+      "p50": 0.5,
+      "p95": 138.8,
+      "p99": 152.6,
+      "stdDev": 58.44,
       "samples": 109
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 47668,
+    "modalMountMs": 57704,
     "focusTransition": {
-      "mean": 0.05,
+      "mean": 0.1,
       "min": 0,
-      "max": 0.3,
-      "p50": 0,
-      "p95": 0.2,
-      "p99": 0.3,
-      "stdDev": 0.08,
+      "max": 0.4,
+      "p50": 0.1,
+      "p95": 0.3,
+      "p99": 0.4,
+      "stdDev": 0.1,
       "samples": 49
     },
     "keystrokeRender": {
-      "mean": 47.34,
+      "mean": 64.31,
       "min": 0.1,
-      "max": 199.9,
+      "max": 268.7,
       "p50": 0.5,
-      "p95": 135.2,
-      "p99": 183.9,
-      "stdDev": 61.44,
+      "p95": 241.3,
+      "p99": 263,
+      "stdDev": 87.07,
       "samples": 109
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-18T15:56:05.914Z"
+  "timestamp": "2026-07-18T16:04:07.082Z"
 }

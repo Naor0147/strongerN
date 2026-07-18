@@ -1,17 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native';
 import Svg, { Path, Text as SvgText, Defs, LinearGradient, Stop, Circle, Line, G } from 'react-native-svg';
-import Animated, {
-  useSharedValue,
-  useAnimatedProps,
-  withTiming,
-  Easing,
-  withRepeat,
-  withDelay,
-} from 'react-native-reanimated';
 import { colors, font, spacing, radius } from '../../../theme';
-
-const ENTRY_DURATION = 1400;
 
 export interface DataPoint {
   x: number;
@@ -29,159 +19,12 @@ export interface LineChartProps {
   title?: string;
 }
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
 const TrendingUpIcon = () => (
   <Svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: spacing.xs }}>
     <Path d="m22 7-8.5 8.5-5-5L2 17" />
     <Path d="M16 7h6v6" />
   </Svg>
 );
-
-// Helper component for animating individual circles to avoid calling hooks inside a loop
-const CircleItem = React.memo(({
-  point,
-  idx,
-  totalPoints,
-  getX,
-  getY,
-  height,
-  paddingBottom,
-  color,
-  entryProgress,
-  isLast,
-}: any) => {
-  const pulseProgress = useSharedValue(0);
-
-  useEffect(() => {
-    if (isLast) {
-      const delay = totalPoints > 1 ? 0.25 : 0;
-      const startDelay = ENTRY_DURATION * delay;
-      const activeDuration = 1400; // 1400ms duration
-      
-      pulseProgress.value = 0;
-      pulseProgress.value = withDelay(
-        startDelay,
-        withRepeat(
-          withTiming(1, {
-            duration: activeDuration / 4, // 4 repetitions: 350ms per step (smoother)
-            easing: Easing.bezier(0.25, 1, 0.5, 1),
-          }),
-          4, // 4 repetitions (2 full beats: up/down)
-          true
-        )
-      );
-    }
-  }, [isLast, totalPoints]);
-
-  const animatedProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const targetY = getY(point.y);
-    const baselineY = height - paddingBottom;
-    
-    // Left-to-right staggered delay
-    const delay = totalPoints > 1 ? (idx / (totalPoints - 1)) * 0.25 : 0;
-    const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-    const pointProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
-    
-    const y = baselineY - (baselineY - targetY) * pointProgress;
-    return {
-      cx: getX(point.x),
-      cy: y,
-      opacity: pointProgress,
-    };
-  });
-
-  const animatedGlowRingProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const targetY = getY(point.y);
-    const baselineY = height - paddingBottom;
-    
-    const delay = totalPoints > 1 ? (idx / (totalPoints - 1)) * 0.25 : 0;
-    const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-    const pointProgress = t * t * (3 - 2 * t);
-    
-    const y = baselineY - (baselineY - targetY) * pointProgress;
-    return {
-      cx: getX(point.x),
-      cy: y,
-      opacity: pointProgress * 0.18,
-    };
-  });
-
-  const animatedHaloProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const pulse = pulseProgress.value;
-    const targetY = getY(point.y);
-    const baselineY = height - paddingBottom;
-    
-    const delay = totalPoints > 1 ? (idx / (totalPoints - 1)) * 0.25 : 0;
-    const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-    const pointProgress = t * t * (3 - 2 * t);
-    
-    const y = baselineY - (baselineY - targetY) * pointProgress;
-    
-    return {
-      cx: getX(point.x),
-      cy: y,
-      r: (10 + pulse * 4) * pointProgress, // radius pulses between 10 and 14
-      opacity: (0.15 + pulse * 0.15) * pointProgress,
-    };
-  });
-
-  if (isLast) {
-    return (
-      <G>
-        {/* Pulsing halo */}
-        <AnimatedCircle
-          animatedProps={animatedHaloProps}
-          fill={colors.highlight}
-        />
-        {/* Glow ring */}
-        <AnimatedCircle
-          animatedProps={animatedGlowRingProps}
-          r={7}
-          fill="none"
-          stroke={colors.highlight}
-          strokeWidth={1.5}
-        />
-        {/* Main Circle */}
-        <AnimatedCircle
-          animatedProps={animatedProps}
-          r={6}
-          fill={colors.bg}
-          stroke={colors.highlight}
-          strokeWidth={2.5}
-        />
-      </G>
-    );
-  }
-
-  return (
-    <G>
-      {/* Glow ring */}
-      <AnimatedCircle
-        animatedProps={animatedGlowRingProps}
-        r={7}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-      />
-      {/* Main Circle */}
-      <AnimatedCircle
-        animatedProps={animatedProps}
-        r={4}
-        fill={colors.bg}
-        stroke={color}
-        strokeWidth={2}
-      />
-    </G>
-  );
-});
 
 const LineChart: React.FC<LineChartProps> = ({
   data,
@@ -195,18 +38,9 @@ const LineChart: React.FC<LineChartProps> = ({
   const [width, setWidth] = useState(300);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    setWidth(e.nativeEvent.layout.width);
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setWidth(w);
   };
-
-  const entryProgress = useSharedValue(0);
-
-  useEffect(() => {
-    entryProgress.value = 0;
-    entryProgress.value = withTiming(1, {
-      duration: ENTRY_DURATION,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-    });
-  }, [data]);
 
   const validData = React.useMemo(() => {
     if (!Array.isArray(data)) return [];
@@ -230,6 +64,7 @@ const LineChart: React.FC<LineChartProps> = ({
   const paddingBottom = 30;
   const paddingLeft = 45;
   const paddingRight = 20;
+  const plotPaddingHorizontal = 16;
 
   // Limits
   const xValues = validData.map((d) => d.x);
@@ -242,17 +77,12 @@ const LineChart: React.FC<LineChartProps> = ({
   const yMaxVal = Math.max(...yValues);
   const yRange = isNaN(yMaxVal - yMinVal) ? 0 : yMaxVal - yMinVal;
   
-  // Pad the y-axis range so that there is a comfortable baseline height.
   const yPadMin = Math.max(5, yRange * 1.2);
   const yPadMax = Math.max(2, yRange * 0.3);
   const yMin = Math.max(0, yMinVal - yPadMin);
   const yMax = yMaxVal + yPadMax;
 
-  // Add horizontal margin to the plotting area so points aren't cut off at the left/right boundaries.
-  const plotPaddingHorizontal = 16;
-
   const getX = (xVal: number) => {
-    'worklet';
     if (xMax === xMin || isNaN(xMin) || isNaN(xMax)) return paddingLeft + (width - paddingLeft - paddingRight) / 2;
     const res = paddingLeft + plotPaddingHorizontal + 
       ((xVal - xMin) / (xMax - xMin)) * (width - paddingLeft - paddingRight - 2 * plotPaddingHorizontal);
@@ -260,100 +90,31 @@ const LineChart: React.FC<LineChartProps> = ({
   };
 
   const getY = (yVal: number) => {
-    'worklet';
     if (yMax === yMin || isNaN(yMin) || isNaN(yMax)) return paddingTop + (height - paddingTop - paddingBottom) / 2;
     const res = height - paddingBottom - ((yVal - yMin) / (yMax - yMin)) * (height - paddingTop - paddingBottom);
     return isNaN(res) ? height - paddingBottom : res;
   };
 
-  // Animated props for the line path
-  const animatedLineProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const N = validData.length;
-    const path = validData.map((d, i) => {
-      const x = getX(d.x);
-      const targetY = getY(d.y);
-      const baselineY = height - paddingBottom;
-      
-      const delay = (i / Math.max(1, N - 1)) * 0.25;
-      const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-      const pointProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
-      
-      const y = baselineY - (baselineY - targetY) * pointProgress;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    }).join(' ');
-    
-    return { d: path };
-  });
+  const linePath = validData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(d.x)} ${getY(d.y)}`).join(' ');
+  const shadowPath = validData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(d.x)} ${getY(d.y) + 3}`).join(' ');
+  const fillPath = `${linePath} L ${getX(validData[validData.length - 1].x)} ${height - paddingBottom} L ${getX(validData[0].x)} ${height - paddingBottom} Z`;
 
-  // Animated props for the line drop shadow path (offset down by 3px)
-  const animatedShadowProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const N = validData.length;
-    const path = validData.map((d, i) => {
-      const x = getX(d.x);
-      const targetY = getY(d.y) + 3; // offset down
-      const baselineY = height - paddingBottom + 3;
-      
-      const delay = (i / Math.max(1, N - 1)) * 0.25;
-      const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-      const pointProgress = t * t * (3 - 2 * t);
-      
-      const y = baselineY - (baselineY - targetY) * pointProgress;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    }).join(' ');
-    
-    return { d: path };
-  });
-
-  // Animated props for the gradient fill path
-  const animatedFillProps = useAnimatedProps(() => {
-    'worklet';
-    const progress = entryProgress.value;
-    const N = validData.length;
-    const linePoints = validData.map((d, i) => {
-      const x = getX(d.x);
-      const targetY = getY(d.y);
-      const baselineY = height - paddingBottom;
-      
-      const delay = (i / Math.max(1, N - 1)) * 0.25;
-      const t = Math.max(0, Math.min(1, (progress - delay) / 0.75));
-      const pointProgress = t * t * (3 - 2 * t); // Smoothstep interpolation
-      
-      const y = baselineY - (baselineY - targetY) * pointProgress;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    }).join(' ');
-    
-    const path = `${linePoints} L ${getX(validData[validData.length - 1].x)} ${height - paddingBottom} L ${getX(validData[0].x)} ${height - paddingBottom} Z`;
-    return { d: path };
-  });
-
-  // Grid tick values (3 steps) - Memorized
-  const yTicks = React.useMemo(() => {
-    return [yMin, yMin + (yMax - yMin) / 2, yMax];
-  }, [yMin, yMax]);
-
-  const xTicksIndices = React.useMemo(() => {
-    return validData.length <= 4 
-      ? validData.map((_, i) => i) 
-      : [0, Math.floor((validData.length - 1) / 3), Math.floor((validData.length - 1) * 2 / 3), validData.length - 1];
-  }, [validData.length]);
+  const yTicks = [yMin, yMin + (yMax - yMin) / 2, yMax];
+  const xTicksIndices = validData.length <= 4 
+    ? validData.map((_, i) => i) 
+    : [0, Math.floor((validData.length - 1) / 3), Math.floor((validData.length - 1) * 2 / 3), validData.length - 1];
 
   return (
     <View style={styles.container} onLayout={onLayout}>
       {title && <Text style={styles.chartTitle}>{title}</Text>}
       <Svg width={width} height={height} style={{ overflow: 'visible' }}>
         <Defs>
-          {/* Richer 3-stop gradient fill */}
           <LinearGradient id="chartGlow" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0%" stopColor={color} stopOpacity={0.30} />
             <Stop offset="40%" stopColor={color} stopOpacity={0.12} />
             <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
           </LinearGradient>
           
-          {/* Edge-fade grid lines gradient */}
           <LinearGradient id="gridLineGrad" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0%" stopColor={colors.border} stopOpacity={0.1} />
             <Stop offset="15%" stopColor={colors.border} stopOpacity={0.7} />
@@ -398,11 +159,11 @@ const LineChart: React.FC<LineChartProps> = ({
         />
 
         {/* Gradient fill */}
-        <AnimatedPath animatedProps={animatedFillProps} fill="url(#chartGlow)" />
+        <Path d={fillPath} fill="url(#chartGlow)" />
 
         {/* Line drop shadow */}
-        <AnimatedPath
-          animatedProps={animatedShadowProps}
+        <Path
+          d={shadowPath}
           fill="none"
           stroke="#000"
           strokeWidth={2.5}
@@ -411,11 +172,11 @@ const LineChart: React.FC<LineChartProps> = ({
           strokeLinejoin="round"
         />
 
-        {/* Glow path - wider and semi-transparent */}
+        {/* Glow path */}
         {glow && (
           <G>
-            <AnimatedPath
-              animatedProps={animatedLineProps}
+            <Path
+              d={linePath}
               fill="none"
               stroke={color}
               strokeWidth={8}
@@ -423,8 +184,8 @@ const LineChart: React.FC<LineChartProps> = ({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <AnimatedPath
-              animatedProps={animatedLineProps}
+            <Path
+              d={linePath}
               fill="none"
               stroke={color}
               strokeWidth={5}
@@ -436,24 +197,29 @@ const LineChart: React.FC<LineChartProps> = ({
         )}
 
         {/* Line stroke */}
-        <AnimatedPath animatedProps={animatedLineProps} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={linePath} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
 
         {/* Data points (circles) */}
-        {validData.map((d, i) => (
-          <CircleItem
-            key={i}
-            point={d}
-            idx={i}
-            totalPoints={validData.length}
-            getX={getX}
-            getY={getY}
-            height={height}
-            paddingBottom={paddingBottom}
-            color={color}
-            entryProgress={entryProgress}
-            isLast={i === validData.length - 1}
-          />
-        ))}
+        {validData.map((d, i) => {
+          const isLast = i === validData.length - 1;
+          const cx = getX(d.x);
+          const cy = getY(d.y);
+          if (isLast) {
+            return (
+              <G key={i}>
+                <Circle cx={cx} cy={cy} r={11} fill={colors.highlight} opacity={0.2} />
+                <Circle cx={cx} cy={cy} r={7} fill="none" stroke={colors.highlight} strokeWidth={1.5} opacity={0.6} />
+                <Circle cx={cx} cy={cy} r={5} fill={colors.bg} stroke={colors.highlight} strokeWidth={2.5} />
+              </G>
+            );
+          }
+          return (
+            <G key={i}>
+              <Circle cx={cx} cy={cy} r={6} fill="none" stroke={color} strokeWidth={1.5} opacity={0.2} />
+              <Circle cx={cx} cy={cy} r={4} fill={colors.bg} stroke={color} strokeWidth={2} />
+            </G>
+          );
+        })}
 
         {/* x-axis labels */}
         {xTicksIndices.map((idx) => {
