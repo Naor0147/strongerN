@@ -1354,6 +1354,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         }
         await dismissWorkoutBackgroundNotification();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (activeInputRef.current) {
+          updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+        }
+        if (hasSyncedPropsRef.current) {
+          flushExercisesToParent(activeExercisesRef.current);
+        }
         if (visibleRef.current) {
           const initialActive = restTimerEmitter.isActive();
           const initialRemaining = restTimerEmitter.getRemaining();
@@ -1410,63 +1416,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       dismissWorkoutBackgroundNotification().catch(() => {});
     };
   }, []);
-
-  // Set completeness toggler
-  const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
-    const targetSet = activeExercisesRef.current[exIdx]?.sets[setIdx];
-    if (!targetSet) return;
-    const willBeCompleted = !targetSet.completed;
-
-    if (willBeCompleted) {
-      playSetCheckedSound();
-      playSatisfyingClickFinishSet();
-      if (isAutoTimerEnabled) {
-        const customRest = activeExercisesRef.current[exIdx]?.autoTimer;
-        const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
-        restTimerEmitter.start(duration);
-      }
-    } else {
-      playUncheckSetSound();
-    }
-
-    safeLayoutAnim();
-    setActiveExercises(prev => {
-      if (!prev[exIdx]) return prev;
-      const targetEx = prev[exIdx];
-      if (!targetEx.sets[setIdx]) return prev;
-      const targetSet = targetEx.sets[setIdx];
-
-      let updatedSet = { ...targetSet, completed: willBeCompleted };
-      if (willBeCompleted) {
-        if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
-          updatedSet.weight = (updatedSet as any).suggestedWeight;
-        }
-        if (!updatedSet.reps && (updatedSet as any).suggestedReps) {
-          updatedSet.reps = (updatedSet as any).suggestedReps;
-        }
-        if (updatedSet.isUnilateral) {
-          if (!updatedSet.leftWeight && (updatedSet as any).suggestedLeftWeight) {
-            updatedSet.leftWeight = (updatedSet as any).suggestedLeftWeight;
-          }
-          if (!updatedSet.leftReps && (updatedSet as any).suggestedLeftReps) {
-            updatedSet.leftReps = (updatedSet as any).suggestedLeftReps;
-          }
-          if (!updatedSet.rightWeight && (updatedSet as any).suggestedRightWeight) {
-            updatedSet.rightWeight = (updatedSet as any).suggestedRightWeight;
-          }
-          if (!updatedSet.rightReps && (updatedSet as any).suggestedRightReps) {
-            updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
-          }
-        }
-      }
-
-      const nextSets = [...targetEx.sets];
-      nextSets[setIdx] = updatedSet;
-      const nextArr = [...prev];
-      nextArr[exIdx] = { ...targetEx, sets: nextSets };
-      return nextArr;
-    });
-  }, [isAutoTimerEnabled, defaultRestDuration]);
 
   // Set weight/reps/rpe/category updater
   const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
@@ -1531,6 +1480,75 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return nextArr;
     });
   }, [isProgressiveOverloadEnabled, sessions]);
+
+  // Set completeness toggler
+  const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
+    const targetSet = activeExercisesRef.current[exIdx]?.sets[setIdx];
+    if (!targetSet) return;
+    const willBeCompleted = !targetSet.completed;
+
+    if (activeInputRef.current) {
+      const { exIdx: curEx, setIdx: curSet, fieldName: curField } = activeInputRef.current;
+      updateSetField(curEx, curSet, curField, tempInputValueRef.current);
+    }
+
+    if (willBeCompleted) {
+      playSetCheckedSound();
+      playSatisfyingClickFinishSet();
+      if (isAutoTimerEnabled) {
+        const customRest = activeExercisesRef.current[exIdx]?.autoTimer;
+        const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
+        restTimerEmitter.start(duration);
+      }
+    } else {
+      playUncheckSetSound();
+    }
+
+    safeLayoutAnim();
+    setActiveExercises(prev => {
+      if (!prev[exIdx]) return prev;
+      const targetEx = prev[exIdx];
+      if (!targetEx.sets[setIdx]) return prev;
+      const targetSet = targetEx.sets[setIdx];
+
+      let updatedSet = { ...targetSet, completed: willBeCompleted };
+      if (activeInputRef.current && activeInputRef.current.exIdx === exIdx && activeInputRef.current.setIdx === setIdx) {
+        const fName = activeInputRef.current.fieldName as keyof SetRecord;
+        if (tempInputValueRef.current !== undefined) {
+          (updatedSet as any)[fName] = tempInputValueRef.current;
+        }
+      }
+
+      if (willBeCompleted) {
+        if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
+          updatedSet.weight = (updatedSet as any).suggestedWeight;
+        }
+        if (!updatedSet.reps && (updatedSet as any).suggestedReps) {
+          updatedSet.reps = (updatedSet as any).suggestedReps;
+        }
+        if (updatedSet.isUnilateral) {
+          if (!updatedSet.leftWeight && (updatedSet as any).suggestedLeftWeight) {
+            updatedSet.leftWeight = (updatedSet as any).suggestedLeftWeight;
+          }
+          if (!updatedSet.leftReps && (updatedSet as any).suggestedLeftReps) {
+            updatedSet.leftReps = (updatedSet as any).suggestedLeftReps;
+          }
+          if (!updatedSet.rightWeight && (updatedSet as any).suggestedRightWeight) {
+            updatedSet.rightWeight = (updatedSet as any).suggestedRightWeight;
+          }
+          if (!updatedSet.rightReps && (updatedSet as any).suggestedRightReps) {
+            updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
+          }
+        }
+      }
+
+      const nextSets = [...targetEx.sets];
+      nextSets[setIdx] = updatedSet;
+      const nextArr = [...prev];
+      nextArr[exIdx] = { ...targetEx, sets: nextSets };
+      return nextArr;
+    });
+  }, [isAutoTimerEnabled, defaultRestDuration, updateSetField]);
 
   // Stable keyboard close/dismiss handler
   const handleCloseKeyboard = useCallback(() => {
@@ -1741,6 +1759,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const nextSets = [...targetEx.sets];
           
           let updatedSet = { ...nextSets[setIdx], completed: true };
+          if (activeInputVal && activeInputVal.exIdx === exIdx && activeInputVal.setIdx === setIdx) {
+            const fName = activeInputVal.fieldName as keyof SetRecord;
+            if (tempInputValueRef.current !== undefined) {
+              (updatedSet as any)[fName] = tempInputValueRef.current;
+            }
+          }
           if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
             updatedSet.weight = (updatedSet as any).suggestedWeight;
           }

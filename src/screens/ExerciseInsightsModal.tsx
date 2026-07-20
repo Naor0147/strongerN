@@ -246,9 +246,9 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
             <Text style={styles.headerTitle} numberOfLines={1}>
               {exerciseName}
             </Text>
-            {exerciseLibraryEntry?.bodyPart && (
+            {(exerciseLibraryEntry?.muscleGroup || (exerciseLibraryEntry as any)?.bodyPart) && (
               <Text style={styles.headerSubtitle}>
-                {exerciseLibraryEntry.bodyPart.toUpperCase()}
+                {(exerciseLibraryEntry?.muscleGroup || (exerciseLibraryEntry as any)?.bodyPart || '').toUpperCase()}
               </Text>
             )}
           </View>
@@ -279,10 +279,13 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                   )}
                 </View>
 
-                {exerciseLibraryEntry?.instructions && exerciseLibraryEntry.instructions.length > 0 && (
+                {exerciseLibraryEntry?.instructions && (
                   <Card style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>INSTRUCTIONS</Text>
-                    {exerciseLibraryEntry.instructions.map((step, idx) => (
+                    {(Array.isArray(exerciseLibraryEntry.instructions)
+                      ? exerciseLibraryEntry.instructions
+                      : [exerciseLibraryEntry.instructions]
+                    ).map((step: string, idx: number) => (
                       <View key={idx} style={styles.instructionStep}>
                         <View style={styles.stepBadge}>
                           <Text style={styles.stepBadgeText}>{idx + 1}</Text>
@@ -384,7 +387,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                           .filter((s: any) => !isNaN(s.reps) && !isNaN(s.weightKg) && (s.reps > 0 || s.weightKg > 0));
 
                         if (normalizedSets.length > 0) {
-                          const dt = session.datetime ? new Date(session.datetime) : (session.date ? new Date(session.date) : new Date());
+                          const dt = session.datetime ? new Date(session.datetime) : ((session as any).date ? new Date((session as any).date) : new Date());
                           const validDate = isNaN(dt.getTime()) ? new Date() : dt;
                           acc.push({
                             id: session.id || `sess-${validDate.getTime()}-${Math.random()}`,
@@ -429,21 +432,10 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                     const sortedHistory = [...validHistory].sort(
                       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
                     );
-                  } catch (err) {
-                    console.error('Error computing exercise history:', err);
-                    return (
-                      <View style={styles.emptyHistoryContainer}>
-                        <Ionicons name="time-outline" size={48} color={colors.textMuted} />
-                        <Text style={styles.emptyHistoryText}>
-                          No training history found for this exercise.
-                        </Text>
-                      </View>
-                    );
-                  }
 
-                  return (
-                    <View style={styles.historyList}>
-                      {sortedHistory.map((entry, idx) => {
+                    return (
+                      <View style={styles.historyList}>
+                        {sortedHistory.map((entry, idx) => {
                         const sets = entry.sets || [];
                         let bestSet = sets[0] || { weightKg: 0, reps: 0 };
                         let bestSet1RM = 0;
@@ -536,6 +528,17 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       })}
                     </View>
                   );
+                  } catch (err) {
+                    console.error('Error computing exercise history:', err);
+                    return (
+                      <View style={styles.emptyHistoryContainer}>
+                        <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+                        <Text style={styles.emptyHistoryText}>
+                          No training history found for this exercise.
+                        </Text>
+                      </View>
+                    );
+                  }
                 })()}
               </View>
             )}

@@ -469,19 +469,18 @@ function App() {
           try {
             const savedWorkout = await loadFromDb('strongern_active_workout_state');
             console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
-            if (savedWorkout && savedWorkout.workoutExercises && savedWorkout.workoutExercises.length > 0 && savedWorkout.workoutName && savedWorkout.workoutName !== 'Empty Workout') {
-              console.log('[RESTORE] Restoring', savedWorkout.workoutExercises.length, 'exercises');
+            if (savedWorkout && (savedWorkout.isWorkoutActive !== false) && (savedWorkout.workoutName || savedWorkout.startTime)) {
+              console.log('[RESTORE] Restoring workout state, exercises count:', savedWorkout.workoutExercises?.length ?? 0);
               setIsWorkoutActive(true);
               if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
               if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
-              setWorkoutExercises(savedWorkout.workoutExercises);
+              if (Array.isArray(savedWorkout.workoutExercises)) setWorkoutExercises(savedWorkout.workoutExercises);
               if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
               if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
             } else {
-              console.log('[RESTORE] No valid non-empty workout found in saved state, purging');
+              console.log('[RESTORE] No active workout found in saved state');
               setIsWorkoutActive(false);
               setIsWorkoutModalVisible(false);
-              deleteFromDb('strongern_active_workout_state');
             }
           } catch (e) {
             console.warn('Error restoring active workout state', e);
@@ -1731,8 +1730,9 @@ function App() {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    if (isWorkoutActive && workoutExercises.length > 0 && workoutName !== 'Empty Workout') {
+    if (isWorkoutActive) {
       const activeState = {
+        isWorkoutActive: true,
         workoutName,
         startTime: startTime.toISOString(),
         workoutExercises,
@@ -1748,14 +1748,16 @@ function App() {
         activeWorkoutStateSavedRef.current = true;
       }, 1000);
     } else {
-      console.log('[SAVE] Deleting or not persisting workout state (exercises empty or empty workout)');
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
-      deleteFromDb('strongern_active_workout_state');
-      pendingSaveRef.current = null;
-      activeWorkoutStateSavedRef.current = false;
+      if (activeWorkoutStateSavedRef.current || pendingSaveRef.current) {
+        console.log('[SAVE] Deleting workout state because workout is no longer active');
+        deleteFromDb('strongern_active_workout_state');
+        pendingSaveRef.current = null;
+        activeWorkoutStateSavedRef.current = false;
+      }
     }
 
     return () => {
