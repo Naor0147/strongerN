@@ -1529,28 +1529,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         }
       }
 
-      if (willBeCompleted) {
-        if (!updatedSet.weight && (updatedSet as any).suggestedWeight) {
-          updatedSet.weight = (updatedSet as any).suggestedWeight;
-        }
-        if (!updatedSet.reps && (updatedSet as any).suggestedReps) {
-          updatedSet.reps = (updatedSet as any).suggestedReps;
-        }
-        if (updatedSet.isUnilateral) {
-          if (!updatedSet.leftWeight && (updatedSet as any).suggestedLeftWeight) {
-            updatedSet.leftWeight = (updatedSet as any).suggestedLeftWeight;
-          }
-          if (!updatedSet.leftReps && (updatedSet as any).suggestedLeftReps) {
-            updatedSet.leftReps = (updatedSet as any).suggestedLeftReps;
-          }
-          if (!updatedSet.rightWeight && (updatedSet as any).suggestedRightWeight) {
-            updatedSet.rightWeight = (updatedSet as any).suggestedRightWeight;
-          }
-          if (!updatedSet.rightReps && (updatedSet as any).suggestedRightReps) {
-            updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
-          }
-        }
-      }
+      // Note: suggestedWeight/suggestedReps are visual placeholders only.
+      // We intentionally do NOT auto-fill them into the set data on check,
+      // so that history reflects what the user actually typed (or 0 if nothing).
+
 
       const nextSets = [...targetEx.sets];
       nextSets[setIdx] = updatedSet;

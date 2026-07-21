@@ -1591,12 +1591,29 @@ function App() {
       const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
       if (count > 0) {
         if (typeof ex.sets === 'number') {
+          // setsDetails comes from flushExercisesToParent — filter to completed only
+          const allDetails: any[] = (ex as any).setsDetails || [];
+          const doneSets = allDetails.filter((s: any) => s.completed === true);
+          if (doneSets.length === 0) return acc; // skip exercise with no completed sets
+          const bestWeight = doneSets.reduce((max: number, s: any) => Math.max(max, parseFloat(s.weight) || 0), 0);
+          const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
-            sets: ex.sets,
-            bestWeight: ex.bestWeight || 60,
-            bestReps: ex.bestReps || 10,
-            setsDetails: (ex as any).setsDetails || [],
+            sets: doneSets.length,
+            bestWeight: bestWeight || ex.bestWeight || 0,
+            bestReps: bestReps || ex.bestReps || 0,
+            setsDetails: doneSets.map((s: any) => ({
+              weight: parseFloat(s.weight) || 0,
+              reps: parseInt(s.reps, 10) || 0,
+              completed: true,
+              rpe: s.rpe ? parseFloat(s.rpe) : undefined,
+              category: s.category || 'S',
+              isUnilateral: s.isUnilateral || false,
+              leftWeight: s.isUnilateral ? (parseFloat(s.leftWeight) || 0) : undefined,
+              leftReps: s.isUnilateral ? (parseInt(s.leftReps, 10) || 0) : undefined,
+              rightWeight: s.isUnilateral ? (parseFloat(s.rightWeight) || 0) : undefined,
+              rightReps: s.isUnilateral ? (parseInt(s.rightReps, 10) || 0) : undefined,
+            })),
           });
         } else {
           const setsArray: any[] = ex.sets || [];
