@@ -384,8 +384,12 @@ const getPreviousSessionSetSuggestion = (
   positionInCategory: number,
   sessions: any[],
   isUnilateral: boolean,
+  workoutName?: string,
+  exIdx?: number,
   sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
+  const cleanStr = (s: string | undefined | null) => (s || '').trim().toLowerCase();
+
   const formatVal = (val: any): string => {
     if (val === undefined || val === null || val === '') return '';
     const num = typeof val === 'number' ? val : parseFloat(val);
@@ -393,78 +397,157 @@ const getPreviousSessionSetSuggestion = (
     return num.toString();
   };
 
-  let matchingSessions: any[];
-  if (sessionsMap) {
-    matchingSessions = sessionsMap.get(exName.toLowerCase()) || [];
-  } else {
-    matchingSessions = (sessions || [])
-      .reduce<any[]>((acc, s) => {
-        if (s.exercises) {
-          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-          if (ex) {
-            acc.push({ datetime: s.datetime, ex });
-          }
-        }
-        return acc;
-      }, [])
-      .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-  }
+  const extractSetVals = (setObj: any) => {
+    const weight = formatVal(setObj.weight ?? setObj.weightKg ?? setObj.suggestedWeight);
+    const reps = formatVal(setObj.reps ?? setObj.suggestedReps);
+    const lw = formatVal(setObj.leftWeight) || weight;
+    const lr = formatVal(setObj.leftReps) || reps;
+    const rw = formatVal(setObj.rightWeight) || weight;
+    const rr = formatVal(setObj.rightReps) || reps;
+    return { weight, reps, lw, lr, rw, rr };
+  };
 
-  if (matchingSessions.length === 0) {
+  const hasValidVals = (v: ReturnType<typeof extractSetVals>) => Boolean(v.weight || v.reps || v.lw || v.rw);
+
+  const targetExClean = cleanStr(exName);
+  const targetRoutineClean = cleanStr(workoutName);
+
+  if (!targetExClean || !sessions || sessions.length === 0) {
     return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
   }
 
-  let matchedSet: any = null;
-  for (let i = 0; i < matchingSessions.length; i++) {
-    const histEx = matchingSessions[i].ex;
-    const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
-    const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
-    const candidate = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
-    if (candidate) {
-      const candidateW = formatVal(candidate.weight ?? candidate.weightKg ?? candidate.suggestedWeight);
-      if (candidateW) {
-        matchedSet = candidate;
-        break;
+  // Pre-sort sessions descending by datetime (most recent first)
+  const sortedSessions = [...sessions].sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+
+  let bestMatchVals: ReturnType<typeof extractSetVals> | null = null;
+
+  // Tier 1: Same Routine, Same Exercise Order Position (exIdx), Same Set Number (positionInCategory)
+  if (targetRoutineClean && exIdx !== undefined && exIdx >= 0) {
+    for (const s of sortedSessions) {
+      if (cleanStr(s.title) === targetRoutineClean && Array.isArray(s.exercises)) {
+        const exAtPos = s.exercises[exIdx];
+        if (exAtPos && cleanStr(exAtPos.name) === targetExClean) {
+          const sets = Array.isArray(exAtPos.setsDetails) ? exAtPos.setsDetails : Array.isArray(exAtPos.sets) ? exAtPos.sets : [];
+          const matchingCatSets = sets.filter((st: any) => (st.category || 'S') === category);
+          const candidateSet = matchingCatSets[positionInCategory];
+          if (candidateSet) {
+            const vals = extractSetVals(candidateSet);
+            if (hasValidVals(vals)) {
+              bestMatchVals = vals;
+              break;
+            }
+          }
+        }
       }
-      if (!matchedSet) matchedSet = candidate;
     }
   }
 
-  if (!matchedSet) {
+  // Tier 2: Same Routine, Same Exercise, Same Set Number
+  if (!bestMatchVals && targetRoutineClean) {
+    for (const s of sortedSessions) {
+      if (cleanStr(s.title) === targetRoutineClean && Array.isArray(s.exercises)) {
+        const histEx = s.exercises.find((e: any) => e.name && cleanStr(e.name) === targetExClean);
+        if (histEx) {
+          const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
+          const matchingCatSets = sets.filter((st: any) => (st.category || 'S') === category);
+          const candidateSet = matchingCatSets[positionInCategory];
+          if (candidateSet) {
+            const vals = extractSetVals(candidateSet);
+            if (hasValidVals(vals)) {
+              bestMatchVals = vals;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Tier 3: Same Exercise Order Position (exIdx), Same Set Number (Any Routine)
+  if (!bestMatchVals && exIdx !== undefined && exIdx >= 0) {
+    for (const s of sortedSessions) {
+      if (Array.isArray(s.exercises)) {
+        const exAtPos = s.exercises[exIdx];
+        if (exAtPos && cleanStr(exAtPos.name) === targetExClean) {
+          const sets = Array.isArray(exAtPos.setsDetails) ? exAtPos.setsDetails : Array.isArray(exAtPos.sets) ? exAtPos.sets : [];
+          const matchingCatSets = sets.filter((st: any) => (st.category || 'S') === category);
+          const candidateSet = matchingCatSets[positionInCategory];
+          if (candidateSet) {
+            const vals = extractSetVals(candidateSet);
+            if (hasValidVals(vals)) {
+              bestMatchVals = vals;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Tier 4: Same Exercise, Same Set Number (Any Routine)
+  if (!bestMatchVals) {
+    for (const s of sortedSessions) {
+      if (Array.isArray(s.exercises)) {
+        const histEx = s.exercises.find((e: any) => e.name && cleanStr(e.name) === targetExClean);
+        if (histEx) {
+          const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
+          const matchingCatSets = sets.filter((st: any) => (st.category || 'S') === category);
+          const candidateSet = matchingCatSets[positionInCategory];
+          if (candidateSet) {
+            const vals = extractSetVals(candidateSet);
+            if (hasValidVals(vals)) {
+              bestMatchVals = vals;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Tier 5: Same Exercise, Closest or Last Logged Set (Any Routine)
+  if (!bestMatchVals) {
+    for (const s of sortedSessions) {
+      if (Array.isArray(s.exercises)) {
+        const histEx = s.exercises.find((e: any) => e.name && cleanStr(e.name) === targetExClean);
+        if (histEx) {
+          const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
+          const matchingCatSets = sets.filter((st: any) => (st.category || 'S') === category);
+          const candidateSet = matchingCatSets[positionInCategory] || matchingCatSets[matchingCatSets.length - 1] || sets[sets.length - 1];
+          if (candidateSet) {
+            const vals = extractSetVals(candidateSet);
+            if (hasValidVals(vals)) {
+              bestMatchVals = vals;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!bestMatchVals) {
     return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
   }
 
-  const setWeight = formatVal(matchedSet.weight ?? matchedSet.weightKg ?? matchedSet.suggestedWeight);
-  const setReps = formatVal(matchedSet.reps ?? matchedSet.suggestedReps);
-
-  let lw = formatVal(matchedSet.leftWeight);
-  let lr = formatVal(matchedSet.leftReps);
-  let rw = formatVal(matchedSet.rightWeight);
-  let rr = formatVal(matchedSet.rightReps);
-
-  if (!lw) lw = setWeight;
-  if (!lr) lr = setReps;
-  if (!rw) rw = setWeight;
-  if (!rr) rr = setReps;
-
   if (isUnilateral) {
     return {
-      weight: lw || rw || '',
-      reps: lr || rr || '',
-      leftWeight: lw || '',
-      leftReps: lr || '',
-      rightWeight: rw || '',
-      rightReps: rr || '',
+      weight: bestMatchVals.lw || bestMatchVals.rw || bestMatchVals.weight || '',
+      reps: bestMatchVals.lr || bestMatchVals.rr || bestMatchVals.reps || '',
+      leftWeight: bestMatchVals.lw || '',
+      leftReps: bestMatchVals.lr || '',
+      rightWeight: bestMatchVals.rw || '',
+      rightReps: bestMatchVals.rr || '',
     };
   }
 
   return {
-    weight: setWeight,
-    reps: setReps,
-    leftWeight: setWeight,
-    leftReps: setReps,
-    rightWeight: setWeight,
-    rightReps: setReps,
+    weight: bestMatchVals.weight || '',
+    reps: bestMatchVals.reps || '',
+    leftWeight: bestMatchVals.weight || '',
+    leftReps: bestMatchVals.reps || '',
+    rightWeight: bestMatchVals.weight || '',
+    rightReps: bestMatchVals.reps || '',
   };
 };
 
