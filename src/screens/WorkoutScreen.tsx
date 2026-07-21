@@ -247,7 +247,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     editingId: string | null;
     notes?: string;
     useRoutineTargets?: boolean;
-  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false });
+    defaultRestDuration?: number;
+  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false, defaultRestDuration: 90 });
 
   // Filter templates list by folder and search
   const filteredTemplates = useMemo(() => {
@@ -326,11 +327,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, []);
 
   const handleOpenCreator = () => {
-    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false });
+    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false, defaultRestDuration: defaultRestDuration || 90 });
     setIsRoutineEditorVisible(true);
   };
 
-  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => {
+  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, routineRestDuration?: number) => {
     const folderVal = folder || undefined;
 
     // Save exercise notes to the global library
@@ -354,11 +355,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
     if (routineEditorInitial.editingId) {
       if (onUpdateTemplate) {
-        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets);
+        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets, routineRestDuration);
       }
     } else {
       if (onAddTemplate) {
-        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets);
+        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets, routineRestDuration);
       }
     }
   };
@@ -415,6 +416,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       folder: tpl.folder || '',
       editingId: tpl.id,
       notes: tpl.notes || '',
+      useRoutineTargets: tpl.useRoutineTargets || false,
+      defaultRestDuration: tpl.defaultRestDuration || defaultRestDuration || 90,
     });
     setIsActionSheetVisible(false);
     setIsRoutineEditorVisible(true);
@@ -1154,6 +1157,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         initialFolder={routineEditorInitial.folder}
         initialNotes={routineEditorInitial.notes}
         initialUseRoutineTargets={routineEditorInitial.useRoutineTargets}
+        initialDefaultRestDuration={routineEditorInitial.defaultRestDuration}
         editingId={routineEditorInitial.editingId}
         exercises={exercises}
         folders={folders}

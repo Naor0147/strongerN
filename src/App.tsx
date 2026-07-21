@@ -1208,7 +1208,7 @@ function App() {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, name, muscleGroup, equipment, isUnilateral } : e));
   }, []);
 
-  const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => {
+  const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => {
     const newTpl = {
       id: `tpl-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
       name,
@@ -1218,6 +1218,7 @@ function App() {
       folder,
       notes,
       useRoutineTargets: !!useRoutineTargets,
+      defaultRestDuration: defaultRestDuration !== undefined ? defaultRestDuration : undefined,
     };
     setTemplatesList(prev => [newTpl, ...prev]);
   }, []);
@@ -1226,8 +1227,8 @@ function App() {
     setTemplatesList(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleUpdateTemplate = React.useCallback((id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => {
-    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails, notes, useRoutineTargets: !!useRoutineTargets } : t));
+  const handleUpdateTemplate = React.useCallback((id: string, name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => {
+    setTemplatesList(prev => prev.map(t => t.id === id ? { ...t, name, exercises: exerciseNames, folder, exercisesDetails, notes, useRoutineTargets: !!useRoutineTargets, defaultRestDuration } : t));
   }, []);
 
   const handleReorderTemplates = React.useCallback((newTemplates: any[]) => {
@@ -1467,6 +1468,9 @@ function App() {
     
     const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
     setActiveWorkoutComment(matchingTemplate?.notes || '');
+    if (matchingTemplate && matchingTemplate.defaultRestDuration !== undefined) {
+      setDefaultRestDuration(matchingTemplate.defaultRestDuration);
+    }
     
     // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
     let resolvedDetails = exercisesDetails;

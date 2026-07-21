@@ -75,10 +75,11 @@ interface RoutineEditorModalProps {
   initialFolder?:        string;
   initialNotes?:         string;
   initialUseRoutineTargets?: boolean;
+  initialDefaultRestDuration?: number;
   editingId?:            string | null;
   exercises:             Exercise[];
   folders:               string[];
-  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
+  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => void;
   onClose:               () => void;
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   sessions?:             any[];
@@ -219,6 +220,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   initialFolder = '',
   initialNotes = '',
   initialUseRoutineTargets = false,
+  initialDefaultRestDuration = 90,
   editingId = null,
   exercises,
   folders,
@@ -237,6 +239,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const [routineFolder, setRoutineFolder] = useState(initialFolder);
   const [routineNotes, setRoutineNotes] = useState(initialNotes);
   const [useRoutineTargets, setUseRoutineTargets] = useState<boolean>(initialUseRoutineTargets);
+  const [defaultRestDuration, setDefaultRestDuration] = useState<number>(initialDefaultRestDuration);
   const [isRoutineSettingsVisible, setIsRoutineSettingsVisible] = useState(false);
   const [editorExercises, setEditorExercises] = useState<RoutineExercise[]>([]);
   const editorExercisesRef = useRef<RoutineExercise[]>([]);
@@ -283,6 +286,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       setRoutineFolder(initialFolder || '');
       setRoutineNotes(initialNotes || '');
       setUseRoutineTargets(initialUseRoutineTargets || false);
+      setDefaultRestDuration(initialDefaultRestDuration ?? 90);
       setIsRoutineSettingsVisible(false);
       setIsDiscardConfirmVisible(false);
 
@@ -667,7 +671,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       })),
     }));
 
-    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails, routineNotes.trim() || undefined, useRoutineTargets);
+    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails, routineNotes.trim() || undefined, useRoutineTargets, defaultRestDuration);
     onClose();
   };
 
@@ -1151,7 +1155,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
         onRequestClose={() => setIsRoutineSettingsVisible(false)}
       >
         <Pressable style={edStyles.sheetBackdrop} onPress={() => setIsRoutineSettingsVisible(false)}>
-          <Pressable style={edStyles.sheetCard} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={[edStyles.sheetCard, { width: '100%', maxWidth: '100%' }]} onPress={(e) => e.stopPropagation()}>
             <Text style={edStyles.sheetTitle}>
               {i18n.t('routineEditor.routineSettings').toUpperCase()}
             </Text>
@@ -1167,9 +1171,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 size={22}
                 color={useRoutineTargets ? (colors.violet || '#7C5CFC') : colors.accent}
               />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                  <Text style={edStyles.sheetItemText}>
+              <View style={{ flex: 1, shrink: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
+                  <Text style={[edStyles.sheetItemText, { flexShrink: 1 }]}>
                     {i18n.t('routineEditor.expectedInputBaseline')}
                   </Text>
                   <View style={{
@@ -1194,6 +1198,56 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 </Text>
               </View>
             </Pressable>
+
+            {/* Default Rest Timer Option Item */}
+            <View style={{ paddingVertical: spacing.sm, borderTopColor: colors.border, borderTopWidth: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs }}>
+                <Ionicons name="timer-outline" size={22} color={colors.accent} />
+                <View style={{ flex: 1, shrink: 1 }}>
+                  <Text style={edStyles.sheetItemText}>
+                    {i18n.t('routineEditor.defaultRestTimer')}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.regular, lineHeight: 16, marginTop: 2 }}>
+                    {i18n.t('routineEditor.defaultRestTimerDesc')}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Timer duration selector pills */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm }}>
+                {[30, 60, 90, 120, 180, 240, 300].map((secs) => {
+                  const isSelected = defaultRestDuration === secs;
+                  const mins = Math.floor(secs / 60);
+                  const remainderSecs = secs % 60;
+                  const label = mins > 0 ? (remainderSecs > 0 ? `${mins}m ${remainderSecs}s` : `${mins}m`) : `${secs}s`;
+                  return (
+                    <Pressable
+                      key={secs}
+                      style={({ pressed }) => [{
+                        backgroundColor: isSelected ? `${colors.accent}25` : colors.surface2,
+                        borderColor: isSelected ? colors.accent : colors.border,
+                        borderWidth: 1,
+                        borderRadius: radius.xs,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: pressed ? 0.8 : 1,
+                      }]}
+                      onPress={() => setDefaultRestDuration(secs)}
+                    >
+                      <Text style={{
+                        color: isSelected ? colors.accent : colors.textPrimary,
+                        fontSize: font.sizes.xs,
+                        fontFamily: isSelected ? font.bold : font.semibold,
+                      }}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             {/* Done Cancel Button */}
             <Pressable style={edStyles.sheetCancel} onPress={() => setIsRoutineSettingsVisible(false)}>
