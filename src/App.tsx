@@ -1600,17 +1600,20 @@ function App() {
           });
         } else {
           const setsArray: any[] = ex.sets || [];
-          const bestWeight = setsArray.reduce((max, s) => Math.max(max, parseFloat(s.weight) || 0), 0);
-          const bestReps = setsArray.reduce((max, s) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
+          // Only save sets that were explicitly marked as done by the user
+          const doneSets = setsArray.filter((s: any) => s.completed === true);
+          if (doneSets.length === 0) return acc; // skip exercise if no sets were completed
+          const bestWeight = doneSets.reduce((max: number, s: any) => Math.max(max, parseFloat(s.weight) || 0), 0);
+          const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
-            sets: setsArray.length,
+            sets: doneSets.length,
             bestWeight: bestWeight || ex.bestWeight || 60,
             bestReps: bestReps || ex.bestReps || 10,
-            setsDetails: setsArray.map(s => ({
+            setsDetails: doneSets.map((s: any) => ({
               weight: parseFloat(s.weight) || 0,
               reps: parseInt(s.reps, 10) || 0,
-              completed: s.completed || false,
+              completed: true,
               rpe: s.rpe ? parseFloat(s.rpe) : undefined,
               category: s.category || 'S',
             })),

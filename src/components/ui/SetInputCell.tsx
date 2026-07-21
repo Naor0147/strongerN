@@ -245,12 +245,12 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
             {displayValue}
           </Text>
         ) : (
-          <TextInput
+        <TextInput
             ref={textRef}
             editable={false}
             pointerEvents="none"
             underlineColorAndroid="transparent"
-            value={displayValue}
+            defaultValue={displayValue}
             style={[
               styles.text,
               textStyle,
