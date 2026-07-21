@@ -170,7 +170,9 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
       }
     }
   } catch (err) {
-    console.error('[CrashLogger] Critical failure inside saveCrashLogSync:', err);
+    // Use console.warn (not console.error) to avoid re-entering the hooked console.error,
+    // which would cause an infinite recursion crash loop.
+    console.warn('[CrashLogger] Critical failure inside saveCrashLogSync:', err);
   }
 }
 
@@ -259,15 +261,29 @@ export function initCrashLogger(): void {
   const originalConsoleError = console.error;
   let lastLoggedMsg = '';
   let lastLoggedTime = 0;
+  // Re-entrancy guard: prevents saveCrashLogSync from recursively triggering this hook
+  // when SQLite itself fails (NullPointerException → console.error → saveCrashLogSync → loop).
+  let isSavingCrashLog = false;
 
   console.error = (...args: any[]) => {
     try {
+      // If we are already inside saveCrashLogSync, skip to avoid infinite recursion.
+      if (isSavingCrashLog) {
+        originalConsoleError.apply(console, args);
+        return;
+      }
       const msg = args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
       const now = Date.now();
-      if (!msg.startsWith('[CrashLogger]') && (msg !== lastLoggedMsg || now - lastLoggedTime > 1000)) {
+      // Skip messages originating from the crash logger itself to avoid loops.
+      if (!msg.startsWith('[CrashLogger]') && !msg.startsWith('[DB]') && (msg !== lastLoggedMsg || now - lastLoggedTime > 1000)) {
         lastLoggedMsg = msg;
         lastLoggedTime = now;
-        saveCrashLogSync('console.error: ' + msg, '', false);
+        isSavingCrashLog = true;
+        try {
+          saveCrashLogSync('console.error: ' + msg, '', false);
+        } finally {
+          isSavingCrashLog = false;
+        }
       }
     } catch (e) {}
     originalConsoleError.apply(console, args);
