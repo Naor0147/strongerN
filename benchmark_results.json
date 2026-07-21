@@ -1,24 +1,24 @@
 {
   "baseline": {
-    "modalMountMs": 6907,
+    "modalMountMs": 4738,
     "focusTransition": {
-      "mean": 0.04,
+      "mean": 0.02,
       "min": 0,
-      "max": 0.3,
+      "max": 0.1,
       "p50": 0,
       "p95": 0.1,
-      "p99": 0.3,
-      "stdDev": 0.07,
+      "p99": 0.1,
+      "stdDev": 0.04,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 10.06,
+      "mean": 8.22,
       "min": 0,
-      "max": 28.2,
-      "p50": 0.2,
-      "p95": 26.5,
-      "p99": 28.2,
-      "stdDev": 11.59,
+      "max": 24.3,
+      "p50": 0.1,
+      "p95": 22.5,
+      "p99": 24.3,
+      "stdDev": 9.64,
       "samples": 49
     },
     "keyboardOpen": {
@@ -43,9 +43,9 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 17178,
+    "modalMountMs": 8607,
     "focusTransition": {
-      "mean": 0.05,
+      "mean": 0.04,
       "min": 0,
       "max": 0.2,
       "p50": 0,
@@ -55,13 +55,13 @@
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 41.26,
+      "mean": 27.07,
       "min": 0,
-      "max": 177,
-      "p50": 0.3,
-      "p95": 120.9,
-      "p99": 177,
-      "stdDev": 50.08,
+      "max": 68.6,
+      "p50": 0.2,
+      "p95": 66.7,
+      "p99": 68.6,
+      "stdDev": 31.12,
       "samples": 49
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 35324,
+    "modalMountMs": 19743,
     "focusTransition": {
-      "mean": 0.09,
+      "mean": 0.03,
       "min": 0,
       "max": 0.3,
       "p50": 0,
-      "p95": 0.3,
+      "p95": 0.2,
       "p99": 0.3,
-      "stdDev": 0.11,
+      "stdDev": 0.07,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 79.55,
-      "min": 0,
-      "max": 297.7,
-      "p50": 0.8,
-      "p95": 244.4,
-      "p99": 297.7,
-      "stdDev": 98.08,
+      "mean": 45.94,
+      "min": 0.1,
+      "max": 126.9,
+      "p50": 0.4,
+      "p95": 118.2,
+      "p99": 126.9,
+      "stdDev": 53.09,
       "samples": 49
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-21T17:09:02.507Z"
+  "timestamp": "2026-07-21T17:12:00.322Z"
 }

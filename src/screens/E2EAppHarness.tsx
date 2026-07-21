@@ -238,23 +238,24 @@ export default function E2EAppHarness() {
         bestWeight: 70,
         bestReps: 10,
         superSetGroupId: ed.superSetGroupId,
+        useRoutineTargets: (tpl as any).useRoutineTargets || false,
         setsDetails: ed.sets.map(s => {
-          const w = parseFloat(s.weight);
-          const r = parseInt(s.reps, 10);
+          const w = s.weight ? parseFloat(s.weight) : NaN;
+          const r = s.reps ? parseInt(s.reps, 10) : NaN;
           const lw = s.leftWeight ? parseFloat(s.leftWeight) : undefined;
           const lr = s.leftReps ? parseInt(s.leftReps, 10) : undefined;
           const rw = s.rightWeight ? parseFloat(s.rightWeight) : undefined;
           const rr = s.rightReps ? parseInt(s.rightReps, 10) : undefined;
           return {
-            weight: Number.isFinite(w) ? w : 0,
-            reps: Number.isFinite(r) ? r : 0,
+            weight: Number.isFinite(w) && w > 0 ? String(w) : '',
+            reps: Number.isFinite(r) && r > 0 ? String(r) : '',
             completed: false,
             category: (s.category && ['W', 'S', 'D', 'F'].includes(s.category) ? s.category : 'S') as 'W' | 'S' | 'D' | 'F',
             isUnilateral: s.isUnilateral || false,
-            leftWeight: lw !== undefined && Number.isFinite(lw) ? lw : undefined,
-            leftReps: lr !== undefined && Number.isFinite(lr) ? lr : undefined,
-            rightWeight: rw !== undefined && Number.isFinite(rw) ? rw : undefined,
-            rightReps: rr !== undefined && Number.isFinite(rr) ? rr : undefined,
+            leftWeight: lw !== undefined && Number.isFinite(lw) && lw > 0 ? String(lw) : undefined,
+            leftReps: lr !== undefined && Number.isFinite(lr) && lr > 0 ? String(lr) : undefined,
+            rightWeight: rw !== undefined && Number.isFinite(rw) && rw > 0 ? String(rw) : undefined,
+            rightReps: rr !== undefined && Number.isFinite(rr) && rr > 0 ? String(rr) : undefined,
           };
         })
       };
@@ -279,23 +280,24 @@ export default function E2EAppHarness() {
         sets: ed.sets.length,
         bestWeight: 70,
         bestReps: 10,
+        useRoutineTargets: (tpl as any).useRoutineTargets || false,
         setsDetails: ed.sets.map(s => {
-          const w = parseFloat(s.weight);
-          const r = parseInt(s.reps, 10);
+          const w = s.weight ? parseFloat(s.weight) : NaN;
+          const r = s.reps ? parseInt(s.reps, 10) : NaN;
           const lw = s.leftWeight ? parseFloat(s.leftWeight) : undefined;
           const lr = s.leftReps ? parseInt(s.leftReps, 10) : undefined;
           const rw = s.rightWeight ? parseFloat(s.rightWeight) : undefined;
           const rr = s.rightReps ? parseInt(s.rightReps, 10) : undefined;
           return {
-            weight: Number.isFinite(w) ? w : 0,
-            reps: Number.isFinite(r) ? r : 0,
+            weight: Number.isFinite(w) && w > 0 ? String(w) : '',
+            reps: Number.isFinite(r) && r > 0 ? String(r) : '',
             completed: false,
             category: (s.category && ['W', 'S', 'D', 'F'].includes(s.category) ? s.category : 'S') as 'W' | 'S' | 'D' | 'F',
             isUnilateral: s.isUnilateral || false,
-            leftWeight: lw !== undefined && Number.isFinite(lw) ? lw : undefined,
-            leftReps: lr !== undefined && Number.isFinite(lr) ? lr : undefined,
-            rightWeight: rw !== undefined && Number.isFinite(rw) ? rw : undefined,
-            rightReps: rr !== undefined && Number.isFinite(rr) ? rr : undefined,
+            leftWeight: lw !== undefined && Number.isFinite(lw) && lw > 0 ? String(lw) : undefined,
+            leftReps: lr !== undefined && Number.isFinite(lr) && lr > 0 ? String(lr) : undefined,
+            rightWeight: rw !== undefined && Number.isFinite(rw) && rw > 0 ? String(rw) : undefined,
+            rightReps: rr !== undefined && Number.isFinite(rr) && rr > 0 ? String(rr) : undefined,
           };
         })
       };
