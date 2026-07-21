@@ -50,7 +50,7 @@ export class RestTimerSheetPage {
     };
 
     // Use our custom interpolated dragMouse helper to trigger react-native-web's PanResponder
-    await dragMouse(this.page, { from, to, steps: 15, delayMs: 15 });
+    await dragMouse(this.page, { from, to, steps: 10, delayMs: 15 });
   }
 
   expectValueChanged(oldValue: string, newValue: string) {

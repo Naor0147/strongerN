@@ -14,7 +14,7 @@ export async function dragMouse(
   page: Page,
   options: { from: Point; to: Point; steps?: number; delayMs?: number }
 ): Promise<void> {
-  const { from, to, steps = 10, delayMs = 10 } = options;
+  const { from, to, steps = 10, delayMs = 15 } = options;
 
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();

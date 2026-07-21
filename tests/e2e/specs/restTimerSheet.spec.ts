@@ -27,8 +27,8 @@ test.describe('Rest Timer Sheet Regression Tests', () => {
     // 3. Verify it is open
     await timerSheetPage.expectOpen();
 
-    // Wait for the slide-in animation to settle
-    await page.waitForTimeout(500);
+    // Wait for the slide-in entrance animation to settle
+    await page.waitForTimeout(250);
 
     // 4. Capture original time display text
     const initialTime = await timerSheetPage.getSecondsText();
@@ -54,8 +54,8 @@ test.describe('Rest Timer Sheet Regression Tests', () => {
     // 3. Verify it is open
     await timerSheetPage.expectOpen();
 
-    // Wait for the slide-in animation to settle
-    await page.waitForTimeout(500);
+    // Wait for slide-in entrance animation to settle
+    await page.waitForTimeout(200);
 
     // 4. Tap backdrop
     await timerSheetPage.tapBackdrop();

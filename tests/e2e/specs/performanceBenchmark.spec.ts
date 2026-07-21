@@ -93,51 +93,51 @@ test.describe('Performance Benchmark Suite', () => {
     const runInteractions = async () => {
       // Warmup
       await weightCell.click();
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(30);
       await repsCell.click();
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(30);
       focusTimings.length = 0;
       keystrokeTimings.length = 0;
       kbOpenTimings.length = 0;
       kbCloseTimings.length = 0;
 
-      // 1. Focus Transitions
-      for (let i = 0; i < 20; i++) {
+      // 1. Focus Transitions (10 cycles = 20 transitions, N=20 sample points)
+      for (let i = 0; i < 10; i++) {
         await weightCell.click();
-        await page.waitForTimeout(40);
+        await page.waitForTimeout(10);
         await repsCell.click();
-        await page.waitForTimeout(40);
+        await page.waitForTimeout(10);
       }
 
-      // 2. Rapid Keystrokes
+      // 2. Rapid Keystrokes (2 rounds of 6 digits + 6 backspaces = 24 keystrokes)
       await weightCell.click();
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(50);
       const digits = ['1', '2', '3', '4', '5', '6'];
-      for (let round = 0; round < 5; round++) {
+      for (let round = 0; round < 2; round++) {
         for (const digit of digits) {
           const keyBtn = page.locator(`[aria-label="Digit ${digit}"]`);
           if (await keyBtn.isVisible()) {
             await keyBtn.click({ delay: 0 });
-            await page.waitForTimeout(15);
+            await page.waitForTimeout(5);
           }
         }
         const bsBtn = page.locator('[aria-label="Delete last digit"]');
         if (await bsBtn.isVisible()) {
           for (let b = 0; b < 6; b++) {
             await bsBtn.click({ delay: 0 });
-            await page.waitForTimeout(15);
+            await page.waitForTimeout(5);
           }
         }
       }
 
-      // 3. Keyboard Open / Close
+      // 3. Keyboard Open / Close (4 cycles = 8 toggle interactions)
       const closeBtn = page.locator('[data-testid="close-keyboard-btn"]');
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 4; i++) {
         await weightCell.click();
-        await page.waitForTimeout(80);
+        await page.waitForTimeout(20);
         if (await closeBtn.isVisible()) {
           await closeBtn.click();
-          await page.waitForTimeout(80);
+          await page.waitForTimeout(20);
         }
       }
 

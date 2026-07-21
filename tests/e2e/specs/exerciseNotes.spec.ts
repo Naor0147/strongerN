@@ -79,9 +79,6 @@ test.describe('Exercise Notes Regression Tests', () => {
     // 4. Fill in Insights Notes and trigger auto-save (blur)
     const insightsNotesText = 'Insights notes: focused on speed';
     await insightsPage.typeNotes(insightsNotesText);
-    
-    // Wait a brief moment for the auto-save to propagate
-    await page.waitForTimeout(500);
 
     // 5. Close Exercise Insights
     await insightsPage.tapBack();

@@ -84,7 +84,7 @@ function pollExpoServer(timeoutMs) {
       req.on('timeout', () => {
         req.destroy();
       });
-    }, 1000);
+    }, 200);
   });
 }
 
@@ -104,7 +104,7 @@ async function main() {
 
       const startTime = Date.now();
 
-      expoProcess = spawn('npx', ['expo', 'start', '--web', '--port', String(PORT), '--clear'], {
+      expoProcess = spawn('npx', ['expo', 'start', '--web', '--port', String(PORT)], {
         stdio: 'pipe',
         shell: true,
         cwd: path.resolve(__dirname, '..'),
