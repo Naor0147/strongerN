@@ -76,7 +76,7 @@ const WebSafeAlert = {
           primaryBtn.onPress();
         }
       } else {
-        window.alert(combinedMsg);
+        console.log('[ALERT]', combinedMsg);
       }
     } else {
       Alert.alert(title, message, buttons as any);
@@ -256,7 +256,7 @@ const getBestPerformanceSuggestionForSet = (
 
   for (const session of last5Sessions) {
     const histEx = session.ex;
-    const sets = histEx.setsDetails || histEx.sets || [];
+    const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
     const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
     const matchedSet = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
 
@@ -787,7 +787,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [isDefaultTimerPickerVisible, setIsDefaultTimerPickerVisible] = useState(false);
   const [localDefaultRest, setLocalDefaultRest] = useState(defaultRestDuration);
   const [customDefaultTimerValue, setCustomDefaultTimerValue] = useState('');
-  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
+  const [activeExercises, _setActiveExercises] = useState<ActiveExercise[]>([]);
+  const activeExercisesRef = useRef<ActiveExercise[]>([]);
+
+  const setActiveExercises = useCallback((action: any) => {
+    _setActiveExercises((prev: ActiveExercise[]) => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      activeExercisesRef.current = next;
+      return next;
+    });
+  }, []);
   const hasSyncedPropsRef = useRef(false);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
@@ -1026,10 +1035,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setListWidth(windowWidth - spacing.lg * 2);
   }, [windowWidth]);
 
-  const activeExercisesRef = useRef(activeExercises);
-  useEffect(() => {
-    activeExercisesRef.current = activeExercises;
-  }, [activeExercises]);
+
 
   const exerciseLibraryMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -1169,32 +1175,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         resumeStartTime.current = isEditing ? new Date() : (startTime || new Date());
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
         setWorkoutNote(editingComment || '');
+        setLocalWorkoutName(workoutName);
 
         const initial = exercises.map((ex: ExerciseSet, exIdx): ActiveExercise => {
           const setsCount = ex.sets;
           
           // Reconstruct SetRecord from setsDetails if present
           const existingDetails = ex.setsDetails;
-          
           if (existingDetails && existingDetails.length > 0) {
             return {
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
+              note: (ex as any).note,
               sets: existingDetails.map((s: any, sIdx: number) => {
                 const isUnilateral = s.isUnilateral || false;
                 const completed = s.completed || false;
                 return {
                   id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
-                  weight:       completed ? (s.weight?.toString() || '') : '',
-                  reps:         completed ? (s.reps?.toString() || '') : '',
+                  weight:       s.weight ? s.weight.toString() : '',
+                  reps:         s.reps ? s.reps.toString() : '',
                   completed:    completed,
                   rpe:          s.rpe ? s.rpe.toString() : '',
                   category:     (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
                   isUnilateral: isUnilateral,
-                  leftWeight:   isUnilateral ? (completed ? (s.leftWeight?.toString() || '') : '') : undefined,
-                  leftReps:     isUnilateral ? (completed ? (s.leftReps?.toString() || '') : '') : undefined,
-                  rightWeight:  isUnilateral ? (completed ? (s.rightWeight?.toString() || '') : '') : undefined,
-                  rightReps:    isUnilateral ? (completed ? (s.rightReps?.toString() || '') : '') : undefined,
+                  leftWeight:   isUnilateral ? (s.leftWeight ? s.leftWeight.toString() : '') : undefined,
+                  leftReps:     isUnilateral ? (s.leftReps ? s.leftReps.toString() : '') : undefined,
+                  rightWeight:  isUnilateral ? (s.rightWeight ? s.rightWeight.toString() : '') : undefined,
+                  rightReps:    isUnilateral ? (s.rightReps ? s.rightReps.toString() : '') : undefined,
                   suggestedWeight: s.suggestedWeight?.toString() || s.weight?.toString() || '60',
                   suggestedReps: s.suggestedReps?.toString() || s.reps?.toString() || '10',
                   suggestedLeftWeight: isUnilateral ? (s.suggestedLeftWeight?.toString() || s.leftWeight?.toString() || s.weight?.toString() || '60') : undefined,
@@ -1210,6 +1217,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
            return {
              id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
              name: ex.name,
+             note: (ex as any).note,
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
@@ -1291,21 +1299,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         });
         return {
           name: ex.name,
-          sets: completedSets.length,
+          note: ex.note,
+          sets: ex.sets.length,
           bestWeight: allWeights.length > 0 ? Math.max(...allWeights, 0) : 0,
           bestReps: allReps.length > 0 ? Math.max(...allReps, 0) : 0,
           superSetGroupId: ex.superSetGroupId,
           setsDetails: ex.sets.map(s => ({
-            weight: parseFloat(s.weight) || 0,
-            reps: parseInt(s.reps, 10) || 0,
+            weight: s.weight !== undefined ? s.weight : '',
+            reps: s.reps !== undefined ? s.reps : '',
+            suggestedWeight: (s as any).suggestedWeight,
+            suggestedReps: (s as any).suggestedReps,
             completed: s.completed,
-            rpe: s.rpe ? parseFloat(s.rpe) : undefined,
+            rpe: s.rpe ? s.rpe : undefined,
             category: s.category || 'S',
             isUnilateral: s.isUnilateral || false,
-            leftWeight: s.leftWeight ? parseFloat(s.leftWeight) : undefined,
-            leftReps: s.leftReps ? parseInt(s.leftReps, 10) : undefined,
-            rightWeight: s.rightWeight ? parseFloat(s.rightWeight) : undefined,
-            rightReps: s.rightReps ? parseInt(s.rightReps, 10) : undefined,
+            leftWeight: s.leftWeight !== undefined ? s.leftWeight : undefined,
+            leftReps: s.leftReps !== undefined ? s.leftReps : undefined,
+            rightWeight: s.rightWeight !== undefined ? s.rightWeight : undefined,
+            rightReps: s.rightReps !== undefined ? s.rightReps : undefined,
           })),
         };
       });
@@ -1313,24 +1324,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   }, [onUpdateActiveExercises]);
 
-  // Sync active exercises back to parent App state so they are stored (debounced)
+  // Sync active exercises back to parent App state so they are stored
   useEffect(() => {
     if (!hasSyncedPropsRef.current) return;
-    
-    if (debounceSyncRef.current) {
-      clearTimeout(debounceSyncRef.current);
-    }
+    flushExercisesToParent(activeExercises);
+  }, [activeExercises, flushExercisesToParent]);
 
-    debounceSyncRef.current = setTimeout(() => {
-      flushExercisesToParent(activeExercisesRef.current);
-    }, 1000);
-
-    return () => {
-      if (debounceSyncRef.current) {
-        clearTimeout(debounceSyncRef.current);
+  // Web beforeunload listener to flush active exercises immediately
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleBeforeUnload = () => {
+      if (hasSyncedPropsRef.current) {
+        flushExercisesToParent(activeExercisesRef.current);
       }
     };
-  }, [activeExercises, flushExercisesToParent]);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [flushExercisesToParent]);
 
   // Keep refs of values needed by background notifications
   const localWorkoutNameRef = useRef(localWorkoutName);
@@ -2241,6 +2251,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <Pressable
+                  testID="minimize-workout-btn"
                   onPress={onClose}
                   style={({ pressed }) => [
                     styles.minimizeBtn,
@@ -2272,6 +2283,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
               <View style={styles.headerRight}>
                 <Pressable
+                  testID="add-exercise-btn"
                   onPress={handleOpenAddExercise}
                   style={({ pressed }) => [
                     styles.headerStopwatchBtn,
@@ -2284,6 +2296,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <Ionicons name="add" size={20} color={colors.accent} />
                 </Pressable>
                 <Pressable
+                  testID="finish-workout-btn"
                   onPress={handleFinishPress}
                   style={({ pressed }) => [
                     styles.headerFinishBtn,
@@ -2319,6 +2332,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               {/* Workout Title Section */}
               <View style={styles.workoutTitleSection}>
                 <TextInput
+                  testID="workout-title-input"
                   style={styles.workoutTitleInput}
                   value={localWorkoutName}
                   onChangeText={(val) => {
@@ -2799,13 +2813,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         <Pressable
                           style={[styles.modalBtnSave, { flex: 1 }]}
                           onPress={() => {
-                            const exName = activeExercises[activeExerciseMenuIndex].name;
-                            const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-                            if (libEx && onUpdateExerciseNotes) {
-                              onUpdateExerciseNotes(libEx.id, noteText.trim() || undefined);
-                              WebSafeAlert.alert('Success', 'Note saved successfully!');
-                            } else {
-                              WebSafeAlert.alert('Info', 'Note updated locally');
+                            const trimmed = noteText.trim() || undefined;
+                            const idx = activeExerciseMenuIndex;
+                            if (activeExercises[idx]) {
+                              const exName = activeExercises[idx].name;
+                              setActiveExercises(prev => {
+                                const next = [...prev];
+                                if (next[idx]) {
+                                  next[idx] = { ...next[idx], note: trimmed };
+                                }
+                                return next;
+                              });
+                              const libEx = exerciseLibraryMap.get(exName.toLowerCase());
+                              if (libEx && onUpdateExerciseNotes) {
+                                onUpdateExerciseNotes(libEx.id, trimmed);
+                              }
                             }
                             setIsNotesModalVisible(false);
                           }}
@@ -3565,6 +3587,7 @@ const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
           {/* Done Button */}
           <Pressable
+            testID={`set-checkbox-${exIdx}-${setIdx}`}
             style={({ pressed }) => [
               styles.colCheck,
               styles.checkButton,
@@ -3727,12 +3750,13 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
 
           {(() => {
             const libEx = exerciseLibraryMap.get(exercise.name.toLowerCase());
-            if (libEx?.notes) {
+            const noteContent = exercise.note || libEx?.notes;
+            if (noteContent) {
               return (
                 <View style={styles.notesContainer}>
                   <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
                   <Text style={styles.notesText} testID="exercise-notes-text">
-                    {libEx.notes}
+                    {noteContent}
                   </Text>
                 </View>
               );
@@ -3772,6 +3796,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
 
           {/* Add Set Button */}
           <Pressable
+            testID={`add-set-btn-${exIdx}`}
             style={({ pressed }) => [
               styles.addSetRow,
               pressed && { transform: [{ scale: 0.96 }] }

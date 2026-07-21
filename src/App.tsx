@@ -123,6 +123,10 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
 }
 
 function App() {
+  if (process.env.EXPO_PUBLIC_E2E === 'true') {
+    return <E2EAppHarness />;
+  }
+
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -1698,17 +1702,35 @@ function App() {
 
   const activeWorkoutStateSavedRef = React.useRef(false);
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const pendingSaveRef = React.useRef<any>(null);
+  const activeWorkoutStateRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (isWorkoutActive) {
+      activeWorkoutStateRef.current = {
+        isWorkoutActive: true,
+        workoutName,
+        startTime: startTime.toISOString(),
+        workoutExercises,
+        isWorkoutModalVisible,
+        comment: activeWorkoutComment,
+      };
+    } else {
+      activeWorkoutStateRef.current = null;
+    }
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment]);
 
   const flushSave = React.useCallback(() => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    if (pendingSaveRef.current) {
-      console.log('[SAVE] Flushing pending save immediately, exercises:', pendingSaveRef.current.workoutExercises?.length);
-      saveToDb('strongern_active_workout_state', pendingSaveRef.current);
-      pendingSaveRef.current = null;
+    if (activeWorkoutStateRef.current) {
+      console.log('[SAVE] Flushing pending save immediately, exercises:', activeWorkoutStateRef.current.workoutExercises?.length);
+      saveToDb('strongern_active_workout_state', activeWorkoutStateRef.current);
+      activeWorkoutStateSavedRef.current = true;
+    } else {
+      deleteFromDb('strongern_active_workout_state');
+      activeWorkoutStateSavedRef.current = false;
     }
   }, []);
 
@@ -1726,45 +1748,16 @@ function App() {
   React.useEffect(() => {
     if (!isDataLoaded || !isWorkoutRestored) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    if (isWorkoutActive) {
-      const activeState = {
-        isWorkoutActive: true,
-        workoutName,
-        startTime: startTime.toISOString(),
-        workoutExercises,
-        isWorkoutModalVisible,
-        comment: activeWorkoutComment,
-      };
-      pendingSaveRef.current = activeState;
-
-      saveTimeoutRef.current = setTimeout(() => {
-        console.log('[SAVE] Saving workout state (debounced), exercises count:', workoutExercises.length);
-        saveToDb('strongern_active_workout_state', activeState);
-        pendingSaveRef.current = null;
-        activeWorkoutStateSavedRef.current = true;
-      }, 1000);
+    if (isWorkoutActive && activeWorkoutStateRef.current) {
+      saveToDb('strongern_active_workout_state', activeWorkoutStateRef.current);
+      activeWorkoutStateSavedRef.current = true;
     } else {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-      if (activeWorkoutStateSavedRef.current || pendingSaveRef.current) {
+      if (activeWorkoutStateSavedRef.current) {
         console.log('[SAVE] Deleting workout state because workout is no longer active');
         deleteFromDb('strongern_active_workout_state');
-        pendingSaveRef.current = null;
         activeWorkoutStateSavedRef.current = false;
       }
     }
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
   }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored]);
 
   // Save workout state when app goes to background (native)
@@ -1950,9 +1943,7 @@ function App() {
   ]);
 
 
-  if (process.env.EXPO_PUBLIC_E2E === 'true') {
-    return <E2EAppHarness />;
-  }
+
 
   // Show login/onboarding if not yet completed
   return (

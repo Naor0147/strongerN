@@ -50,6 +50,7 @@ export function setForegroundSuppression(suppressed: boolean) {
 }
 
 export async function scheduleRestTimerNotification(durationSec: number) {
+  if (Platform.OS === 'web') return;
   await cancelRestTimerNotification();
 
   if (durationSec > 0) {
@@ -75,6 +76,7 @@ export async function scheduleRestTimerNotification(durationSec: number) {
 }
 
 export async function cancelRestTimerNotification() {
+  if (Platform.OS === 'web') return;
   if (scheduledRestTimerId) {
     try {
       await Notifications.cancelScheduledNotificationAsync(scheduledRestTimerId);
@@ -87,6 +89,7 @@ export async function cancelRestTimerNotification() {
 }
 
 export async function showWorkoutBackgroundNotification({ title, body }: { title: string; body: string }) {
+  if (Platform.OS === 'web') return null;
   await dismissWorkoutBackgroundNotification();
 
   try {
@@ -112,6 +115,7 @@ export async function showWorkoutBackgroundNotification({ title, body }: { title
 }
 
 export async function dismissWorkoutBackgroundNotification() {
+  if (Platform.OS === 'web') return;
   if (activeWorkoutNotifId) {
     try {
       await Notifications.dismissNotificationAsync(activeWorkoutNotifId);

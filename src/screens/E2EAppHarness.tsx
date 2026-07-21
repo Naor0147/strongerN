@@ -20,6 +20,9 @@ import ActiveWorkoutModal from '../components/layout/ActiveWorkoutModal';
 import { initSounds } from '../utils/soundPlayer';
 import { initNotifications, getLastNotificationResponse, onNotificationTapped, isWorkoutNotificationResponse } from '../utils/notifications';
 
+import { Platform } from 'react-native';
+import { initDb, saveToDb, loadFromDb, deleteFromDb } from '../utils/db';
+
 interface LogItem {
   id: string;
   time: string;
@@ -81,6 +84,7 @@ export default function E2EAppHarness() {
   const [workoutExercises, setWorkoutExercises] = useState<ExerciseSet[]>([]);
   const [activeWorkoutComment, setActiveWorkoutComment] = useState('');
   const [defaultRestDuration, setDefaultRestDuration] = useState(90);
+  const [isDataRestored, setIsDataRestored] = useState(false);
 
   // Lists
   const [exercisesList, setExercisesList] = useState<Exercise[]>(mockExercises);
@@ -104,6 +108,76 @@ export default function E2EAppHarness() {
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     setLogs((prev) => [{ id: nextId('log'), time: timeStr, message }, ...prev.slice(0, 29)]);
   }, []);
+
+  // Restore active workout state on mount
+  useEffect(() => {
+    async function restoreActiveWorkout() {
+      try {
+        await initDb();
+        const savedWorkout = await loadFromDb('strongern_active_workout_state');
+        console.log('[HARNESS RESTORE] loaded savedWorkout:', savedWorkout ? JSON.stringify(savedWorkout) : 'null');
+        if (savedWorkout && savedWorkout.isWorkoutActive !== false && (savedWorkout.workoutName || savedWorkout.startTime)) {
+          setIsWorkoutActive(true);
+          if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
+          if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
+          if (Array.isArray(savedWorkout.workoutExercises)) setWorkoutExercises(savedWorkout.workoutExercises);
+          setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible !== undefined ? savedWorkout.isWorkoutModalVisible : true);
+          if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
+          addLog('Restored active workout from storage');
+        }
+      } catch (e) {
+        console.warn('Error restoring active workout state in E2E harness:', e);
+      } finally {
+        setIsDataRestored(true);
+      }
+    }
+    restoreActiveWorkout();
+  }, [addLog]);
+
+  // Persist active workout state on changes
+  const activeWorkoutStateRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (isWorkoutActive) {
+      activeWorkoutStateRef.current = {
+        isWorkoutActive: true,
+        workoutName,
+        startTime: startTime.toISOString(),
+        workoutExercises,
+        isWorkoutModalVisible,
+        comment: activeWorkoutComment,
+      };
+    } else {
+      activeWorkoutStateRef.current = null;
+    }
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment]);
+
+  const flushSave = useCallback(() => {
+    if (activeWorkoutStateRef.current) {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem('strongern_active_workout_state', JSON.stringify(activeWorkoutStateRef.current));
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleBeforeUnload = () => {
+      flushSave();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [flushSave]);
+
+  useEffect(() => {
+    if (!isDataRestored) return;
+
+    if (isWorkoutActive && activeWorkoutStateRef.current) {
+      saveToDb('strongern_active_workout_state', activeWorkoutStateRef.current);
+    }
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataRestored]);
 
   const handleStartEmptyWorkout = () => {
     setWorkoutName('Empty Workout');
@@ -235,8 +309,10 @@ export default function E2EAppHarness() {
   };
 
   const handleFinishWorkout = (summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => {
+    activeWorkoutStateRef.current = null;
     setIsWorkoutModalVisible(false);
     setIsWorkoutActive(false);
+    deleteFromDb('strongern_active_workout_state');
     addLog(`Finished Workout! Volume: ${summary.totalVolume}kg, Sets: ${summary.totalSets}, Duration: ${summary.durationMin}m, Note: ${summary.comment || 'None'}`);
     
     // Save to session history
@@ -256,6 +332,7 @@ export default function E2EAppHarness() {
   const handleDiscardWorkout = () => {
     setIsWorkoutModalVisible(false);
     setIsWorkoutActive(false);
+    deleteFromDb('strongern_active_workout_state');
     addLog('Discarded Workout session');
   };
 
@@ -319,12 +396,12 @@ export default function E2EAppHarness() {
 
             {/* Active Session Status */}
             {isWorkoutActive && (
-              <View style={styles.activeStatusCard}>
+              <View style={styles.activeStatusCard} testID="active-workout-bar">
                 <View style={styles.statusRow}>
                   <View style={styles.pulsingIndicator} />
                   <Text style={styles.activeStatusText}>Workout In Progress: {workoutName}</Text>
                 </View>
-                <Pressable style={styles.resumeBtn} onPress={() => setIsWorkoutModalVisible(true)}>
+                <Pressable style={styles.resumeBtn} onPress={() => setIsWorkoutModalVisible(true)} testID="resume-workout-btn">
                   <Text style={styles.resumeBtnText}>Resume Active Session Sheet</Text>
                 </Pressable>
               </View>

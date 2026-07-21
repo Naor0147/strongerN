@@ -7,6 +7,11 @@ export class AppPage {
     await this.page.goto('/');
   }
 
+  async clearStorage() {
+    await this.page.evaluate(() => localStorage.clear());
+    await this.page.reload();
+  }
+
   async startTemplateWorkout() {
     await this.page.click('[data-testid="start-template-workout"]');
   }

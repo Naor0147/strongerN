@@ -1,254 +1,254 @@
 {
-  "analyzedAt": "2026-07-21T10:44:47.933Z",
+  "analyzedAt": "2026-07-21T11:42:30.078Z",
   "throttled4x": {
     "profileFile": "cpu_profile_4x.json",
-    "totalDurationMs": 11932.93,
+    "totalDurationMs": 11084.62,
     "topBottlenecks": [
       {
         "functionName": "(program)",
         "source": "(native/v8):-1",
-        "selfTimeMs": 7123.13,
-        "cpuPercentage": 59.69
+        "selfTimeMs": 6334.22,
+        "cpuPercentage": 57.14
       },
       {
         "functionName": "(idle)",
         "source": "(native/v8):-1",
-        "selfTimeMs": 1131.86,
-        "cpuPercentage": 9.49
+        "selfTimeMs": 1317.56,
+        "cpuPercentage": 11.89
       },
       {
         "functionName": "exports.createElement",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2724",
-        "selfTimeMs": 324.18,
-        "cpuPercentage": 2.72
+        "selfTimeMs": 290.67,
+        "cpuPercentage": 2.62
       },
       {
         "functionName": "query",
         "source": "(native/v8):5446",
-        "selfTimeMs": 294.99,
-        "cpuPercentage": 2.47
+        "selfTimeMs": 280.99,
+        "cpuPercentage": 2.53
       },
       {
         "functionName": "exports.jsxDEV",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:137565",
-        "selfTimeMs": 274.52,
-        "cpuPercentage": 2.3
+        "selfTimeMs": 256.5,
+        "cpuPercentage": 2.31
       },
       {
         "functionName": "elementsFromPoint",
         "source": "(native/v8):-1",
-        "selfTimeMs": 121.35,
-        "cpuPercentage": 1.02
+        "selfTimeMs": 123.96,
+        "cpuPercentage": 1.12
       },
       {
         "functionName": "exports.jsx",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:26853",
-        "selfTimeMs": 115.63,
-        "cpuPercentage": 0.97
+        "selfTimeMs": 119.14,
+        "cpuPercentage": 1.07
+      },
+      {
+        "functionName": "(anonymous / internal)",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:227883",
+        "selfTimeMs": 67.48,
+        "cpuPercentage": 0.61
       },
       {
         "functionName": "runWithFiberInDEV",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:34792",
-        "selfTimeMs": 83.43,
-        "cpuPercentage": 0.7
+        "selfTimeMs": 66.2,
+        "cpuPercentage": 0.6
       },
       {
         "functionName": "run",
         "source": "(native/v8):-1",
-        "selfTimeMs": 75.69,
-        "cpuPercentage": 0.63
+        "selfTimeMs": 65.33,
+        "cpuPercentage": 0.59
+      },
+      {
+        "functionName": "(anonymous / internal)",
+        "source": "(native/v8):-1",
+        "selfTimeMs": 61.94,
+        "cpuPercentage": 0.56
       },
       {
         "functionName": "querySelectorAll",
         "source": "(native/v8):-1",
-        "selfTimeMs": 73.25,
-        "cpuPercentage": 0.61
+        "selfTimeMs": 57.81,
+        "cpuPercentage": 0.52
       },
       {
-        "functionName": "(anonymous / internal)",
+        "functionName": "createTask",
         "source": "(native/v8):-1",
-        "selfTimeMs": 72.92,
-        "cpuPercentage": 0.61
+        "selfTimeMs": 57.27,
+        "cpuPercentage": 0.52
       },
       {
         "functionName": "(garbage collector)",
         "source": "(native/v8):-1",
-        "selfTimeMs": 65.04,
-        "cpuPercentage": 0.55
-      },
-      {
-        "functionName": "(anonymous / internal)",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:227858",
-        "selfTimeMs": 63.57,
-        "cpuPercentage": 0.53
-      },
-      {
-        "functionName": "(anonymous / internal)",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13211",
-        "selfTimeMs": 58.22,
+        "selfTimeMs": 54.03,
         "cpuPercentage": 0.49
       },
       {
         "functionName": "ReactElement",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2250",
-        "selfTimeMs": 55.2,
-        "cpuPercentage": 0.46
+        "selfTimeMs": 45.95,
+        "cpuPercentage": 0.41
       },
       {
-        "functionName": "createTask",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 48.3,
-        "cpuPercentage": 0.4
-      },
-      {
-        "functionName": "styleq",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:17976",
-        "selfTimeMs": 46.3,
-        "cpuPercentage": 0.39
-      },
-      {
-        "functionName": "createDOMProps",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13621",
-        "selfTimeMs": 46.27,
-        "cpuPercentage": 0.39
+        "functionName": "react-stack-bottom-frame",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:46810",
+        "selfTimeMs": 41.85,
+        "cpuPercentage": 0.38
       },
       {
         "functionName": "utilJs9Factory",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:69482",
-        "selfTimeMs": 39.34,
-        "cpuPercentage": 0.33
+        "selfTimeMs": 40.64,
+        "cpuPercentage": 0.37
       },
       {
-        "functionName": "now",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 35.47,
-        "cpuPercentage": 0.3
+        "functionName": "(anonymous / internal)",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13211",
+        "selfTimeMs": 38.7,
+        "cpuPercentage": 0.35
+      },
+      {
+        "functionName": "createDOMProps",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13621",
+        "selfTimeMs": 37.22,
+        "cpuPercentage": 0.34
+      },
+      {
+        "functionName": "createWorkInProgress",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:36096",
+        "selfTimeMs": 34.15,
+        "cpuPercentage": 0.31
       }
     ]
   },
   "throttled6x": {
     "profileFile": "cpu_profile_6x.json",
-    "totalDurationMs": 21781.94,
+    "totalDurationMs": 21900.42,
     "topBottlenecks": [
       {
         "functionName": "(program)",
         "source": "(native/v8):-1",
-        "selfTimeMs": 15253.44,
-        "cpuPercentage": 70.03
+        "selfTimeMs": 15823.38,
+        "cpuPercentage": 72.25
       },
       {
         "functionName": "exports.createElement",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2724",
-        "selfTimeMs": 581.28,
-        "cpuPercentage": 2.67
+        "selfTimeMs": 555.99,
+        "cpuPercentage": 2.54
       },
       {
         "functionName": "exports.jsxDEV",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:137565",
-        "selfTimeMs": 502.25,
-        "cpuPercentage": 2.31
+        "selfTimeMs": 507.78,
+        "cpuPercentage": 2.32
       },
       {
         "functionName": "query",
         "source": "(native/v8):5446",
-        "selfTimeMs": 490.03,
-        "cpuPercentage": 2.25
-      },
-      {
-        "functionName": "(garbage collector)",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 211.37,
-        "cpuPercentage": 0.97
+        "selfTimeMs": 464.83,
+        "cpuPercentage": 2.12
       },
       {
         "functionName": "elementsFromPoint",
         "source": "(native/v8):-1",
-        "selfTimeMs": 196.43,
-        "cpuPercentage": 0.9
+        "selfTimeMs": 190.17,
+        "cpuPercentage": 0.87
       },
       {
         "functionName": "exports.jsx",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:26853",
-        "selfTimeMs": 193.6,
-        "cpuPercentage": 0.89
+        "selfTimeMs": 176.45,
+        "cpuPercentage": 0.81
+      },
+      {
+        "functionName": "(anonymous / internal)",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:227883",
+        "selfTimeMs": 118.28,
+        "cpuPercentage": 0.54
       },
       {
         "functionName": "run",
         "source": "(native/v8):-1",
-        "selfTimeMs": 133.47,
-        "cpuPercentage": 0.61
-      },
-      {
-        "functionName": "(anonymous / internal)",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 126.7,
-        "cpuPercentage": 0.58
-      },
-      {
-        "functionName": "(anonymous / internal)",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:227858",
-        "selfTimeMs": 116.79,
-        "cpuPercentage": 0.54
-      },
-      {
-        "functionName": "querySelectorAll",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 115.83,
-        "cpuPercentage": 0.53
+        "selfTimeMs": 110.98,
+        "cpuPercentage": 0.51
       },
       {
         "functionName": "runWithFiberInDEV",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:34792",
-        "selfTimeMs": 99.18,
-        "cpuPercentage": 0.46
+        "selfTimeMs": 102.32,
+        "cpuPercentage": 0.47
+      },
+      {
+        "functionName": "querySelectorAll",
+        "source": "(native/v8):-1",
+        "selfTimeMs": 98.62,
+        "cpuPercentage": 0.45
+      },
+      {
+        "functionName": "(anonymous / internal)",
+        "source": "(native/v8):-1",
+        "selfTimeMs": 97.47,
+        "cpuPercentage": 0.45
       },
       {
         "functionName": "createTask",
         "source": "(native/v8):-1",
-        "selfTimeMs": 86.46,
-        "cpuPercentage": 0.4
-      },
-      {
-        "functionName": "ReactElement",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2250",
-        "selfTimeMs": 84.86,
-        "cpuPercentage": 0.39
+        "selfTimeMs": 95.97,
+        "cpuPercentage": 0.44
       },
       {
         "functionName": "createDOMProps",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13621",
-        "selfTimeMs": 83.09,
-        "cpuPercentage": 0.38
+        "selfTimeMs": 91.82,
+        "cpuPercentage": 0.42
       },
       {
-        "functionName": "(idle)",
-        "source": "(native/v8):-1",
-        "selfTimeMs": 82.86,
-        "cpuPercentage": 0.38
-      },
-      {
-        "functionName": "createWorkInProgress",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:36096",
-        "selfTimeMs": 76.73,
-        "cpuPercentage": 0.35
-      },
-      {
-        "functionName": "styleq",
-        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:17976",
-        "selfTimeMs": 76.11,
-        "cpuPercentage": 0.35
+        "functionName": "ReactElement",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2250",
+        "selfTimeMs": 88.37,
+        "cpuPercentage": 0.4
       },
       {
         "functionName": "now",
         "source": "(native/v8):-1",
-        "selfTimeMs": 75.96,
-        "cpuPercentage": 0.35
+        "selfTimeMs": 74.71,
+        "cpuPercentage": 0.34
       },
       {
         "functionName": "createElement",
         "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13353",
-        "selfTimeMs": 62.52,
+        "selfTimeMs": 70.79,
+        "cpuPercentage": 0.32
+      },
+      {
+        "functionName": "styleq",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:17976",
+        "selfTimeMs": 68.28,
+        "cpuPercentage": 0.31
+      },
+      {
+        "functionName": "(anonymous / internal)",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:13211",
+        "selfTimeMs": 62.76,
         "cpuPercentage": 0.29
+      },
+      {
+        "functionName": "react-stack-bottom-frame",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:46810",
+        "selfTimeMs": 59.68,
+        "cpuPercentage": 0.27
+      },
+      {
+        "functionName": "updatePropsDOM",
+        "source": "index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:65755",
+        "selfTimeMs": 57.05,
+        "cpuPercentage": 0.26
       }
     ]
   }
