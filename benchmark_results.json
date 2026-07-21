@@ -1,24 +1,24 @@
 {
   "baseline": {
-    "modalMountMs": 4451,
+    "modalMountMs": 4933,
     "focusTransition": {
       "mean": 0.03,
       "min": 0,
-      "max": 0.2,
+      "max": 0.3,
       "p50": 0,
-      "p95": 0.2,
-      "p99": 0.2,
-      "stdDev": 0.06,
+      "p95": 0.1,
+      "p99": 0.3,
+      "stdDev": 0.07,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 7.41,
+      "mean": 8.16,
       "min": 0,
-      "max": 24.8,
+      "max": 23.2,
       "p50": 0.1,
-      "p95": 21.9,
-      "p99": 24.8,
-      "stdDev": 8.78,
+      "p95": 22.1,
+      "p99": 23.2,
+      "stdDev": 9.53,
       "samples": 49
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 9369,
+    "modalMountMs": 8750,
     "focusTransition": {
-      "mean": 0.08,
+      "mean": 0.04,
       "min": 0,
-      "max": 1,
+      "max": 0.2,
       "p50": 0,
       "p95": 0.2,
-      "p99": 1,
-      "stdDev": 0.2,
+      "p99": 0.2,
+      "stdDev": 0.06,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 30.25,
+      "mean": 28.74,
       "min": 0,
-      "max": 76,
-      "p50": 0.3,
-      "p95": 72.4,
-      "p99": 76,
-      "stdDev": 34.73,
+      "max": 85.9,
+      "p50": 0.2,
+      "p95": 70.2,
+      "p99": 85.9,
+      "stdDev": 33.22,
       "samples": 49
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 20399,
+    "modalMountMs": 19274,
     "focusTransition": {
-      "mean": 0.05,
+      "mean": 0.06,
       "min": 0,
       "max": 0.2,
       "p50": 0,
       "p95": 0.2,
       "p99": 0.2,
-      "stdDev": 0.08,
+      "stdDev": 0.09,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 50.18,
+      "mean": 46,
       "min": 0.1,
-      "max": 137.3,
+      "max": 126.7,
       "p50": 0.4,
-      "p95": 127,
-      "p99": 137.3,
-      "stdDev": 57.93,
+      "p95": 113.9,
+      "p99": 126.7,
+      "stdDev": 52.92,
       "samples": 49
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-21T11:42:29.903Z"
+  "timestamp": "2026-07-21T16:00:50.273Z"
 }

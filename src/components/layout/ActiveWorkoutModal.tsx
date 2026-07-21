@@ -2315,6 +2315,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               <View style={styles.workoutTitleSection}>
                 <TextInput
                   testID="workout-title-input"
+                  // React Native Web normally maps testID to data-testid. Keep the
+                  // DOM attribute explicit for the restored modal too, where the
+                  // persistence runner reads the title immediately after reload.
+                  {...(Platform.OS === 'web' ? { 'data-testid': 'workout-title-input' } : {})}
                   style={styles.workoutTitleInput}
                   value={localWorkoutName}
                   onChangeText={(val) => {
