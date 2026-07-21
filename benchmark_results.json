@@ -1,8 +1,8 @@
 {
   "baseline": {
-    "modalMountMs": 4933,
+    "modalMountMs": 6907,
     "focusTransition": {
-      "mean": 0.03,
+      "mean": 0.04,
       "min": 0,
       "max": 0.3,
       "p50": 0,
@@ -12,13 +12,13 @@
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 8.16,
+      "mean": 10.06,
       "min": 0,
-      "max": 23.2,
-      "p50": 0.1,
-      "p95": 22.1,
-      "p99": 23.2,
-      "stdDev": 9.53,
+      "max": 28.2,
+      "p50": 0.2,
+      "p95": 26.5,
+      "p99": 28.2,
+      "stdDev": 11.59,
       "samples": 49
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 8750,
+    "modalMountMs": 17178,
     "focusTransition": {
-      "mean": 0.04,
+      "mean": 0.05,
       "min": 0,
       "max": 0.2,
       "p50": 0,
       "p95": 0.2,
       "p99": 0.2,
-      "stdDev": 0.06,
+      "stdDev": 0.08,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 28.74,
+      "mean": 41.26,
       "min": 0,
-      "max": 85.9,
-      "p50": 0.2,
-      "p95": 70.2,
-      "p99": 85.9,
-      "stdDev": 33.22,
+      "max": 177,
+      "p50": 0.3,
+      "p95": 120.9,
+      "p99": 177,
+      "stdDev": 50.08,
       "samples": 49
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 19274,
+    "modalMountMs": 35324,
     "focusTransition": {
-      "mean": 0.06,
+      "mean": 0.09,
       "min": 0,
-      "max": 0.2,
+      "max": 0.3,
       "p50": 0,
-      "p95": 0.2,
-      "p99": 0.2,
-      "stdDev": 0.09,
+      "p95": 0.3,
+      "p99": 0.3,
+      "stdDev": 0.11,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 46,
-      "min": 0.1,
-      "max": 126.7,
-      "p50": 0.4,
-      "p95": 113.9,
-      "p99": 126.7,
-      "stdDev": 52.92,
+      "mean": 79.55,
+      "min": 0,
+      "max": 297.7,
+      "p50": 0.8,
+      "p95": 244.4,
+      "p99": 297.7,
+      "stdDev": 98.08,
       "samples": 49
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-21T16:00:50.273Z"
+  "timestamp": "2026-07-21T17:09:02.507Z"
 }

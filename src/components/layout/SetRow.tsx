@@ -146,7 +146,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   keyboardType="numeric"
                   value={isLeftWeightFocused ? (tempInputValue ?? '') : String(set.leftWeight ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftWeight')}
-                  placeholder={String(set.suggestedLeftWeight ?? set.suggestedWeight ?? '0')}
+                  placeholder={String(set.suggestedLeftWeight ?? set.suggestedWeight ?? '')}
                   placeholderTextColor={colors.textMuted}
                   editable={!isCompleted}
                   selectTextOnFocus
@@ -164,7 +164,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   keyboardType="numeric"
                   value={isLeftRepsFocused ? (tempInputValue ?? '') : String(set.leftReps ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'leftReps')}
-                  placeholder={String(set.suggestedLeftReps ?? set.suggestedReps ?? '0')}
+                  placeholder={String(set.suggestedLeftReps ?? set.suggestedReps ?? '')}
                   placeholderTextColor={colors.textMuted}
                   editable={!isCompleted}
                   selectTextOnFocus
@@ -188,7 +188,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   keyboardType="numeric"
                   value={isRightWeightFocused ? (tempInputValue ?? '') : String(set.rightWeight ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightWeight')}
-                  placeholder={String(set.suggestedRightWeight ?? set.suggestedWeight ?? '0')}
+                  placeholder={String(set.suggestedRightWeight ?? set.suggestedWeight ?? '')}
                   placeholderTextColor={colors.textMuted}
                   editable={!isCompleted}
                   selectTextOnFocus
@@ -206,7 +206,7 @@ export const SetRow: React.FC<SetRowProps> = React.memo(({
                   keyboardType="numeric"
                   value={isRightRepsFocused ? (tempInputValue ?? '') : String(set.rightReps ?? '')}
                   onFocus={() => onFocus(exIdx, setIdx, 'rightReps')}
-                  placeholder={String(set.suggestedRightReps ?? set.suggestedReps ?? '0')}
+                  placeholder={String(set.suggestedRightReps ?? set.suggestedReps ?? '')}
                   placeholderTextColor={colors.textMuted}
                   editable={!isCompleted}
                   selectTextOnFocus
@@ -308,7 +308,7 @@ unstable_pressDelay={0}
             keyboardType="numeric"
             value={isWeightFocused ? (tempInputValue ?? '') : String(set.weight || '')}
             onFocus={() => onFocus(exIdx, setIdx, 'weight')}
-            placeholder={String(set.suggestedWeight || '0')}
+            placeholder={String(set.suggestedWeight || '')}
             placeholderTextColor={colors.textMuted}
             editable={!isCompleted}
             selectTextOnFocus
@@ -331,7 +331,7 @@ unstable_pressDelay={0}
                 showSoftInputOnFocus={false}
                 value={isRepsFocused ? (tempInputValue ?? '') : String(set.reps || '')}
                 onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-                placeholder={String(set.suggestedReps || '0')}
+                placeholder={String(set.suggestedReps || '')}
                 placeholderTextColor={colors.textMuted}
                 editable={!isCompleted}
                 selectTextOnFocus
@@ -355,7 +355,7 @@ unstable_pressDelay={0}
               keyboardType="numeric"
               value={isRepsFocused ? (tempInputValue ?? '') : String(set.reps || '')}
               onFocus={() => onFocus(exIdx, setIdx, 'reps')}
-              placeholder={String(set.suggestedReps || '0')}
+              placeholder={String(set.suggestedReps || '')}
               placeholderTextColor={colors.textMuted}
               selectTextOnFocus
             />

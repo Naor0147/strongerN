@@ -378,6 +378,90 @@ const getBestPerformanceSuggestionForSet = (
   }
 };
 
+const getPreviousSessionSetSuggestion = (
+  exName: string,
+  category: string,
+  positionInCategory: number,
+  sessions: any[],
+  isUnilateral: boolean,
+  sessionsMap?: Map<string, any[]>
+): SetSuggestion => {
+  const formatVal = (val: any): string => {
+    if (val === undefined || val === null || val === '') return '';
+    const num = typeof val === 'number' ? val : parseFloat(val);
+    if (isNaN(num) || num === 0) return '';
+    return num.toString();
+  };
+
+  let matchingSessions: any[];
+  if (sessionsMap) {
+    matchingSessions = sessionsMap.get(exName.toLowerCase()) || [];
+  } else {
+    matchingSessions = (sessions || [])
+      .reduce<any[]>((acc, s) => {
+        if (s.exercises) {
+          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+          if (ex) {
+            acc.push({ datetime: s.datetime, ex });
+          }
+        }
+        return acc;
+      }, [])
+      .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+  }
+
+  if (matchingSessions.length === 0) {
+    return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+  }
+
+  const lastSession = matchingSessions[0];
+  const histEx = lastSession.ex;
+  const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
+  const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
+
+  if (matchingSets.length === 0) {
+    return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+  }
+
+  const matchedSet = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
+  if (!matchedSet) {
+    return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+  }
+
+  const setWeight = formatVal(matchedSet.weight ?? matchedSet.weightKg);
+  const setReps = formatVal(matchedSet.reps);
+
+  let lw = formatVal(matchedSet.leftWeight);
+  let lr = formatVal(matchedSet.leftReps);
+  let rw = formatVal(matchedSet.rightWeight);
+  let rr = formatVal(matchedSet.rightReps);
+
+  if (!lw) lw = setWeight;
+  if (!lr) lr = setReps;
+  if (!rw) rw = setWeight;
+  if (!rr) rr = setReps;
+
+  if (isUnilateral) {
+    return {
+      weight: lw || rw || '',
+      reps: lr || rr || '',
+      leftWeight: lw || '',
+      leftReps: lr || '',
+      rightWeight: rw || '',
+      rightReps: rr || '',
+    };
+  }
+
+  return {
+    weight: setWeight,
+    reps: setReps,
+    leftWeight: setWeight,
+    leftReps: setReps,
+    rightWeight: setWeight,
+    rightReps: setReps,
+  };
+};
+
 class RestTimerEmitter {
   private listeners = new Set<(state: { remaining: number; active: boolean; endTarget?: number | null }) => void>();
   private remaining = 0;
@@ -1179,8 +1263,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
         const initial = exercises.map((ex: ExerciseSet, exIdx): ActiveExercise => {
           const setsCount = ex.sets;
-          
-          // Reconstruct SetRecord from setsDetails if present
+          const useRoutineTargets = (ex as any).useRoutineTargets || false;
           const existingDetails = ex.setsDetails;
           if (existingDetails && existingDetails.length > 0) {
             return {
@@ -1190,24 +1273,63 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               sets: existingDetails.map((s: any, sIdx: number) => {
                 const isUnilateral = s.isUnilateral || false;
                 const completed = s.completed || false;
+                const category = s.category || 'S';
+
+                let suggestedWeight = '';
+                let suggestedReps = '';
+                let suggestedLeftWeight = '';
+                let suggestedLeftReps = '';
+                let suggestedRightWeight = '';
+                let suggestedRightReps = '';
+
+                if (useRoutineTargets) {
+                  suggestedWeight = s.suggestedWeight?.toString() || (s.weight && s.weight !== '0' ? s.weight.toString() : '');
+                  suggestedReps = s.suggestedReps?.toString() || (s.reps && s.reps !== '0' ? s.reps.toString() : '');
+                  if (isUnilateral) {
+                    suggestedLeftWeight = s.suggestedLeftWeight?.toString() || (s.leftWeight && s.leftWeight !== '0' ? s.leftWeight.toString() : suggestedWeight);
+                    suggestedLeftReps = s.suggestedLeftReps?.toString() || (s.leftReps && s.leftReps !== '0' ? s.leftReps.toString() : suggestedReps);
+                    suggestedRightWeight = s.suggestedRightWeight?.toString() || (s.rightWeight && s.rightWeight !== '0' ? s.rightWeight.toString() : suggestedWeight);
+                    suggestedRightReps = s.suggestedRightReps?.toString() || (s.rightReps && s.rightReps !== '0' ? s.rightReps.toString() : suggestedReps);
+                  }
+                } else {
+                  const hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, sessionsByExerciseMap);
+                  if (hist.weight || hist.reps || hist.leftWeight || hist.rightWeight) {
+                    suggestedWeight = hist.weight;
+                    suggestedReps = hist.reps;
+                    suggestedLeftWeight = hist.leftWeight || '';
+                    suggestedLeftReps = hist.leftReps || '';
+                    suggestedRightWeight = hist.rightWeight || '';
+                    suggestedRightReps = hist.rightReps || '';
+                  } else {
+                    suggestedWeight = s.suggestedWeight?.toString() || (s.weight && s.weight !== '0' ? s.weight.toString() : '');
+                    suggestedReps = s.suggestedReps?.toString() || (s.reps && s.reps !== '0' ? s.reps.toString() : '');
+                    if (isUnilateral) {
+                      suggestedLeftWeight = s.suggestedLeftWeight?.toString() || (s.leftWeight && s.leftWeight !== '0' ? s.leftWeight.toString() : suggestedWeight);
+                      suggestedLeftReps = s.suggestedLeftReps?.toString() || (s.leftReps && s.leftReps !== '0' ? s.leftReps.toString() : suggestedReps);
+                      suggestedRightWeight = s.suggestedRightWeight?.toString() || (s.rightWeight && s.rightWeight !== '0' ? s.rightWeight.toString() : suggestedWeight);
+                      suggestedRightReps = s.suggestedRightReps?.toString() || (s.rightReps && s.rightReps !== '0' ? s.rightReps.toString() : suggestedReps);
+                    }
+                  }
+                }
+
                 return {
                   id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
                   weight:       s.weight ? s.weight.toString() : '',
                   reps:         s.reps ? s.reps.toString() : '',
                   completed:    completed,
                   rpe:          s.rpe ? s.rpe.toString() : '',
-                  category:     (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
+                  category:     (category) as 'W' | 'S' | 'D' | 'F',
                   isUnilateral: isUnilateral,
                   leftWeight:   isUnilateral ? (s.leftWeight ? s.leftWeight.toString() : '') : undefined,
                   leftReps:     isUnilateral ? (s.leftReps ? s.leftReps.toString() : '') : undefined,
                   rightWeight:  isUnilateral ? (s.rightWeight ? s.rightWeight.toString() : '') : undefined,
                   rightReps:    isUnilateral ? (s.rightReps ? s.rightReps.toString() : '') : undefined,
-                  suggestedWeight: s.suggestedWeight?.toString() || s.weight?.toString() || '60',
-                  suggestedReps: s.suggestedReps?.toString() || s.reps?.toString() || '10',
-                  suggestedLeftWeight: isUnilateral ? (s.suggestedLeftWeight?.toString() || s.leftWeight?.toString() || s.weight?.toString() || '60') : undefined,
-                  suggestedLeftReps: isUnilateral ? (s.suggestedLeftReps?.toString() || s.leftReps?.toString() || s.reps?.toString() || '10') : undefined,
-                  suggestedRightWeight: isUnilateral ? (s.suggestedRightWeight?.toString() || s.rightWeight?.toString() || s.weight?.toString() || '60') : undefined,
-                  suggestedRightReps: isUnilateral ? (s.suggestedRightReps?.toString() || s.rightReps?.toString() || s.reps?.toString() || '10') : undefined,
+                  suggestedWeight,
+                  suggestedReps,
+                  suggestedLeftWeight: isUnilateral ? suggestedLeftWeight : undefined,
+                  suggestedLeftReps: isUnilateral ? suggestedLeftReps : undefined,
+                  suggestedRightWeight: isUnilateral ? suggestedRightWeight : undefined,
+                  suggestedRightReps: isUnilateral ? suggestedRightReps : undefined,
                 };
               }),
               superSetGroupId: (ex as any).superSetGroupId,
@@ -1221,23 +1343,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
-               const positionInCategory = setIdx;
-               const bestW = (ex.bestWeight ?? 0).toString();
-               const bestR = (ex.bestReps ?? 0).toString();
-               let suggested: SetSuggestion = {
-                 weight: bestW,
-                 reps: bestR,
-                 leftWeight: bestW,
-                 leftReps: bestR,
-                 rightWeight: bestW,
-                 rightReps: bestR,
-               };
-               if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-                 const perfSuggested = getBestPerformanceSuggestionForSet(ex.name, category, positionInCategory, sessions, isUnilateral, sessionsByExerciseMap);
-                 if (perfSuggested.weight || perfSuggested.reps) {
-                   suggested = perfSuggested;
-                 }
-               }
+               const hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, sessionsByExerciseMap);
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
                  weight:    '',
@@ -1250,12 +1356,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                  leftReps:     isUnilateral ? '' : undefined,
                  rightWeight:  isUnilateral ? '' : undefined,
                  rightReps:    isUnilateral ? '' : undefined,
-                 suggestedWeight: suggested.weight,
-                 suggestedReps: suggested.reps,
-                 suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-                 suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-                 suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-                 suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+                 suggestedWeight: hist.weight,
+                 suggestedReps: hist.reps,
+                 suggestedLeftWeight: isUnilateral ? hist.leftWeight : undefined,
+                 suggestedLeftReps: isUnilateral ? hist.leftReps : undefined,
+                 suggestedRightWeight: isUnilateral ? hist.rightWeight : undefined,
+                 suggestedRightReps: isUnilateral ? hist.rightReps : undefined,
                };
              }),
              superSetGroupId: (ex as any).superSetGroupId,
@@ -1640,27 +1746,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
       const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
 
-      const sugWeight = lastSet ? (lastSet.weight || (lastSet as any).suggestedWeight || '0') : '0';
-      const sugReps = lastSet ? (lastSet.reps || (lastSet as any).suggestedReps || '0') : '0';
-      let suggested: SetSuggestion = {
-        weight: sugWeight,
-        reps: sugReps,
-        leftWeight: sugWeight,
-        leftReps: sugReps,
-        rightWeight: sugWeight,
-        rightReps: sugReps,
-      };
-      if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-        const perfSuggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, unilateral);
-        if (perfSuggested.weight || perfSuggested.reps) {
-          suggested = perfSuggested;
-        }
-      }
-      if (unilateral) {
-        suggested.leftWeight = lastSet ? (lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || sugWeight) : sugWeight;
-        suggested.leftReps = lastSet ? (lastSet.leftReps || (lastSet as any).suggestedLeftReps || sugReps) : sugReps;
-        suggested.rightWeight = lastSet ? (lastSet.rightWeight || (lastSet as any).suggestedRightWeight || sugWeight) : sugWeight;
-        suggested.rightReps = lastSet ? (lastSet.rightReps || (lastSet as any).suggestedRightReps || sugReps) : sugReps;
+      const histSuggested = getPreviousSessionSetSuggestion(targetEx.name, category, positionInCategory, sessions, unilateral, sessionsByExerciseMap);
+      let suggested: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+
+      if (histSuggested.weight || histSuggested.reps || histSuggested.leftWeight) {
+        suggested = histSuggested;
+      } else if (lastSet) {
+        const fallbackW = lastSet.weight || (lastSet as any).suggestedWeight || '';
+        const fallbackR = lastSet.reps || (lastSet as any).suggestedReps || '';
+        suggested = {
+          weight: fallbackW,
+          reps: fallbackR,
+          leftWeight: lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || fallbackW,
+          leftReps: lastSet.leftReps || (lastSet as any).suggestedLeftReps || fallbackR,
+          rightWeight: lastSet.rightWeight || (lastSet as any).suggestedRightWeight || fallbackW,
+          rightReps: lastSet.rightReps || (lastSet as any).suggestedRightReps || fallbackR,
+        };
       }
 
       const newSet: SetRecord = {

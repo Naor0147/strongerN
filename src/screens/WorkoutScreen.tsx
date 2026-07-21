@@ -41,9 +41,9 @@ interface WorkoutScreenProps {
   templates:         Template[];
   exercises:         Exercise[];
   onStartWorkout?:   (name: string, exercises: string[], exercisesDetails?: any[]) => void;
-  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
+  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
   onDeleteTemplate?: (id: string) => void;
-  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
+  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
   onReorderTemplates?: (newTemplates: Template[]) => void;
   folders?:          string[];
   onAddFolder?:      (name: string) => void;
@@ -246,7 +246,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     folder: string;
     editingId: string | null;
     notes?: string;
-  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '' });
+    useRoutineTargets?: boolean;
+  }>({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false });
 
   // Filter templates list by folder and search
   const filteredTemplates = useMemo(() => {
@@ -325,11 +326,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, []);
 
   const handleOpenCreator = () => {
-    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '' });
+    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false });
     setIsRoutineEditorVisible(true);
   };
 
-  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => {
+  const handleSaveRoutineFromEditor = (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => {
     const folderVal = folder || undefined;
 
     // Save exercise notes to the global library
@@ -353,11 +354,11 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
     if (routineEditorInitial.editingId) {
       if (onUpdateTemplate) {
-        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes);
+        onUpdateTemplate(routineEditorInitial.editingId, name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets);
       }
     } else {
       if (onAddTemplate) {
-        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails, notes);
+        onAddTemplate(name, exerciseNames, folderVal, exercisesDetails, notes, useRoutineTargets);
       }
     }
   };
@@ -1152,6 +1153,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         initialExercisesDetails={routineEditorInitial.exercisesDetails}
         initialFolder={routineEditorInitial.folder}
         initialNotes={routineEditorInitial.notes}
+        initialUseRoutineTargets={routineEditorInitial.useRoutineTargets}
         editingId={routineEditorInitial.editingId}
         exercises={exercises}
         folders={folders}

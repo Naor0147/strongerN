@@ -17,6 +17,7 @@ import {
   LayoutAnimation,
   UIManager,
   useWindowDimensions,
+  Switch,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, type SharedValue, useAnimatedRef } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -73,10 +74,11 @@ interface RoutineEditorModalProps {
   initialExercisesDetails?: any[];
   initialFolder?:        string;
   initialNotes?:         string;
+  initialUseRoutineTargets?: boolean;
   editingId?:            string | null;
   exercises:             Exercise[];
   folders:               string[];
-  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string) => void;
+  onSave:                (name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
   onClose:               () => void;
   onAddCustomExercise?:  (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   sessions?:             any[];
@@ -216,6 +218,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   initialExercisesDetails = EMPTY_ANY_ARRAY,
   initialFolder = '',
   initialNotes = '',
+  initialUseRoutineTargets = false,
   editingId = null,
   exercises,
   folders,
@@ -233,6 +236,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const [routineName,  setRoutineName]  = useState(initialName);
   const [routineFolder, setRoutineFolder] = useState(initialFolder);
   const [routineNotes, setRoutineNotes] = useState(initialNotes);
+  const [useRoutineTargets, setUseRoutineTargets] = useState<boolean>(initialUseRoutineTargets);
+  const [isRoutineSettingsVisible, setIsRoutineSettingsVisible] = useState(false);
   const [editorExercises, setEditorExercises] = useState<RoutineExercise[]>([]);
   const editorExercisesRef = useRef<RoutineExercise[]>([]);
   useEffect(() => {
@@ -277,6 +282,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       setRoutineName(initialName || '');
       setRoutineFolder(initialFolder || '');
       setRoutineNotes(initialNotes || '');
+      setUseRoutineTargets(initialUseRoutineTargets || false);
+      setIsRoutineSettingsVisible(false);
       setIsDiscardConfirmVisible(false);
 
       // Compute initial exercises inline (derived entirely from props)
@@ -660,7 +667,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       })),
     }));
 
-    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails, routineNotes.trim() || undefined);
+    onSave(routineName.trim(), editorExercises.map(ex => ex.name), folderVal, exercisesDetails, routineNotes.trim() || undefined, useRoutineTargets);
     onClose();
   };
 
@@ -773,15 +780,24 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
 
                 {/* Routine Notes Input */}
                 <View style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
-                  <Text style={{
-                    color: colors.textSecondary,
-                    fontSize: font.sizes.xs,
-                    fontFamily: font.bold,
-                    marginBottom: 6,
-                    letterSpacing: 0.5,
-                  }}>
-                    ROUTINE NOTE
-                  </Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={{
+                      color: colors.textSecondary,
+                      fontSize: font.sizes.xs,
+                      fontFamily: font.bold,
+                      letterSpacing: 0.5,
+                    }}>
+                      ROUTINE NOTE
+                    </Text>
+                    <Pressable
+                      onPress={() => setIsRoutineSettingsVisible(true)}
+                      hitSlop={8}
+                      style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1, padding: 4 }]}
+                      accessibilityLabel="Routine Settings"
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
                   <TextInput
                     style={{
                       backgroundColor: colors.surface2,
@@ -1125,6 +1141,145 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           </View>
         </KeyboardAvoidingView>
         </GestureHandlerRootView>
+      </Modal>
+
+      {/* Routine Settings Modal */}
+      <Modal
+        visible={isRoutineSettingsVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsRoutineSettingsVisible(false)}
+      >
+        <View style={edStyles.modalBackdrop}>
+          <View style={[edStyles.modalCard, { width: Math.min(windowWidth - 32, 420), padding: spacing.lg }]}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                <Ionicons name="options-outline" size={20} color={colors.accent} />
+                <Text style={{ color: colors.textPrimary, fontSize: font.sizes.lg, fontFamily: font.bold }}>
+                  {i18n.t('routineEditor.routineSettings')}
+                </Text>
+              </View>
+              <IconButton
+                name="close"
+                size={20}
+                color={colors.textSecondary}
+                onPress={() => setIsRoutineSettingsVisible(false)}
+              />
+            </View>
+
+            {/* Main Setting Card */}
+            <View style={{
+              backgroundColor: colors.surface2,
+              borderRadius: radius.md,
+              padding: spacing.md,
+              borderColor: colors.border,
+              borderWidth: 1,
+              marginBottom: spacing.md,
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.sizes.md, fontFamily: font.bold }}>
+                  {i18n.t('routineEditor.expectedInputBaseline')}
+                </Text>
+                <Switch
+                  value={useRoutineTargets}
+                  onValueChange={setUseRoutineTargets}
+                  trackColor={{ false: colors.surface, true: colors.accent }}
+                  thumbColor={colors.textPrimary}
+                />
+              </View>
+
+              <Text style={{ color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.regular, marginBottom: spacing.md, lineHeight: 18 }}>
+                {i18n.t('routineEditor.expectedInputBaselineDesc')}
+              </Text>
+
+              {/* Options details */}
+              <View style={{ gap: spacing.xs }}>
+                <Pressable
+                  style={({ pressed }) => [{
+                    backgroundColor: !useRoutineTargets ? `${colors.accent}15` : colors.surface,
+                    borderColor: !useRoutineTargets ? colors.accent : colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.xs,
+                    padding: spacing.sm,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    opacity: pressed ? 0.8 : 1,
+                  }]}
+                  onPress={() => setUseRoutineTargets(false)}
+                >
+                  <View style={{ flex: 1, paddingRight: spacing.xs }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="time-outline" size={16} color={!useRoutineTargets ? colors.accent : colors.textSecondary} />
+                      <Text style={{ color: !useRoutineTargets ? colors.accent : colors.textPrimary, fontSize: font.sizes.sm, fontFamily: font.bold }}>
+                        {i18n.t('routineEditor.historyBased')}
+                      </Text>
+                      {!useRoutineTargets && (
+                        <View style={{ backgroundColor: colors.accent, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                          <Text style={{ color: '#0D0F14', fontSize: 10, fontFamily: font.bold }}>OFF</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.regular, marginTop: 2 }}>
+                      {i18n.t('routineEditor.historyBasedDesc')}
+                    </Text>
+                  </View>
+                  {!useRoutineTargets && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [{
+                    backgroundColor: useRoutineTargets ? `${colors.accent}15` : colors.surface,
+                    borderColor: useRoutineTargets ? colors.accent : colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.xs,
+                    padding: spacing.sm,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    opacity: pressed ? 0.8 : 1,
+                  }]}
+                  onPress={() => setUseRoutineTargets(true)}
+                >
+                  <View style={{ flex: 1, paddingRight: spacing.xs }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="clipboard-outline" size={16} color={useRoutineTargets ? colors.accent : colors.textSecondary} />
+                      <Text style={{ color: useRoutineTargets ? colors.accent : colors.textPrimary, fontSize: font.sizes.sm, fontFamily: font.bold }}>
+                        {i18n.t('routineEditor.routineBased')}
+                      </Text>
+                      {useRoutineTargets && (
+                        <View style={{ backgroundColor: colors.accent, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                          <Text style={{ color: '#0D0F14', fontSize: 10, fontFamily: font.bold }}>ON</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.regular, marginTop: 2 }}>
+                      {i18n.t('routineEditor.routineBasedDesc')}
+                    </Text>
+                  </View>
+                  {useRoutineTargets && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Done button */}
+            <Pressable
+              style={({ pressed }) => [{
+                backgroundColor: colors.accent,
+                borderRadius: radius.xs,
+                paddingVertical: spacing.sm,
+                alignItems: 'center',
+                opacity: pressed ? 0.8 : 1,
+              }]}
+              onPress={() => setIsRoutineSettingsVisible(false)}
+            >
+              <Text style={{ color: '#0D0F14', fontSize: font.sizes.md, fontFamily: font.bold }}>
+                {i18n.t('alerts.ok') || 'DONE'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Global Add Exercise Screen */}
