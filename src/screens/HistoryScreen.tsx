@@ -204,6 +204,16 @@ const SessionCard: React.FC<{
     [session.id]
   );
 
+  const visibleExercises = useMemo(() => {
+    return (session.exercises || []).filter(ex => {
+      if (typeof ex.sets === 'number' && ex.sets > 0) return true;
+      if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
+        return ex.setsDetails.some((s: any) => s && s.completed);
+      }
+      return false;
+    });
+  }, [session.exercises]);
+
   return (
     <Pressable
       onPress={() => onResumeWorkout && onResumeWorkout(session)}
@@ -233,12 +243,14 @@ const SessionCard: React.FC<{
       ) : null}
 
       {/* Exercise table header */}
-      <View style={styles.tableHeader}>
-        <Text style={styles.tableCol}>{i18n.t('extras.sets')}</Text>
-        <Text style={styles.tableCol}>{i18n.t('extras.bestSet')}</Text>
-      </View>
+      {visibleExercises.length > 0 && (
+        <View style={styles.tableHeader}>
+          <Text style={styles.tableCol}>{i18n.t('extras.sets')}</Text>
+          <Text style={styles.tableCol}>{i18n.t('extras.bestSet')}</Text>
+        </View>
+      )}
 
-      {session.exercises.map((ex, i) => (
+      {visibleExercises.map((ex, i) => (
         <ExerciseRow key={ex.name + i} exercise={ex} />
       ))}
 
@@ -342,7 +354,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
         if (!item) return 150;
         const baseHeight = 149;
         const commentHeight = item.comment ? 26 : 0;
-        const exercisesHeight = (item.exercises || []).length * 26;
+        const exercisesHeight = (item.exercises || []).filter((ex: any) => {
+          if (typeof ex.sets === 'number' && ex.sets > 0) return true;
+          if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
+            return ex.setsDetails.some((s: any) => s && s.completed);
+          }
+          return false;
+        }).length * 26;
         return baseHeight + commentHeight + exercisesHeight;
       },
       getSectionHeaderHeight: () => 48,
