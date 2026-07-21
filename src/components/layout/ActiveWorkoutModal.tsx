@@ -414,22 +414,28 @@ const getPreviousSessionSetSuggestion = (
     return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
   }
 
-  const lastSession = matchingSessions[0];
-  const histEx = lastSession.ex;
-  const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
-  const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
-
-  if (matchingSets.length === 0) {
-    return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+  let matchedSet: any = null;
+  for (let i = 0; i < matchingSessions.length; i++) {
+    const histEx = matchingSessions[i].ex;
+    const sets = Array.isArray(histEx.setsDetails) ? histEx.setsDetails : Array.isArray(histEx.sets) ? histEx.sets : [];
+    const matchingSets = sets.filter((s: any) => (s.category || 'S') === category);
+    const candidate = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
+    if (candidate) {
+      const candidateW = formatVal(candidate.weight ?? candidate.weightKg ?? candidate.suggestedWeight);
+      if (candidateW) {
+        matchedSet = candidate;
+        break;
+      }
+      if (!matchedSet) matchedSet = candidate;
+    }
   }
 
-  const matchedSet = matchingSets[positionInCategory] || matchingSets[matchingSets.length - 1];
   if (!matchedSet) {
     return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
   }
 
-  const setWeight = formatVal(matchedSet.weight ?? matchedSet.weightKg);
-  const setReps = formatVal(matchedSet.reps);
+  const setWeight = formatVal(matchedSet.weight ?? matchedSet.weightKg ?? matchedSet.suggestedWeight);
+  const setReps = formatVal(matchedSet.reps ?? matchedSet.suggestedReps);
 
   let lw = formatVal(matchedSet.leftWeight);
   let lr = formatVal(matchedSet.leftReps);
@@ -1198,7 +1204,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         for (let j = 0; j < s.exercises.length; j++) {
           const ex = s.exercises[j];
           if (ex && ex.name) {
-            const key = ex.name.toLowerCase();
+            const key = ex.name.trim().toLowerCase();
             let list = map.get(key);
             if (!list) {
               list = [];
@@ -1314,16 +1320,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
                 return {
                   id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
-                  weight:       s.weight ? s.weight.toString() : '',
-                  reps:         s.reps ? s.reps.toString() : '',
+                  weight:       (s.weight && s.weight !== '0' && s.weight !== 0) ? s.weight.toString() : '',
+                  reps:         (s.reps && s.reps !== '0' && s.reps !== 0) ? s.reps.toString() : '',
                   completed:    completed,
                   rpe:          s.rpe ? s.rpe.toString() : '',
                   category:     (category) as 'W' | 'S' | 'D' | 'F',
                   isUnilateral: isUnilateral,
-                  leftWeight:   isUnilateral ? (s.leftWeight ? s.leftWeight.toString() : '') : undefined,
-                  leftReps:     isUnilateral ? (s.leftReps ? s.leftReps.toString() : '') : undefined,
-                  rightWeight:  isUnilateral ? (s.rightWeight ? s.rightWeight.toString() : '') : undefined,
-                  rightReps:    isUnilateral ? (s.rightReps ? s.rightReps.toString() : '') : undefined,
+                  leftWeight:   isUnilateral ? ((s.leftWeight && s.leftWeight !== '0' && s.leftWeight !== 0) ? s.leftWeight.toString() : '') : undefined,
+                  leftReps:     isUnilateral ? ((s.leftReps && s.leftReps !== '0' && s.leftReps !== 0) ? s.leftReps.toString() : '') : undefined,
+                  rightWeight:  isUnilateral ? ((s.rightWeight && s.rightWeight !== '0' && s.rightWeight !== 0) ? s.rightWeight.toString() : '') : undefined,
+                  rightReps:    isUnilateral ? ((s.rightReps && s.rightReps !== '0' && s.rightReps !== 0) ? s.rightReps.toString() : '') : undefined,
                   suggestedWeight,
                   suggestedReps,
                   suggestedLeftWeight: isUnilateral ? suggestedLeftWeight : undefined,

@@ -127,7 +127,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
-          const isValEmpty = newValue === '';
+          const isValEmpty = newValue === '' || newValue === '0';
           const targetColor = isCompleted
             ? colors.textMuted
             : isValEmpty
@@ -183,7 +183,7 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
   useEffect(() => {
     if (textRef.current) {
-      const isValEmpty = value === '';
+      const isValEmpty = value === '' || value === '0';
       const targetColor = isCompleted
         ? colors.textMuted
         : isValEmpty
@@ -217,8 +217,8 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
     }
   }, [isCompleted, value, placeholder, isActive]);
 
-  const showPlaceholder = value === '';
-  const displayValue = value !== '' ? value : placeholder;
+  const showPlaceholder = value === '' || value === '0';
+  const displayValue = !showPlaceholder ? value : placeholder;
 
   return (
     <Pressable
