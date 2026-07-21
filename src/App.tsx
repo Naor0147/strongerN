@@ -1340,6 +1340,23 @@ function App() {
 
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
+  const handleMeasurePress = React.useCallback(() => {
+    setIsMeasureModalVisible(true);
+  }, []);
+
+  const handleSetAppTheme = React.useCallback((theme: any) => {
+    setAppThemeState(theme);
+    const { applyTheme } = require('./theme');
+    applyTheme(theme, customAccentColor);
+    setThemeVersion(v => v + 1);
+  }, [customAccentColor]);
+
+  const handleSetCustomAccentColor = React.useCallback((color: string) => {
+    setCustomAccentColor(color);
+    const { applyTheme } = require('./theme');
+    applyTheme(appTheme, color);
+    setThemeVersion(v => v + 1);
+  }, [appTheme]);
 
   // Compute weekly muscle sets from sessions in the last 7 days
   const weeklyMuscleSets = React.useMemo(() => {
@@ -1995,7 +2012,7 @@ function App() {
                   sessions={sessionsList}
                   isAutoTimerEnabled={isAutoTimerEnabled}
                   setIsAutoTimerEnabled={setIsAutoTimerEnabled}
-                  onMeasurePress={() => setIsMeasureModalVisible(true)}
+                  onMeasurePress={handleMeasurePress}
                   googleUser={googleUser}
                   onGoogleLogin={handleGoogleLogin}
                   onGoogleLogout={handleGoogleLogout}
@@ -2053,19 +2070,9 @@ function App() {
                   isDeveloperModeEnabled={isDeveloperModeEnabled}
                   setIsDeveloperModeEnabled={setIsDeveloperModeEnabled}
                   appTheme={appTheme}
-                  setAppTheme={(theme: any) => {
-                    setAppThemeState(theme);
-                    const { applyTheme } = require('./theme');
-                    applyTheme(theme, customAccentColor);
-                    setThemeVersion(v => v + 1);
-                  }}
+                  setAppTheme={handleSetAppTheme}
                   customAccentColor={customAccentColor}
-                  setCustomAccentColor={(color: string) => {
-                    setCustomAccentColor(color);
-                    const { applyTheme } = require('./theme');
-                    applyTheme(appTheme, color);
-                    setThemeVersion(v => v + 1);
-                  }}
+                  setCustomAccentColor={handleSetCustomAccentColor}
 
                   authMode={authState.authMode}
                   onAppLogout={handleAppLogout}

@@ -35,10 +35,11 @@ interface TabItemProps {
   tab:       TabConfig;
   isActive:  boolean;
   onPress:   () => void;
+  onPressIn: () => void;
   index:     number;
 }
 
-const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, index }) => {
+const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, onPressIn, index }) => {
   const scale = useSharedValue(isActive ? 1 : 0.88);
 
   useEffect(() => {
@@ -67,6 +68,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, isActive, onPress, in
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={onPressIn}
       android_ripple={rippleTokens.borderless}
       style={styles.tab}
       accessibilityLabel={`${tab.label} tab`}
@@ -96,10 +98,35 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
   const navigateTo = useMemo(() => {
     const map: Record<string, () => void> = {};
     state.routes.forEach(route => {
-      map[route.name] = () => navigation.navigate(route.name);
+      map[route.name] = () => {
+        const event = navigation.emit({
+          type: 'tabPress',
+          target: route.key,
+          canPreventDefault: true,
+        });
+
+        if (state.index !== state.routes.indexOf(route) && !event.defaultPrevented) {
+          navigation.navigate(route.name);
+        }
+      };
     });
     return map;
-  }, [state.routes, navigation]);
+  }, [state.index, state.routes, navigation]);
+
+  // A tab press is completed on release, but its screen can be prepared as soon
+  // as the finger lands. This keeps expensive first mounts out of the critical
+  // input-to-navigation window without changing tab-selection semantics.
+  const preloadOnTouch = useMemo(() => {
+    const map: Record<string, () => void> = {};
+    state.routes.forEach((route, index) => {
+      map[route.name] = () => {
+        if (state.index !== index) {
+          navigation.preload(route.name);
+        }
+      };
+    });
+    return map;
+  }, [state.index, state.routes, navigation]);
 
   return (
     <View
@@ -123,6 +150,7 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
               tab={tab}
               isActive={state.index === index}
               onPress={navigateTo[route.name]}
+              onPressIn={preloadOnTouch[route.name]}
               index={index}
             />
           );
