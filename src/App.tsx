@@ -1591,7 +1591,7 @@ function App() {
       const count = typeof ex.sets === 'number' ? ex.sets : (ex.sets?.length || 0);
       if (count > 0) {
         if (typeof ex.sets === 'number') {
-          // setsDetails comes from flushExercisesToParent — filter to completed only
+          // setsDetails comes from flushExercisesToParent — contains all sets with completed flags
           const allDetails: any[] = (ex as any).setsDetails || [];
           const doneSets = allDetails.filter((s: any) => s.completed === true);
           if (doneSets.length === 0) return acc; // skip exercise with no completed sets
@@ -1599,13 +1599,15 @@ function App() {
           const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
+            // sets count = only completed sets (for history summary display)
             sets: doneSets.length,
             bestWeight: bestWeight || ex.bestWeight || 0,
             bestReps: bestReps || ex.bestReps || 0,
-            setsDetails: doneSets.map((s: any) => ({
+            // setsDetails = ALL sets (done + undone) so resuming shows full workout
+            setsDetails: allDetails.map((s: any) => ({
               weight: parseFloat(s.weight) || 0,
               reps: parseInt(s.reps, 10) || 0,
-              completed: true,
+              completed: s.completed === true,
               rpe: s.rpe ? parseFloat(s.rpe) : undefined,
               category: s.category || 'S',
               isUnilateral: s.isUnilateral || false,
@@ -1617,20 +1619,22 @@ function App() {
           });
         } else {
           const setsArray: any[] = ex.sets || [];
-          // Only save sets that were explicitly marked as done by the user
+          // Derive summary stats from completed sets only
           const doneSets = setsArray.filter((s: any) => s.completed === true);
           if (doneSets.length === 0) return acc; // skip exercise if no sets were completed
           const bestWeight = doneSets.reduce((max: number, s: any) => Math.max(max, parseFloat(s.weight) || 0), 0);
           const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
+            // sets count = completed only (history display)
             sets: doneSets.length,
-            bestWeight: bestWeight || ex.bestWeight || 60,
-            bestReps: bestReps || ex.bestReps || 10,
-            setsDetails: doneSets.map((s: any) => ({
+            bestWeight: bestWeight || ex.bestWeight || 0,
+            bestReps: bestReps || ex.bestReps || 0,
+            // setsDetails = ALL sets (done + undone) so resuming shows full workout
+            setsDetails: setsArray.map((s: any) => ({
               weight: parseFloat(s.weight) || 0,
               reps: parseInt(s.reps, 10) || 0,
-              completed: true,
+              completed: s.completed === true,
               rpe: s.rpe ? parseFloat(s.rpe) : undefined,
               category: s.category || 'S',
             })),
