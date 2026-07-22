@@ -1,24 +1,24 @@
 {
   "baseline": {
-    "modalMountMs": 8120,
+    "modalMountMs": 3511,
     "focusTransition": {
-      "mean": 0.03,
+      "mean": 0,
       "min": 0,
       "max": 0.1,
       "p50": 0,
-      "p95": 0.1,
+      "p95": 0,
       "p99": 0.1,
-      "stdDev": 0.04,
+      "stdDev": 0.02,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 9.68,
+      "mean": 4.78,
       "min": 0,
-      "max": 26.7,
-      "p50": 0.2,
-      "p95": 24.7,
-      "p99": 26.7,
-      "stdDev": 11.15,
+      "max": 14.8,
+      "p50": 0.1,
+      "p95": 12.2,
+      "p99": 14.8,
+      "stdDev": 5.55,
       "samples": 49
     },
     "keyboardOpen": {
@@ -43,25 +43,25 @@
     }
   },
   "throttled4x": {
-    "modalMountMs": 15110,
+    "modalMountMs": 10977,
     "focusTransition": {
-      "mean": 0.04,
+      "mean": 0.03,
       "min": 0,
-      "max": 0.3,
+      "max": 0.2,
       "p50": 0,
       "p95": 0.2,
-      "p99": 0.3,
-      "stdDev": 0.07,
+      "p99": 0.2,
+      "stdDev": 0.06,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 34.09,
+      "mean": 34.03,
       "min": 0,
-      "max": 99.9,
+      "max": 103.2,
       "p50": 0.3,
-      "p95": 85.1,
-      "p99": 99.9,
-      "stdDev": 39.36,
+      "p95": 83.3,
+      "p99": 103.2,
+      "stdDev": 39.29,
       "samples": 49
     },
     "keyboardOpen": {
@@ -86,25 +86,25 @@
     }
   },
   "throttled6x": {
-    "modalMountMs": 20901,
+    "modalMountMs": 22466,
     "focusTransition": {
-      "mean": 0.1,
+      "mean": 0.04,
       "min": 0,
       "max": 0.3,
-      "p50": 0.1,
+      "p50": 0,
       "p95": 0.2,
       "p99": 0.3,
-      "stdDev": 0.1,
+      "stdDev": 0.07,
       "samples": 25
     },
     "keystrokeRender": {
-      "mean": 56.21,
-      "min": 0.1,
-      "max": 159.8,
-      "p50": 0.4,
-      "p95": 152.5,
-      "p99": 159.8,
-      "stdDev": 65.08,
+      "mean": 55.48,
+      "min": 0,
+      "max": 153.3,
+      "p50": 0.5,
+      "p95": 138.8,
+      "p99": 153.3,
+      "stdDev": 64.01,
       "samples": 49
     },
     "keyboardOpen": {
@@ -128,5 +128,5 @@
       "samples": 0
     }
   },
-  "timestamp": "2026-07-22T14:28:46.156Z"
+  "timestamp": "2026-07-22T21:22:16.982Z"
 }

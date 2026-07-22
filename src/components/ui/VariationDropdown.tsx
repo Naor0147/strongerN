@@ -39,6 +39,7 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
   return (
     <View>
       <Pressable
+        testID="variation-dropdown-btn"
         onPress={() => {
           triggerHaptic('impactLight');
           setModalVisible(true);
@@ -81,6 +82,7 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
             <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled">
               {/* Option 1: Base (No Variation) */}
               <Pressable
+                testID="variation-option-base"
                 style={({ pressed }) => [
                   styles.optionRow,
                   !activeVariation && styles.optionRowSelected,
@@ -107,6 +109,7 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
                   return (
                     <Pressable
                       key={v}
+                      testID={`variation-option-${v.toLowerCase().trim()}`}
                       style={({ pressed }) => [
                         styles.optionRow,
                         isSelected && styles.optionRowSelected,
