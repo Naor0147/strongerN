@@ -42,6 +42,12 @@ import {
   showWorkoutBackgroundNotification,
   dismissWorkoutBackgroundNotification,
 } from '../../utils/notifications';
+import {
+  startWorkoutForeground,
+  updateTimerCountdown,
+  showTimerComplete,
+  stopWorkoutForeground,
+} from '../../utils/foregroundNotification';
 import { Ionicons } from '@expo/vector-icons';
 import i18n from '../../utils/i18n';
 import * as Haptics from 'expo-haptics';
@@ -1557,6 +1563,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           restTimerUnsubscribe();
           restTimerUnsubscribe = null;
         }
+        await stopWorkoutForeground();
         await dismissWorkoutBackgroundNotification();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
         if (activeInputRef.current) {
@@ -1566,6 +1573,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           flushExercisesToParent(activeExercisesRef.current);
         }
         if (visibleRef.current) {
+          const workoutNameStr = localWorkoutNameRef.current || 'Workout';
+          await startWorkoutForeground(workoutNameStr);
+
           const initialActive = restTimerEmitter.isActive();
           const initialRemaining = restTimerEmitter.getRemaining();
 
@@ -1582,7 +1592,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
           const initialBody = buildWorkoutBody(initialActive, initialRemaining, false);
           await showWorkoutBackgroundNotification({
-            title: localWorkoutNameRef.current || 'Workout',
+            title: workoutNameStr,
             body: initialBody,
           });
 
@@ -1597,11 +1607,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             const activeFlips = timerState.active !== prevActive;
             const remainingHitsZero = timerState.remaining === 0 && prevRemaining > 0;
 
+            if (timerState.active && timerState.remaining > 0) {
+              await updateTimerCountdown(timerState.remaining, workoutNameStr);
+            }
+
             if (activeFlips || remainingHitsZero) {
               const timerJustFinished = !timerState.active && prevActive;
+              if (timerJustFinished) {
+                await showTimerComplete(workoutNameStr);
+              }
+
               const body = buildWorkoutBody(timerState.active, timerState.remaining, timerJustFinished);
               await showWorkoutBackgroundNotification({
-                title: localWorkoutNameRef.current || 'Workout',
+                title: workoutNameStr,
                 body,
               });
             }
@@ -1618,6 +1636,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       if (restTimerUnsubscribe) {
         restTimerUnsubscribe();
       }
+      stopWorkoutForeground().catch(() => {});
       dismissWorkoutBackgroundNotification().catch(() => {});
     };
   }, []);
@@ -2107,6 +2126,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const cleanupTimerAndNotifications = () => {
     restTimerEmitter.stop();
     cancelRestTimerNotification();
+    stopWorkoutForeground();
     dismissWorkoutBackgroundNotification();
     setForegroundSuppression(false);
   };

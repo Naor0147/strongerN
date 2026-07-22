@@ -90,7 +90,7 @@ function playWebSound(soundKey: string) {
 }
 
 // Caching and preloading native audio players to eliminate tap delays
-const NATIVE_SOUND_ASSETS: Record<string, any> = {
+export const NATIVE_SOUND_ASSETS: Record<string, any> = {
   'chime':                    require('../../assets/sounds/set_completed.wav'),
   'beep':                     require('../../assets/sounds/timer_completed.wav'),
   'fanfare':                  require('../../assets/sounds/workout_completed.wav'),
@@ -108,7 +108,7 @@ async function ensureAudioModeActivated() {
       playsInSilentMode: true,
       interruptionMode: 'mixWithOthers',
       allowsRecording: false,
-      shouldPlayInBackground: false,
+      shouldPlayInBackground: true,
     });
     _audioModeActivated = true;
   } catch (e) {

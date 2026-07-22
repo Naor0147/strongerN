@@ -35,6 +35,10 @@ const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
 import { pickAndReadBackupFile } from '../utils/backupManager';
 import {
+  scheduleDailyWorkoutReminders,
+  cancelDailyWorkoutReminders,
+} from '../utils/notifications';
+import {
   getCrashLogs,
   deleteCrashLog,
   clearCrashLogs,
@@ -777,6 +781,30 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // Timer selector overlay states
   const [isTimerPickerVisible, setIsTimerPickerVisible] = useState(false);
   const [customTimerValue, setCustomTimerValue] = useState(() => defaultRestDuration.toString());
+
+  // Workout Reminders states
+  const [isWorkoutReminderEnabled, setIsWorkoutReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState('09:00');
+  const [isReminderTimePickerVisible, setIsReminderTimePickerVisible] = useState(false);
+
+  const handleToggleWorkoutReminder = async (enabled: boolean) => {
+    setIsWorkoutReminderEnabled(enabled);
+    if (!enabled) {
+      await cancelDailyWorkoutReminders();
+    } else {
+      const [hStr, mStr] = reminderTime.split(':');
+      const hour = parseInt(hStr, 10) || 9;
+      const minute = parseInt(mStr, 10) || 0;
+      let trainingDays = [2, 4, 6];
+      if (activeProgramId) {
+        const prog = mockPrograms.find(p => p.id === activeProgramId);
+        if (prog && prog.days && prog.days.length > 0) {
+          trainingDays = prog.days.map((_, idx) => (idx * 2 + 1) % 7 + 1);
+        }
+      }
+      await scheduleDailyWorkoutReminders(trainingDays, hour, minute);
+    }
+  };
 
 
 
@@ -2373,6 +2401,63 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
                   <View style={styles.settingDivider} />
 
+                  {/* Workout Day Reminders */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Ionicons name="notifications-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.settingTitle}>{i18n.t('notifications.workoutReminder')}</Text>
+                        <Text style={styles.settingSubtitle} numberOfLines={2}>
+                          {i18n.t('notifications.workoutReminderDesc')}
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.togglePill,
+                        isWorkoutReminderEnabled && styles.togglePillActive
+                      ]}
+                      onPress={() => handleToggleWorkoutReminder(!isWorkoutReminderEnabled)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={[
+                        styles.togglePillText,
+                        isWorkoutReminderEnabled && styles.togglePillTextActive
+                      ]}>
+                        {isWorkoutReminderEnabled ? i18n.t('extras.onLabel') : i18n.t('extras.offLabel')}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {isWorkoutReminderEnabled && (
+                    <>
+                      <View style={styles.settingDivider} />
+                      <Pressable
+                        style={styles.settingRow}
+                        onPress={() => setIsReminderTimePickerVisible(true)}
+                        android_ripple={rippleTokens.surface}
+                      >
+                        <View style={styles.settingInfo}>
+                          <Ionicons name="time-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.settingTitle}>{i18n.t('notifications.reminderTime')}</Text>
+                            <Text style={styles.settingSubtitle}>
+                              {i18n.t('notifications.reminderPreview', { time: reminderTime })}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                          <Text style={{ color: colors.textSecondary, fontSize: font.sizes.sm, fontFamily: font.semibold }}>
+                            {reminderTime}
+                          </Text>
+                          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                        </View>
+                      </Pressable>
+                    </>
+                  )}
+
+                  <View style={styles.settingDivider} />
+
                   {/* RPE / RIR Toggle */}
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
@@ -3410,6 +3495,93 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <Pressable
               style={[styles.bottomSheetCloseBtn, { marginTop: spacing.md }]}
               onPress={() => setIsTimerPickerVisible(false)}
+              android_ripple={rippleTokens.surface}
+            >
+              <Text style={styles.bottomSheetCloseBtnText}>{i18n.t('common.cancel')}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Reminder Time Picker Bottom Sheet Modal */}
+      <Modal
+        visible={isReminderTimePickerVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsReminderTimePickerVisible(false)}
+      >
+        <Pressable 
+          style={styles.bottomSheetBackdrop} 
+          onPress={() => setIsReminderTimePickerVisible(false)}
+        >
+          <Pressable 
+            style={styles.bottomSheetContainer}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.bottomSheetDragIndicator} />
+            <View style={styles.bottomSheetHeader}>
+              <Text style={styles.bottomSheetTitle}>{i18n.t('notifications.reminderTime')}</Text>
+              <Text style={styles.bottomSheetSubtitle}>{i18n.t('notifications.workoutReminderDesc')}</Text>
+            </View>
+
+            <View style={styles.bottomSheetOptions}>
+              {['07:00', '08:00', '09:00', '10:00', '17:00', '18:00', '19:00', '20:00'].map((timeVal) => {
+                const isSelected = reminderTime === timeVal;
+                return (
+                  <Pressable
+                    key={timeVal}
+                    style={[
+                      styles.soundOptionRow,
+                      isSelected && styles.soundOptionRowActive
+                    ]}
+                    onPress={async () => {
+                      setReminderTime(timeVal);
+                      setIsReminderTimePickerVisible(false);
+                      if (isWorkoutReminderEnabled) {
+                        const [hStr, mStr] = timeVal.split(':');
+                        const hour = parseInt(hStr, 10) || 9;
+                        const minute = parseInt(mStr, 10) || 0;
+                        let trainingDays = [2, 4, 6];
+                        if (activeProgramId) {
+                          const prog = mockPrograms.find(p => p.id === activeProgramId);
+                          if (prog && prog.days && prog.days.length > 0) {
+                            trainingDays = prog.days.map((_, idx) => (idx * 2 + 1) % 7 + 1);
+                          }
+                        }
+                        await scheduleDailyWorkoutReminders(trainingDays, hour, minute);
+                      }
+                    }}
+                    android_ripple={rippleTokens.surface}
+                  >
+                    <View style={styles.soundOptionLeft}>
+                      <View style={[
+                        styles.soundOptionIconCircle,
+                        isSelected ? { backgroundColor: colors.accent + '22' } : { backgroundColor: colors.surfaceHigh }
+                      ]}>
+                        <Ionicons 
+                          name="time-outline" 
+                          size={18} 
+                          color={isSelected ? colors.accent : colors.textSecondary} 
+                        />
+                      </View>
+                      <Text style={[
+                        styles.soundOptionText,
+                        isSelected && styles.soundOptionTextActive
+                      ]}>
+                        {timeVal}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={20} color={colors.accent} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              style={[styles.bottomSheetCloseBtn, { marginTop: spacing.md }]}
+              onPress={() => setIsReminderTimePickerVisible(false)}
               android_ripple={rippleTokens.surface}
             >
               <Text style={styles.bottomSheetCloseBtnText}>{i18n.t('common.cancel')}</Text>
