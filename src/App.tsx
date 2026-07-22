@@ -497,15 +497,46 @@ function App() {
             console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
             if (savedWorkout && (savedWorkout.isWorkoutActive !== false) && (savedWorkout.workoutName || savedWorkout.startTime)) {
               console.log('[RESTORE] Restoring workout state, exercises count:', savedWorkout.workoutExercises?.length ?? 0);
+              const restoredExercises = Array.isArray(savedWorkout.workoutExercises)
+                ? savedWorkout.workoutExercises.map((ex: any) => ({
+                    ...ex,
+                    variation: ex.variation || undefined,
+                    setsDetails: Array.isArray(ex.setsDetails) ? ex.setsDetails : [],
+                  }))
+                : [];
+
+              isWorkoutActiveRef.current = true;
               setIsWorkoutActive(true);
-              if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
-              if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
-              if (Array.isArray(savedWorkout.workoutExercises)) setWorkoutExercisesAndRef(savedWorkout.workoutExercises);
-              if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
-              if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
+
+              if (savedWorkout.workoutName) {
+                workoutNameRef.current = savedWorkout.workoutName;
+                setWorkoutName(savedWorkout.workoutName);
+              }
+              if (savedWorkout.startTime) {
+                const st = new Date(savedWorkout.startTime);
+                startTimeRef.current = st;
+                setStartTime(st);
+              }
+              setWorkoutExercisesAndRef(restoredExercises);
+
+              if (savedWorkout.isWorkoutModalVisible !== undefined) {
+                isWorkoutModalVisibleRef.current = savedWorkout.isWorkoutModalVisible;
+                setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
+              } else {
+                isWorkoutModalVisibleRef.current = true;
+                setIsWorkoutModalVisible(true);
+              }
+
+              if (savedWorkout.comment !== undefined) {
+                activeWorkoutCommentRef.current = savedWorkout.comment || '';
+                setActiveWorkoutComment(savedWorkout.comment || '');
+              }
+              activeWorkoutStateSavedRef.current = true;
             } else {
               console.log('[RESTORE] No active workout found in saved state');
+              isWorkoutActiveRef.current = false;
               setIsWorkoutActive(false);
+              isWorkoutModalVisibleRef.current = false;
               setIsWorkoutModalVisible(false);
             }
           } catch (e) {

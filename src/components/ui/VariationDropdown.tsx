@@ -98,28 +98,32 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
               </Pressable>
 
               {/* Tag Options */}
-              {variations.map((v) => {
-                const isSelected = activeVariation?.toLowerCase() === v.toLowerCase();
-                return (
-                  <Pressable
-                    key={v}
-                    style={({ pressed }) => [
-                      styles.optionRow,
-                      isSelected && styles.optionRowSelected,
-                      pressed && { backgroundColor: colors.surface2 },
-                    ]}
-                    onPress={() => handleSelect(v)}
-                    android_ripple={rippleTokens.surface}
-                  >
-                    <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-                      {v}
-                    </Text>
-                    {isSelected && (
-                      <Ionicons name="checkmark" size={16} color={colors.accent} />
-                    )}
-                  </Pressable>
-                );
-              })}
+              {variations
+                .filter((v): v is string => Boolean(v && typeof v === 'string'))
+                .map((v) => {
+                  const isSelected = activeVariation
+                    ? activeVariation.toLowerCase().trim() === v.toLowerCase().trim()
+                    : false;
+                  return (
+                    <Pressable
+                      key={v}
+                      style={({ pressed }) => [
+                        styles.optionRow,
+                        isSelected && styles.optionRowSelected,
+                        pressed && { backgroundColor: colors.surface2 },
+                      ]}
+                      onPress={() => handleSelect(v)}
+                      android_ripple={rippleTokens.surface}
+                    >
+                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                        {v}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={16} color={colors.accent} />
+                      )}
+                    </Pressable>
+                  );
+                })}
             </ScrollView>
 
             {onManageVariations && (
