@@ -2,9 +2,15 @@
 
 At the start of every session, read the `.agents` folder and load all rule files from `.agents/rules/` (including `auto-git-commit.md`) to understand project-specific behaviors and constraints.
 
+# Primary Production Repository & Branch Rules
+
+- **Always on Master**: This repository (`C:\Antigravity\strongerN`) is the official production project (`StrongerN`). All completed work, features, bug fixes, and builds MUST be committed and pushed directly to the `master` branch.
+- **No Sandbox Branches**: Never leave work on temporary branches (such as `feat/sandbox-merge` or sandbox testing folders). Always merge changes to `master` and ensure `git status` shows you are on `master`.
+- **Standalone Release APK**: Always build and install the release APK from `master` via `cmd /c build-apk.bat --auto`.
+
 # ui-ux-design-pro-max
 
-This sandbox project strictly implements a premium, AMOLED-first, high-fidelity dark design system using design intelligence from `ui-ux-design-pro-max`. Ensure any edits to `RestTimerRuler.tsx` align perfectly with colors, typography, and interactive state rules specified in [UI_UX_README.md](file:///C:/Antigravity/strongerNTesting/UI_UX_README.md).
+This project strictly implements a premium, AMOLED-first, high-fidelity dark design system using design intelligence from `ui-ux-design-pro-max`. Ensure any edits to `RestTimerRuler.tsx` align perfectly with colors, typography, and interactive state rules specified in [UI_UX_README.md](file:///C:/Antigravity/strongerN/UI_UX_README.md).
 
 # E2E Testing Guide for AI Agents
 
@@ -37,4 +43,4 @@ Every time you make any change or complete a task, increment the app version in 
 
 # Git Auto-Commit & Push
 
-After making any changes or completing a task, stage, commit, and push the changes to the Git repository (e.g., using `git add .`, `git commit -m "<message>"`, and `git push`). This ensures each task or feature has its own clean, separated commit and push history.
+After making any changes or completing a task, stage, commit, and push the changes to the Git repository on `master` (e.g., using `git add .`, `git commit -m "<message>"`, and `git push`). This ensures each task or feature has its own clean, separated commit and push history on the main production branch.
