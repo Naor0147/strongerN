@@ -1880,10 +1880,7 @@ function App() {
     return () => sub.remove();
   }, [flushSave]);
 
-  const workoutExercisesRef = React.useRef(workoutExercises);
-  React.useEffect(() => {
-    workoutExercisesRef.current = workoutExercises;
-  }, [workoutExercises]);
+
 
   const handleFinishWorkoutRef = React.useRef(handleFinishWorkout);
   React.useEffect(() => {
