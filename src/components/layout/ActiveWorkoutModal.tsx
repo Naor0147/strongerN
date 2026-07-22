@@ -1426,7 +1426,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     suggestedRightReps = s.suggestedRightReps?.toString() || (s.rightReps && s.rightReps !== '0' ? s.rightReps.toString() : suggestedReps);
                   }
                 } else {
-                  const hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, sessionsByExerciseMap);
+                  const hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
                   if (hist.weight || hist.reps || hist.leftWeight || hist.rightWeight) {
                     suggestedWeight = hist.weight;
                     suggestedReps = hist.reps;
@@ -1479,7 +1479,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
-               const hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, sessionsByExerciseMap);
+               const hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
                  weight:    '',
@@ -1896,7 +1896,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
       const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
 
-      const histSuggested = getPreviousSessionSetSuggestion(targetEx.name, category, positionInCategory, sessions, unilateral, sessionsByExerciseMap);
+      const histSuggested = getPreviousSessionSetSuggestion(targetEx.name, category, positionInCategory, sessions, unilateral, undefined, undefined, sessionsByExerciseMap);
       let suggested: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
 
       if (histSuggested.weight || histSuggested.reps || histSuggested.leftWeight) {
@@ -2245,8 +2245,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           }
         ]
       );
+    }
+  };
+
   const handleSelectVariation = useCallback((exIdx: number, newVariation: string | undefined) => {
-    setActiveExercises(prev => {
+    setActiveExercises((prev: ActiveExercise[]) => {
       if (!prev[exIdx]) return prev;
       const targetEx = prev[exIdx];
       const libEx = exerciseLibraryMap.get(targetEx.name.toLowerCase());

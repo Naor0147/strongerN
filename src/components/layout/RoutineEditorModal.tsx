@@ -1173,7 +1173,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                 size={22}
                 color={useRoutineTargets ? (colors.violet || '#7C5CFC') : colors.accent}
               />
-              <View style={{ flex: 1, shrink: 1 }}>
+              <View style={{ flex: 1, flexShrink: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
                   <Text style={[edStyles.sheetItemText, { flexShrink: 1 }]}>
                     {i18n.t('routineEditor.expectedInputBaseline')}
@@ -1205,7 +1205,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
             <View style={{ paddingVertical: spacing.sm, borderTopColor: colors.border, borderTopWidth: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs }}>
                 <Ionicons name="timer-outline" size={22} color={colors.accent} />
-                <View style={{ flex: 1, shrink: 1 }}>
+                <View style={{ flex: 1, flexShrink: 1 }}>
                   <Text style={edStyles.sheetItemText}>
                     {i18n.t('routineEditor.defaultRestTimer')}
                   </Text>

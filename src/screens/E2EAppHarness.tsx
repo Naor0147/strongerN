@@ -231,7 +231,7 @@ export default function E2EAppHarness() {
     setWorkoutName(tpl.name);
     setStartTime(new Date());
     
-    const initialExercises: ExerciseSet[] = (tpl.exercisesDetails || []).map(ed => {
+    const initialExercises: any[] = (tpl.exercisesDetails || []).map(ed => {
       return {
         name: ed.name,
         sets: ed.sets.length,
@@ -274,7 +274,7 @@ export default function E2EAppHarness() {
     setStartTime(new Date());
     
     // Convert template exercisesDetails to ExerciseSet[]
-    const initialExercises: ExerciseSet[] = (tpl.exercisesDetails || []).map(ed => {
+    const initialExercises: any[] = (tpl.exercisesDetails || []).map(ed => {
       return {
         name: ed.name,
         sets: ed.sets.length,

@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, font, ripple as rippleTokens } from '../../theme';
-import { triggerHaptic } from '../../utils/haptics';
 import i18n from '../../utils/i18n';
+
+const triggerHaptic = (type: string) => {
+  try {
+    if (type === 'selection') Haptics.selectionAsync();
+    else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  } catch (e) {}
+};
 
 export interface VariationDropdownProps {
   variations: string[];
@@ -155,12 +162,12 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: font.sizes.xs,
-    fontFamily: font.weights.medium,
+    fontFamily: font.medium,
     color: colors.textMuted,
   },
   chipTextActive: {
     color: colors.accent,
-    fontFamily: font.weights.semibold,
+    fontFamily: font.semibold,
   },
   modalOverlay: {
     flex: 1,
@@ -194,7 +201,7 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: font.sizes.sm,
-    fontFamily: font.weights.semibold,
+    fontFamily: font.semibold,
     color: colors.textPrimary,
   },
   optionRow: {
@@ -211,11 +218,11 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: font.sizes.sm,
-    fontFamily: font.weights.regular,
+    fontFamily: font.regular,
     color: colors.textSecondary,
   },
   optionTextSelected: {
-    fontFamily: font.weights.semibold,
+    fontFamily: font.semibold,
     color: colors.accent,
   },
   manageBtn: {
@@ -229,7 +236,7 @@ const styles = StyleSheet.create({
   },
   manageBtnText: {
     fontSize: font.sizes.xs,
-    fontFamily: font.weights.medium,
+    fontFamily: font.medium,
     color: colors.accent,
   },
 });

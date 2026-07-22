@@ -1545,7 +1545,7 @@ function App() {
         if (found) {
           bestWeight = found.bestWeight || 60;
           bestReps = found.bestReps || 10;
-          sets = typeof found.sets === 'number' ? found.sets : (found.sets?.length || 3);
+          sets = typeof found.sets === 'number' ? found.sets : (Array.isArray(found.sets) ? (found.sets as any[]).length : 3);
         }
       }
       

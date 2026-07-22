@@ -25,6 +25,7 @@ import { Exercise } from '../data/mockData';
 import ScreenHeader from '../components/layout/ScreenHeader';
 import PressableRow from '../components/ui/PressableRow';
 import IconButton   from '../components/ui/IconButton';
+import { sectionListGetItemLayout } from '../utils/listLayout';
 import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 import { normalizeTag, isValidTag, addVariationToExercise, removeVariationFromExercise } from '../utils/variationUtils';
@@ -2277,7 +2278,7 @@ const tagStyles = StyleSheet.create({
   },
   tagChipText: {
     fontSize: font.sizes.xs,
-    fontFamily: font.weights.medium,
+    fontFamily: font.medium,
     color: colors.accent,
   },
   addTagRow: {
@@ -2296,7 +2297,7 @@ const tagStyles = StyleSheet.create({
     paddingVertical: 6,
     color: colors.textPrimary,
     fontSize: font.sizes.xs,
-    fontFamily: font.weights.medium,
+    fontFamily: font.medium,
   },
   addTagBtn: {
     flexDirection: 'row',
@@ -2309,7 +2310,7 @@ const tagStyles = StyleSheet.create({
   addTagBtnText: {
     color: '#0D0F14',
     fontSize: font.sizes.xs,
-    fontFamily: font.weights.bold,
+    fontFamily: font.bold,
     marginLeft: 2,
   },
 });

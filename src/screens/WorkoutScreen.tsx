@@ -41,9 +41,9 @@ interface WorkoutScreenProps {
   templates:         Template[];
   exercises:         Exercise[];
   onStartWorkout?:   (name: string, exercises: string[], exercisesDetails?: any[]) => void;
-  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
+  onAddTemplate?:    (name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => void;
   onDeleteTemplate?: (id: string) => void;
-  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean) => void;
+  onUpdateTemplate?: (id: string, name: string, exercises: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => void;
   onReorderTemplates?: (newTemplates: Template[]) => void;
   folders?:          string[];
   onAddFolder?:      (name: string) => void;
@@ -327,7 +327,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   }, []);
 
   const handleOpenCreator = () => {
-    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false, defaultRestDuration: defaultRestDuration || 90 });
+    setRoutineEditorInitial({ name: '', exercises: [], exercisesDetails: [], folder: '', editingId: null, notes: '', useRoutineTargets: false, defaultRestDuration: 90 });
     setIsRoutineEditorVisible(true);
   };
 
@@ -417,7 +417,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       editingId: tpl.id,
       notes: tpl.notes || '',
       useRoutineTargets: tpl.useRoutineTargets || false,
-      defaultRestDuration: tpl.defaultRestDuration || defaultRestDuration || 90,
+      defaultRestDuration: tpl.defaultRestDuration || 90,
     });
     setIsActionSheetVisible(false);
     setIsRoutineEditorVisible(true);

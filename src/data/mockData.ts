@@ -74,6 +74,8 @@ export interface Template {
   lastUsed: Date;
   folder?: string;
   notes?: string;
+  useRoutineTargets?: boolean;
+  defaultRestDuration?: number;
 }
 
 export interface Exercise {
