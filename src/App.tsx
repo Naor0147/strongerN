@@ -18,6 +18,7 @@ import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureSt
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
 import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
 import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
+import { getSessionsForExerciseVariation } from './utils/variationUtils';
 import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
@@ -123,7 +124,19 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
 }
 
 function App() {
-  if (process.env.EXPO_PUBLIC_E2E === 'true') {
+  const isE2E = process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
+    window.location?.search?.includes('e2e=true') ||
+    window.sessionStorage?.getItem('is_e2e_mode') === 'true' ||
+    window.localStorage?.getItem('is_e2e_mode') === 'true'
+  ));
+
+  if (isE2E) {
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage?.setItem('is_e2e_mode', 'true');
+        window.localStorage?.setItem('is_e2e_mode', 'true');
+      } catch (e) {}
+    }
     return <E2EAppHarness />;
   }
 
@@ -1208,6 +1221,10 @@ function App() {
     setExercisesList(prev => prev.map(e => e.id === id ? { ...e, name, muscleGroup, equipment, isUnilateral } : e));
   }, []);
 
+  const handleUpdateExerciseVariations = React.useCallback((id: string, variations: string[]) => {
+    setExercisesList(prev => prev.map(e => e.id === id ? { ...e, variations } : e));
+  }, []);
+
   const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => {
     const newTpl = {
       id: `tpl-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
@@ -1490,9 +1507,12 @@ function App() {
         ? resolvedDetails[index]
         : resolvedDetails?.find(d => d.name.toLowerCase().trim() === exName.toLowerCase().trim());
       
+      const targetVariation = detail?.variation;
+
       if (detail && detail.sets && detail.sets.length > 0) {
         return {
           name: exName,
+          variation: targetVariation,
           sets: detail.sets.length,
           bestWeight: 60,
           bestReps: 10,
@@ -1518,9 +1538,8 @@ function App() {
       let bestReps = 10;
       let sets: any = 3;
 
-      const previousSession = sessionsListRef.current.find((s: any) => 
-        s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim())
-      );
+      const varSessions = getSessionsForExerciseVariation(exName, targetVariation, libraryEx, sessionsListRef.current);
+      const previousSession = varSessions.length > 0 ? varSessions[0] : null;
       if (previousSession) {
         const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
         if (found) {
@@ -1532,6 +1551,7 @@ function App() {
       
       return {
         name: exName,
+        variation: targetVariation,
         sets,
         bestWeight,
         bestReps,
@@ -1620,6 +1640,7 @@ function App() {
           const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
+            variation: ex.variation,
             // sets count = only completed sets (for history summary display)
             sets: doneSets.length,
             bestWeight: bestWeight || ex.bestWeight || 0,
@@ -1646,6 +1667,7 @@ function App() {
           const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
           acc.push({
             name: ex.name,
+            variation: ex.variation,
             // sets count = completed only (history display)
             sets: doneSets.length,
             bestWeight: bestWeight || ex.bestWeight || 0,
@@ -1954,6 +1976,7 @@ function App() {
         onDeleteExercise={handleDeleteExercise}
         onUpdateExerciseNotes={handleUpdateExerciseNotes}
         onUpdateExercise={handleUpdateExercise}
+        onUpdateExerciseVariations={handleUpdateExerciseVariations}
         sessions={sessionsList}
         exerciseNameLanguage={exerciseNameLanguage}
       />

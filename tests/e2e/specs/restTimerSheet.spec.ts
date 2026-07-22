@@ -14,6 +14,7 @@ test.describe('Rest Timer Sheet Regression Tests', () => {
     timerSheetPage = new RestTimerSheetPage(page);
 
     await appPage.goto();
+    await appPage.clearStorage();
     await appPage.startTemplateWorkout();
   });
 

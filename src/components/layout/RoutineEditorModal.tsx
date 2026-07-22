@@ -63,6 +63,7 @@ interface RoutineExercise {
   id: string;
   name: string;
   notes?: string;
+  variation?: string;
   sets: SetRecord[];
   superSetGroupId?: string;
 }
@@ -658,6 +659,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     const exercisesDetails = editorExercises.map(ex => ({
       name: ex.name,
       notes: ex.notes || undefined,
+      variation: ex.variation || undefined,
       superSetGroupId: ex.superSetGroupId,
       sets: ex.sets.map(s => ({
         weight: parseFloat(s.weight) || 0,

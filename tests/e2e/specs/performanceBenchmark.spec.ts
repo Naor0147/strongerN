@@ -61,6 +61,7 @@ test.describe('Performance Benchmark Suite', () => {
     test.setTimeout(240000);
     appPage = new AppPage(page);
     await appPage.goto();
+    await appPage.clearStorage();
     await appPage.startLargeWorkout();
 
     const focusTimings: number[] = [];

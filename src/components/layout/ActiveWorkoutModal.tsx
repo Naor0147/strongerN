@@ -70,25 +70,49 @@ import { saveCrashLogSync } from '../../utils/crashLogger';
 import { keyboardValueStore } from '../../utils/keyboardValueStore';
 import { activeInputStore } from '../../utils/activeInputStore';
 import { useTrackRender } from '../../utils/renderTracker';
+import { VariationDropdown } from '../ui/VariationDropdown';
+import { getSessionsForExerciseVariation } from '../../utils/variationUtils';
 
 const WebSafeAlert = {
   alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: string }[]) => {
     if (Platform.OS === 'web') {
-      const combinedMsg = message ? `${title}\n\n${message}` : title;
-      if (buttons && buttons.length > 0) {
-        const primaryBtn = buttons.find(b => b.text !== 'Cancel' && b.style !== 'cancel') || buttons[0];
-        const confirmed = window.confirm(combinedMsg);
-        if (confirmed && primaryBtn.onPress) {
-          primaryBtn.onPress();
+      if (buttons && buttons.length > 1) {
+        const confirmResult = window.confirm(`${title}\n\n${message || ''}`);
+        if (confirmResult) {
+          const dest = buttons.find(b => b.style === 'destructive' || b.text === 'Discard' || b.text === 'Remove');
+          if (dest && dest.onPress) dest.onPress();
+        } else {
+          const cancelBtn = buttons.find(b => b.style === 'cancel' || b.text === 'Cancel' || b.text === 'Keep Tracking');
+          if (cancelBtn && cancelBtn.onPress) cancelBtn.onPress();
         }
       } else {
-        console.log('[ALERT]', combinedMsg);
+        window.alert(`${title}\n\n${message || ''}`);
+        if (buttons && buttons[0] && buttons[0].onPress) buttons[0].onPress();
       }
     } else {
       Alert.alert(title, message, buttons as any);
     }
   }
 };
+
+interface SetSuggestion {
+  weight: string;
+  reps: string;
+  leftWeight?: string;
+  leftReps?: string;
+  rightWeight?: string;
+  rightReps?: string;
+}
+
+interface ActiveExercise {
+  id: string;
+  name: string;
+  sets: SetRecord[];
+  superSetGroupId?: string;
+  autoTimer?: number;
+  variation?: string;
+  note?: string;
+}
 
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: Record<string, any> = {};
@@ -213,6 +237,8 @@ const getBestPerformanceSuggestionForSet = (
   positionInCategory: number,
   sessions: any[],
   isUnilateral: boolean,
+  targetVariation?: string,
+  exerciseObj?: any,
   sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
   const parseWeight = (val: any): number => {
@@ -227,13 +253,26 @@ const getBestPerformanceSuggestionForSet = (
   };
 
   let matchingSessions: any[];
-  if (sessionsMap) {
+  if (targetVariation !== undefined || exerciseObj !== undefined) {
+    const varSessions = getSessionsForExerciseVariation(exName, targetVariation, exerciseObj, sessions || []);
+    matchingSessions = varSessions
+      .reduce<any[]>((acc, s) => {
+        if (s.exercises) {
+          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+          if (ex) {
+            acc.push({ datetime: s.datetime, ex });
+          }
+        }
+        return acc;
+      }, [])
+      .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+  } else if (sessionsMap) {
     matchingSessions = sessionsMap.get(exName.toLowerCase()) || [];
   } else {
     matchingSessions = (sessions || [])
       .reduce<any[]>((acc, s) => {
         if (s.exercises) {
-          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
+          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
           if (ex) {
             acc.push({ datetime: s.datetime, ex });
           }
@@ -1428,6 +1467,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 };
               }),
               superSetGroupId: (ex as any).superSetGroupId,
+              variation: (ex as any).variation,
             };
           }
  
@@ -1435,6 +1475,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
              id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
              name: ex.name,
              note: (ex as any).note,
+             variation: (ex as any).variation,
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
@@ -1501,6 +1542,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         return {
           name: ex.name,
           note: ex.note,
+          variation: ex.variation,
           sets: ex.sets.length,
           bestWeight: allWeights.length > 0 ? Math.max(...allWeights, 0) : 0,
           bestReps: allReps.length > 0 ? Math.max(...allReps, 0) : 0,
@@ -2203,8 +2245,68 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           }
         ]
       );
-    }
-  };
+  const handleSelectVariation = useCallback((exIdx: number, newVariation: string | undefined) => {
+    setActiveExercises(prev => {
+      if (!prev[exIdx]) return prev;
+      const targetEx = prev[exIdx];
+      const libEx = exerciseLibraryMap.get(targetEx.name.toLowerCase());
+      const isUnilateral = libEx?.isUnilateral || false;
+
+      const updatedSets = targetEx.sets.map((s, sIdx) => {
+        const category = s.category || 'S';
+        let positionInCategory = 0;
+        for (let i = 0; i < sIdx; i++) {
+          if ((targetEx.sets[i].category || 'S') === category) {
+            positionInCategory++;
+          }
+        }
+
+        const defaultW = (libEx?.bestWeight ?? 0).toString();
+        const defaultR = (libEx?.bestReps ?? 0).toString();
+        let suggested: SetSuggestion = {
+          weight: defaultW,
+          reps: defaultR,
+          leftWeight: defaultW,
+          leftReps: defaultR,
+          rightWeight: defaultW,
+          rightReps: defaultR,
+        };
+
+        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+          const perfSuggested = getBestPerformanceSuggestionForSet(
+            targetEx.name,
+            category,
+            positionInCategory,
+            sessions,
+            isUnilateral,
+            newVariation,
+            libEx
+          );
+          if (perfSuggested.weight || perfSuggested.reps) {
+            suggested = perfSuggested;
+          }
+        }
+
+        return {
+          ...s,
+          suggestedWeight: suggested.weight,
+          suggestedReps: suggested.reps,
+          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
+          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
+          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
+          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
+        };
+      });
+
+      const nextArr = [...prev];
+      nextArr[exIdx] = {
+        ...targetEx,
+        variation: newVariation,
+        sets: updatedSets,
+      };
+      return nextArr;
+    });
+  }, [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions]);
 
   const handleDeleteExercise = useCallback((exIdx: number) => {
     setActiveExercises(prev => {
@@ -2644,6 +2746,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       superSetColor={superSetColor}
                       handleDeleteExercise={handleDeleteExercise}
                       handleExerciseMenuPress={handleExerciseMenuPress}
+                      handleSelectVariation={handleSelectVariation}
                       exerciseLibraryMap={exerciseLibraryMap}
                       handleSetFocus={handleSetFocus}
                       updateSetField={updateSetField}
@@ -3828,6 +3931,7 @@ interface ActiveExerciseRowProps {
   prevIsSameSuperSet: boolean;
   superSetColor: string | undefined;
   handleExerciseMenuPress: (idx: number) => void;
+  handleSelectVariation?: (exIdx: number, variation: string | undefined) => void;
   exerciseLibraryMap: Map<string, any>;
   handleSetFocus: any;
   updateSetField: any;
@@ -3847,6 +3951,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   prevIsSameSuperSet,
   superSetColor,
   handleExerciseMenuPress,
+  handleSelectVariation,
   exerciseLibraryMap,
   handleSetFocus,
   updateSetField,
@@ -3930,6 +4035,21 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
+              {(() => {
+                const libEx = exerciseLibraryMap.get(exercise.name.toLowerCase());
+                const variationsList = libEx?.variations || [];
+                if (variationsList.length > 0 || exercise.variation) {
+                  return (
+                    <VariationDropdown
+                      variations={variationsList}
+                      activeVariation={exercise.variation}
+                      onSelectVariation={(v) => handleSelectVariation && handleSelectVariation(exIdx, v)}
+                      onManageVariations={() => handleExerciseMenuPress(exIdx)}
+                    />
+                  );
+                }
+                return null;
+              })()}
               <Pressable
                 onPress={() => handleExerciseMenuPress(exIdx)}
                 style={styles.exEllipsis}
@@ -4033,6 +4153,7 @@ interface ActiveExerciseCardProps {
   superSetColor: string | undefined;
   handleDeleteExercise: (idx: number) => void;
   handleExerciseMenuPress: (idx: number) => void;
+  handleSelectVariation?: (exIdx: number, variation: string | undefined) => void;
   exerciseLibraryMap: Map<string, any>;
   handleSetFocus: any;
   updateSetField: any;
@@ -4053,6 +4174,7 @@ const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
   superSetColor,
   handleDeleteExercise,
   handleExerciseMenuPress,
+  handleSelectVariation,
   exerciseLibraryMap,
   handleSetFocus,
   updateSetField,
@@ -4084,6 +4206,7 @@ const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
           prevIsSameSuperSet={prevIsSameSuperSet}
           superSetColor={superSetColor}
           handleExerciseMenuPress={handleExerciseMenuPress}
+          handleSelectVariation={handleSelectVariation}
           exerciseLibraryMap={exerciseLibraryMap}
           handleSetFocus={handleSetFocus}
           updateSetField={updateSetField}

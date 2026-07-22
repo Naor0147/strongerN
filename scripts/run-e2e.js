@@ -13,26 +13,22 @@ let didStartExpo = false;
 
 // Clean up child process on exit
 function cleanup() {
-  try {
-    const envPath = path.resolve(__dirname, '../.env.local');
-    if (fs.existsSync(envPath)) {
-      fs.unlinkSync(envPath);
-    }
-  } catch (err) {}
-
-  if (didStartExpo && expoProcess) {
-    console.log('[e2e] Cleaning up Expo.');
-    if (process.platform === 'win32') {
-      try {
+  if (!didStartExpo) return;
+  didStartExpo = false;
+  console.log('[e2e] Cleaning up Expo.');
+  if (process.platform === 'win32') {
+    try {
+      if (expoProcess && expoProcess.pid) {
         execSync(`taskkill /pid ${expoProcess.pid} /T /F`, { stdio: 'ignore' });
-      } catch (err) {
-        // Process might already be dead
       }
-    } else {
-      expoProcess.kill('SIGTERM');
-    }
-    expoProcess = null;
+      execSync('for /f "tokens=5" %a in (\'netstat -aon ^| findstr LISTENING ^| findstr :8081\') do taskkill /F /PID %a', { stdio: 'ignore', shell: 'cmd.exe' });
+    } catch (err) {}
+  } else {
+    try {
+      if (expoProcess) expoProcess.kill('SIGKILL');
+    } catch (err) {}
   }
+  expoProcess = null;
 }
 
 process.on('exit', cleanup);
@@ -95,9 +91,16 @@ async function main() {
     const isActive = await checkPortActive();
 
     if (isActive) {
-      console.log('[e2e] Expo already running.');
-    } else {
-      console.log('[e2e] Expo not running. Starting...');
+      console.log('[e2e] Expo active on :8081. Clearing stale process...');
+      try {
+        if (process.platform === 'win32') {
+          execSync('for /f "tokens=5" %a in (\'netstat -aon ^| findstr LISTENING ^| findstr :8081\') do taskkill /F /PID %a', { stdio: 'ignore', shell: 'cmd.exe' });
+        }
+      } catch (err) {}
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    console.log('[e2e] Starting fresh Expo instance...');
       
       const logPath = path.resolve(__dirname, '../expo-e2e.log');
       const logStream = fs.createWriteStream(logPath, { flags: 'w' });
@@ -125,7 +128,18 @@ async function main() {
       try {
         await pollExpoServer(EXPO_TIMEOUT_MS);
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[e2e] Expo ready (${duration}s)`);
+        console.log(`[e2e] Expo ready (${duration}s). Pre-warming bundle...`);
+
+        // Pre-warm Metro web bundle so Playwright doesn't hit 5s element click timeout during initial compile
+        await new Promise((res) => {
+          const warmReq = http.get(`${URL}/index.bundle?platform=web&dev=true`, { timeout: 45000 }, (response) => {
+            response.on('data', () => {});
+            response.on('end', () => res(true));
+          });
+          warmReq.on('error', () => res(false));
+          warmReq.on('timeout', () => { warmReq.destroy(); res(false); });
+        });
+        console.log(`[e2e] Metro bundle pre-warmed.`);
       } catch (err) {
         // Show tail of log file on failure
         try {
@@ -137,9 +151,7 @@ async function main() {
           console.error('[e2e] Expo failed, and log file could not be read.');
         }
         cleanup();
-        process.exit(1);
       }
-    }
 
     console.log('[e2e] Running tests...');
     const extraArgs = process.argv.slice(2);

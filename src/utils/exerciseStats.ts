@@ -16,7 +16,8 @@ function getMonday(date: Date): Date | null {
  */
 export function setsPerWeek(
   exName: string,
-  sessions: WorkoutSession[]
+  sessions: WorkoutSession[],
+  variation?: string
 ): { weekStart: Date; count: number }[] {
   if (!exName || !Array.isArray(sessions) || sessions.length === 0) return [];
   const weekMap: Record<string, number> = {};
@@ -24,7 +25,8 @@ export function setsPerWeek(
   for (const session of sessions) {
     if (!session || !session.datetime || !Array.isArray(session.exercises)) continue;
     const exSet = session.exercises.find(
-      (e) => e && e.name && e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim() &&
+        (variation ? (e.variation && e.variation.trim().toLowerCase() === variation.trim().toLowerCase()) : true)
     );
     if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
@@ -52,7 +54,8 @@ export function setsPerWeek(
  */
 export function avgRepsPerWorkout(
   exName: string,
-  sessions: WorkoutSession[]
+  sessions: WorkoutSession[],
+  variation?: string
 ): { date: Date; avg: number }[] {
   if (!exName || !Array.isArray(sessions) || sessions.length === 0) return [];
   const result: { date: Date; avg: number }[] = [];
@@ -65,7 +68,8 @@ export function avgRepsPerWorkout(
   for (const session of sortedSessions) {
     if (!Array.isArray(session.exercises)) continue;
     const exSet = session.exercises.find(
-      (e) => e && e.name && e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim() &&
+        (variation ? (e.variation && e.variation.trim().toLowerCase() === variation.trim().toLowerCase()) : true)
     );
     if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
@@ -96,13 +100,15 @@ export function avgRepsPerWorkout(
  */
 export function lastPerformed(
   exName: string,
-  sessions: WorkoutSession[]
+  sessions: WorkoutSession[],
+  variation?: string
 ): Date | null {
   let latestDate: Date | null = null;
 
   for (const session of sessions) {
     const exSet = session.exercises.find(
-      (e) => e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim() &&
+        (variation ? (e.variation && e.variation.trim().toLowerCase() === variation.trim().toLowerCase()) : true)
     );
     if (!exSet || !exSet.setsDetails) continue;
 
@@ -123,13 +129,15 @@ export function lastPerformed(
  */
 export function totalSetsAllTime(
   exName: string,
-  sessions: WorkoutSession[]
+  sessions: WorkoutSession[],
+  variation?: string
 ): number {
   let total = 0;
 
   for (const session of sessions) {
     const exSet = session.exercises.find(
-      (e) => e.name.toLowerCase() === exName.toLowerCase()
+      (e) => e && e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim() &&
+        (variation ? (e.variation && e.variation.trim().toLowerCase() === variation.trim().toLowerCase()) : true)
     );
     if (!exSet || !exSet.setsDetails) continue;
 

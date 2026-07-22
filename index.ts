@@ -1,3 +1,13 @@
+if (typeof window !== 'undefined') {
+  if (window.location?.search?.includes('e2e=true') || window.sessionStorage?.getItem('is_e2e_mode') === 'true' || window.localStorage?.getItem('is_e2e_mode') === 'true') {
+    (window as any).__IS_E2E__ = true;
+    try {
+      window.sessionStorage?.setItem('is_e2e_mode', 'true');
+      window.localStorage?.setItem('is_e2e_mode', 'true');
+    } catch (e) {}
+  }
+}
+
 import 'react-native-gesture-handler';
 import './src/utils/reactScan'; // React Scan performance monitor toggle
 import './src/utils/alertOverride'; // Override Alert.alert globally

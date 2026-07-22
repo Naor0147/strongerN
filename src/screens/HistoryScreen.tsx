@@ -179,6 +179,9 @@ const ExerciseRow: React.FC<{ exercise: ExerciseSet }> = React.memo(({ exercise 
     <Text style={styles.exSets} numberOfLines={1}>
       {exercise.sets}
       <Text style={styles.exX}>×</Text> {exercise.name}
+      {exercise.variation ? (
+        <Text style={{ color: colors.accent, fontSize: font.sizes.xs, fontFamily: font.semibold }}> · {exercise.variation}</Text>
+      ) : null}
     </Text>
     <Text style={styles.exBest}>
       {exercise.bestWeight}kg × {exercise.bestReps}

@@ -25,9 +25,9 @@ import { Exercise } from '../data/mockData';
 import ScreenHeader from '../components/layout/ScreenHeader';
 import PressableRow from '../components/ui/PressableRow';
 import IconButton   from '../components/ui/IconButton';
-import { sectionListGetItemLayout } from '../utils/listLayout';
 import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
+import { normalizeTag, isValidTag, addVariationToExercise, removeVariationFromExercise } from '../utils/variationUtils';
 
 const ITEM_HEIGHT   = 72;
 const HEADER_HEIGHT = 48;
@@ -41,6 +41,7 @@ interface ExercisesScreenProps {
   onDeleteExercise?: (id: string) => void;
   onUpdateExerciseNotes?: (id: string, notes?: string) => void;
   onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
+  onUpdateExerciseVariations?: (id: string, variations: string[]) => void;
   sessions?: any[];
   exerciseNameLanguage?: 'en' | 'he';
 }
@@ -301,11 +302,13 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   onDeleteExercise, 
   onUpdateExerciseNotes,
   onUpdateExercise,
+  onUpdateExerciseVariations,
   sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
+  const [newTagText, setNewTagText] = useState('');
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<'alphabetical-asc' | 'alphabetical-desc' | 'sets'>('alphabetical-asc');
@@ -1190,6 +1193,71 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                     ) : (
                       <Text style={styles.detailsNoteEmptyText}>{i18n.t('extras.noCustomCues')}</Text>
                     )}
+                  </View>
+
+                  {/* Exercise Variations / Tags Section */}
+                  <View style={styles.detailsNoteContainer}>
+                    <View style={styles.detailsNoteHeader}>
+                      <Text style={styles.sectionTitle}>{i18n.t('variations.title', { defaultValue: 'Variations & Tags' })}</Text>
+                    </View>
+
+                    {selectedExercise.variations && selectedExercise.variations.length > 0 ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: spacing.xs }}>
+                        {selectedExercise.variations.map(tag => (
+                          <View key={tag} style={tagStyles.tagChip}>
+                            <Ionicons name="pricetag" size={11} color={colors.accent} style={{ marginRight: 4 }} />
+                            <Text style={tagStyles.tagChipText}>{tag}</Text>
+                            <Pressable
+                              onPress={() => {
+                                if (onUpdateExerciseVariations && selectedExercise) {
+                                  const updated = removeVariationFromExercise(selectedExercise, tag);
+                                  onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
+                                }
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={{ marginLeft: 6 }}
+                            >
+                              <Ionicons name="close-circle" size={14} color={colors.textMuted} />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.detailsNoteEmptyText}>
+                        {i18n.t('variations.noHistory', { defaultValue: 'No variation tags created yet.' })}
+                      </Text>
+                    )}
+
+                    <View style={tagStyles.addTagRow}>
+                      <TextInput
+                        style={tagStyles.addTagInput}
+                        placeholder={i18n.t('variations.placeholder', { defaultValue: 'e.g. Icon Push, Bereshit Upper...' })}
+                        placeholderTextColor={colors.textMuted}
+                        value={newTagText}
+                        onChangeText={setNewTagText}
+                        keyboardAppearance="dark"
+                        maxLength={40}
+                      />
+                      <Pressable
+                        style={tagStyles.addTagBtn}
+                        onPress={() => {
+                          if (!newTagText.trim()) return;
+                          if (!isValidTag(newTagText)) {
+                            Alert.alert(i18n.t('common.error'), i18n.t('variations.tooLong', { defaultValue: 'Tag name too long (max 40 chars)' }));
+                            return;
+                          }
+                          if (onUpdateExerciseVariations && selectedExercise) {
+                            const updated = addVariationToExercise(selectedExercise, newTagText);
+                            onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
+                            setNewTagText('');
+                          }
+                        }}
+                        android_ripple={rippleTokens.accent}
+                      >
+                        <Ionicons name="add" size={16} color="#0D0F14" />
+                        <Text style={tagStyles.addTagBtnText}>{i18n.t('common.add', { defaultValue: 'Add' })}</Text>
+                      </Pressable>
+                    </View>
                   </View>
 
                   {/* Progression Trend Chart */}
@@ -2193,6 +2261,56 @@ const skeletonStyles = StyleSheet.create({
     height: 28,
     borderRadius: radius.xs ?? 3,
     backgroundColor: colors.surface2,
+  },
+});
+
+const tagStyles = StyleSheet.create({
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(79, 142, 247, 0.15)',
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  tagChipText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.weights.medium,
+    color: colors.accent,
+  },
+  addTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    columnGap: spacing.xs,
+  },
+  addTagInput: {
+    flex: 1,
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    color: colors.textPrimary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.weights.medium,
+  },
+  addTagBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: radius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  addTagBtnText: {
+    color: '#0D0F14',
+    fontSize: font.sizes.xs,
+    fontFamily: font.weights.bold,
+    marginLeft: 2,
   },
 });
 

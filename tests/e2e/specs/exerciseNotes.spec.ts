@@ -17,6 +17,7 @@ test.describe('Exercise Notes Regression Tests', () => {
     insightsPage = new ExerciseInsightsPage(page);
 
     await appPage.goto();
+    await appPage.clearStorage();
     await appPage.startTemplateWorkout();
   });
 

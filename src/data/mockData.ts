@@ -38,6 +38,7 @@ export interface ExerciseSet {
   bestReps: number;
   rpe?: number;
   setsDetails?: SetDetail[];
+  variation?: string;
 }
 
 export interface WorkoutSession {
@@ -58,6 +59,7 @@ export interface Template {
   exercisesDetails?: {
     name: string;
     superSetGroupId?: string;
+    variation?: string;
     sets: {
       weight: string;
       reps: string;
@@ -88,6 +90,7 @@ export interface Exercise {
   nameHe?: string;
   searchAliases?: string[];
   instructions?: string;
+  variations?: string[];
 }
 
 export interface MeasureHistoryEntry {
