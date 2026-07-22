@@ -124,20 +124,27 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
 }
 
 function App() {
-  const isE2E = process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
-    window.location?.search?.includes('e2e=true') ||
-    window.sessionStorage?.getItem('is_e2e_mode') === 'true' ||
-    window.localStorage?.getItem('is_e2e_mode') === 'true'
-  ));
+  const isE2E = Platform.OS === 'web' && (
+    process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
+      window.location?.search?.includes('e2e=true') ||
+      window.sessionStorage?.getItem('is_e2e_mode') === 'true'
+    ))
+  );
 
   if (isE2E) {
     if (typeof window !== 'undefined') {
       try {
         window.sessionStorage?.setItem('is_e2e_mode', 'true');
-        window.localStorage?.setItem('is_e2e_mode', 'true');
       } catch (e) {}
     }
     return <E2EAppHarness />;
+  }
+
+  // Clear legacy localStorage e2e key if present
+  if (typeof window !== 'undefined' && window.localStorage?.getItem('is_e2e_mode')) {
+    try {
+      window.localStorage.removeItem('is_e2e_mode');
+    } catch (e) {}
   }
 
   const [fontsLoaded] = useFonts({
