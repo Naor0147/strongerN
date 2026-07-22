@@ -491,7 +491,7 @@ function App() {
               setIsWorkoutActive(true);
               if (savedWorkout.workoutName) setWorkoutName(savedWorkout.workoutName);
               if (savedWorkout.startTime) setStartTime(new Date(savedWorkout.startTime));
-              if (Array.isArray(savedWorkout.workoutExercises)) setWorkoutExercises(savedWorkout.workoutExercises);
+              if (Array.isArray(savedWorkout.workoutExercises)) setWorkoutExercisesAndRef(savedWorkout.workoutExercises);
               if (savedWorkout.isWorkoutModalVisible !== undefined) setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
               if (savedWorkout.comment !== undefined) setActiveWorkoutComment(savedWorkout.comment || '');
             } else {
@@ -517,6 +517,23 @@ function App() {
   React.useEffect(() => {
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.backgroundColor = '#0D0F14';
+    }
+  }, []);
+
+  // Root state save refs
+  const rootSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const latestAppDataRef = React.useRef<any>(null);
+
+  const flushMainAppData = React.useCallback(() => {
+    if (rootSaveTimeoutRef.current) {
+      clearTimeout(rootSaveTimeoutRef.current);
+      rootSaveTimeoutRef.current = null;
+    }
+    if (latestAppDataRef.current) {
+      console.log('[SAVE] Flushing main app data immediately');
+      saveToDb(STORAGE_KEY, latestAppDataRef.current).catch(e => {
+        console.error('[SAVE] Error flushing main app data:', e);
+      });
     }
   }, []);
 
@@ -565,9 +582,18 @@ function App() {
         appTheme,
         customAccentColor,
       };
-      saveToDb(STORAGE_KEY, data);
+      latestAppDataRef.current = data;
+      if (rootSaveTimeoutRef.current) {
+        clearTimeout(rootSaveTimeoutRef.current);
+      }
+      rootSaveTimeoutRef.current = setTimeout(() => {
+        saveToDb(STORAGE_KEY, data).catch(e => {
+          console.error('[SAVE] Error saving state to database:', e);
+        });
+        rootSaveTimeoutRef.current = null;
+      }, 400);
     } catch (e) {
-      console.warn('Error saving state to database', e);
+      console.warn('Error queuing state save to database', e);
     }
   }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isRpeMode, appTheme, customAccentColor, isDataLoaded]);
 
@@ -1570,7 +1596,7 @@ function App() {
     });
 
     console.log('[START WORKOUT] Creating', mappedExercises.length, 'exercises');
-    setWorkoutExercises(mappedExercises.length > 0 ? mappedExercises : []);
+    setWorkoutExercisesAndRef(mappedExercises.length > 0 ? mappedExercises : []);
 
     // Phase C: Update lastUsed on the matching template when the workout starts
     if (name && name !== i18n.t('extras.emptyWorkout')) {
@@ -1583,7 +1609,7 @@ function App() {
 
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
-  }, []);
+  }, [setWorkoutExercisesAndRef]);
 
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
@@ -1610,7 +1636,7 @@ function App() {
       };
     });
 
-    setWorkoutExercises(mapped);
+    setWorkoutExercisesAndRef(mapped);
     setIsWorkoutActive(true);
     setIsWorkoutModalVisible(true);
   };
@@ -1618,7 +1644,7 @@ function App() {
   const handleDiscardWorkout = React.useCallback(() => {
     setIsWorkoutActive(false);
     setIsWorkoutModalVisible(false);
-    setWorkoutExercises([]);
+    setWorkoutExercisesAndRef([]);
     setWorkoutName('Active Workout');
     setEditingSessionId(null);
     setActiveWorkoutComment('');
@@ -1768,37 +1794,62 @@ function App() {
 
   const activeWorkoutStateSavedRef = React.useRef(false);
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const activeWorkoutStateRef = React.useRef<any>(null);
+
+  const isWorkoutActiveRef = React.useRef(isWorkoutActive);
+  const isWorkoutModalVisibleRef = React.useRef(isWorkoutModalVisible);
+  const activeWorkoutCommentRef = React.useRef(activeWorkoutComment);
+  const workoutExercisesRef = React.useRef(workoutExercises);
 
   React.useEffect(() => {
-    if (isWorkoutActive) {
-      activeWorkoutStateRef.current = {
-        isWorkoutActive: true,
-        workoutName,
-        startTime: startTime.toISOString(),
-        workoutExercises,
-        isWorkoutModalVisible,
-        comment: activeWorkoutComment,
-      };
-    } else {
-      activeWorkoutStateRef.current = null;
-    }
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment]);
+    isWorkoutActiveRef.current = isWorkoutActive;
+    isWorkoutModalVisibleRef.current = isWorkoutModalVisible;
+    activeWorkoutCommentRef.current = activeWorkoutComment;
+    workoutExercisesRef.current = workoutExercises;
+  }, [isWorkoutActive, isWorkoutModalVisible, activeWorkoutComment, workoutExercises]);
 
-  const flushSave = React.useCallback(() => {
+  const setWorkoutExercisesAndRef = React.useCallback((exercises: any[]) => {
+    workoutExercisesRef.current = exercises;
+    setWorkoutExercises(exercises);
+  }, []);
+
+  const getFreshWorkoutState = React.useCallback(() => {
+    if (!isWorkoutActiveRef.current) return null;
+    return {
+      isWorkoutActive: true,
+      workoutName: workoutNameRef.current || 'Active Workout',
+      startTime: startTimeRef.current ? startTimeRef.current.toISOString() : new Date().toISOString(),
+      workoutExercises: workoutExercisesRef.current || [],
+      isWorkoutModalVisible: isWorkoutModalVisibleRef.current,
+      comment: activeWorkoutCommentRef.current || '',
+    };
+  }, []);
+
+  const saveActiveWorkoutState = React.useCallback((forceFlush = false) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    if (activeWorkoutStateRef.current) {
-      console.log('[SAVE] Flushing pending save immediately, exercises:', activeWorkoutStateRef.current.workoutExercises?.length);
-      saveToDb('strongern_active_workout_state', activeWorkoutStateRef.current);
+    const freshState = getFreshWorkoutState();
+    if (freshState) {
+      console.log('[SAVE] Saving active workout state, exercises count:', freshState.workoutExercises.length);
+      saveToDb('strongern_active_workout_state', freshState).catch(e => {
+        console.error('[SAVE] Error saving active workout state:', e);
+      });
       activeWorkoutStateSavedRef.current = true;
-    } else {
+    } else if (activeWorkoutStateSavedRef.current) {
+      console.log('[SAVE] Deleting workout state because workout is no longer active');
       deleteFromDb('strongern_active_workout_state');
       activeWorkoutStateSavedRef.current = false;
     }
-  }, []);
+  }, [getFreshWorkoutState]);
+
+  const flushSave = React.useCallback(() => {
+    console.log('[SAVE] AppState change/flush save triggered');
+    // 1. Flush main root data (exercises, tags, sessions, user settings)
+    flushMainAppData();
+    // 2. Flush active workout state from live refs
+    saveActiveWorkoutState(true);
+  }, [flushMainAppData, saveActiveWorkoutState]);
 
   // Flush on web beforeunload
   React.useEffect(() => {
@@ -1813,18 +1864,8 @@ function App() {
   // Persist active workout state on changes (cross-platform via db.ts)
   React.useEffect(() => {
     if (!isDataLoaded || !isWorkoutRestored) return;
-
-    if (isWorkoutActive && activeWorkoutStateRef.current) {
-      saveToDb('strongern_active_workout_state', activeWorkoutStateRef.current);
-      activeWorkoutStateSavedRef.current = true;
-    } else {
-      if (activeWorkoutStateSavedRef.current) {
-        console.log('[SAVE] Deleting workout state because workout is no longer active');
-        deleteFromDb('strongern_active_workout_state');
-        activeWorkoutStateSavedRef.current = false;
-      }
-    }
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored]);
+    saveActiveWorkoutState(false);
+  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored, saveActiveWorkoutState]);
 
   // Save workout state when app goes to background (native)
   React.useEffect(() => {
@@ -2159,7 +2200,7 @@ function App() {
               onFinish={handleFinishWorkout}
               onDiscard={handleDiscardWorkout}
               exerciseLibrary={exercisesList}
-              onUpdateActiveExercises={setWorkoutExercises}
+              onUpdateActiveExercises={setWorkoutExercisesAndRef}
               onUpdateExerciseNotes={handleUpdateExerciseNotes}
               onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
               onAddCustomExercise={handleAddExercise}
