@@ -335,7 +335,7 @@ function Install-ADB {
     
     try { $p.Refresh() } catch {}
     $needFallback = $false
-    if ($p.ExitCode -ne 0) {
+    if ($p.ExitCode -and $p.ExitCode -ne 0) {
         Write-Host "[WARN] Standard installation failed (Exit Code: $($p.ExitCode))." -ForegroundColor $WarningColor
         $needFallback = $true
     }
@@ -395,7 +395,7 @@ function Install-ADB {
             Start-Process $adb -ArgumentList $cleanArgs -NoNewWindow -PassThru -Wait | Out-Null
             
             try { $pShell.Refresh() } catch {}
-            if ($pShell.ExitCode -ne 0) {
+            if ($pShell.ExitCode -and $pShell.ExitCode -ne 0) {
                 Write-Host "❌ Fallback installation failed (Exit Code: $($pShell.ExitCode))." -ForegroundColor $ErrorColor
                 return $false
             }

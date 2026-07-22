@@ -1008,9 +1008,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [activeExercises, _setActiveExercises] = useState<ActiveExercise[]>([]);
   const activeExercisesRef = useRef<ActiveExercise[]>([]);
 
-  const setActiveExercises = useCallback((action: any) => {
+  const setActiveExercises = useCallback((action: React.SetStateAction<ActiveExercise[]>) => {
     _setActiveExercises((prev: ActiveExercise[]) => {
-      const next = typeof action === 'function' ? action(prev) : action;
+      const next = typeof action === 'function' ? (action as (p: ActiveExercise[]) => ActiveExercise[])(prev) : action;
       activeExercisesRef.current = next;
       return next;
     });
@@ -2725,7 +2725,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 onDragEnd={({ order }) => {
                   setScrollEnabled(true);
                   setTimeout(() => {
-                    setActiveExercises(prev => sanitizeSuperSets(order(prev)));
+                    setActiveExercises(prev => sanitizeSuperSets(order(prev) as ActiveExercise[]));
                   }, 120);
                 }}
                 onActiveItemDropped={() => setScrollEnabled(true)}
