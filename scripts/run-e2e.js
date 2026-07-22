@@ -11,8 +11,14 @@ const EXPO_TIMEOUT_MS = 120000; // 2 minutes
 let expoProcess = null;
 let didStartExpo = false;
 
-// Clean up child process on exit
+// Clean up child process and env file on exit
 function cleanup() {
+  try {
+    const envLocalPath = path.resolve(__dirname, '../.env.local');
+    if (fs.existsSync(envLocalPath)) {
+      fs.unlinkSync(envLocalPath);
+    }
+  } catch (err) {}
   if (!didStartExpo) return;
   didStartExpo = false;
   console.log('[e2e] Cleaning up Expo.');
