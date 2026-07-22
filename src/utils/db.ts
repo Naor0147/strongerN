@@ -41,16 +41,21 @@ export async function saveToDb(key: string, value: any): Promise<boolean> {
   const serialized = JSON.stringify(value);
 
   // Native SQLite path
-  if (!isWeb && db) {
-    try {
-      await db.runAsync(
-        `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value) VALUES (?, ?);`,
-        [key, serialized]
-      );
-      return true;
-    } catch (err) {
-      console.error('[DB] SQLite save error, trying localStorage fallback:', err);
-      // Fall through to localStorage
+  if (!isWeb) {
+    if (!db) {
+      await initDb();
+    }
+    if (db) {
+      try {
+        await db.runAsync(
+          `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value) VALUES (?, ?);`,
+          [key, serialized]
+        );
+        return true;
+      } catch (err) {
+        console.error('[DB] SQLite save error, trying localStorage fallback:', err);
+        // Fall through to localStorage
+      }
     }
   }
 
@@ -68,16 +73,21 @@ export async function saveToDb(key: string, value: any): Promise<boolean> {
 
 export async function loadFromDb(key: string): Promise<any | null> {
   // Native SQLite path
-  if (!isWeb && db) {
-    try {
-      const row = await db.getFirstAsync(
-        `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
-        [key]
-      );
-      return row ? JSON.parse(row.value) : null;
-    } catch (err) {
-      console.error('[DB] SQLite load error, trying localStorage fallback:', err);
-      // Fall through to localStorage
+  if (!isWeb) {
+    if (!db) {
+      await initDb();
+    }
+    if (db) {
+      try {
+        const row = await db.getFirstAsync(
+          `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
+          [key]
+        );
+        return row ? JSON.parse(row.value) : null;
+      } catch (err) {
+        console.error('[DB] SQLite load error, trying localStorage fallback:', err);
+        // Fall through to localStorage
+      }
     }
   }
 

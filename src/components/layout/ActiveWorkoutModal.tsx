@@ -1404,6 +1404,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
               note: (ex as any).note,
+              variation: (ex as any).variation,
               sets: existingDetails.map((s: any, sIdx: number) => {
                 const isUnilateral = s.isUnilateral || false;
                 const completed = s.completed || false;
@@ -1467,7 +1468,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 };
               }),
               superSetGroupId: (ex as any).superSetGroupId,
-              variation: (ex as any).variation,
             };
           }
  

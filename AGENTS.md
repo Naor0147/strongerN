@@ -14,7 +14,8 @@ This project strictly implements a premium, AMOLED-first, high-fidelity dark des
 
 # E2E Testing Guide for AI Agents
 
-To run the end-to-end tests, run the command `npm run e2e`.
+- **CRITICAL**: Do NOT run `npm run e2e` tests unless the user explicitly asks for them. Running E2E tests burns excessive tokens. Use unit tests (`npm test`), typechecks (`npm run typecheck`), and standalone APK builds instead.
+- If explicitly asked by the user, to run the end-to-end tests, run the command `npm run e2e`.
 - **Exit Code**: The script returns `0` on success and `1` on failure.
 - **Output Format**: The test runner uses a failures-only custom reporter. If all tests pass, it prints a single summary line. If tests fail, it outputs structured diagnostic logs (error description, file source, anchor code, and regression fix recommendation).
 - **Debugging Protocol**: Do not read test spec files to analyze test failures. Trust the diagnostic output containing the exact `source` file, `anchor` code string, and recommended `fix`.

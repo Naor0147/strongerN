@@ -416,24 +416,26 @@ function App() {
             if (parsed.exercisesList) {
               const loadedIds = new Set();
               const uniqueLoaded = parsed.exercisesList.map((e: any) => {
+                const safeVars = Array.isArray(e.variations) ? e.variations : [];
                 if (!e.id || loadedIds.has(e.id)) {
                   const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
                   loadedIds.add(newId);
-                  return { ...e, id: newId };
+                  return { ...e, variations: safeVars, id: newId };
                 }
                 loadedIds.add(e.id);
-                return e;
+                return { ...e, variations: safeVars };
               });
 
               const loadedNames = new Set(uniqueLoaded.map((e: any) => e.name.toLowerCase().trim()));
               const merged = [...uniqueLoaded];
               mockExercises.forEach((defaultEx) => {
                 if (!loadedIds.has(defaultEx.id) && !loadedNames.has(defaultEx.name.toLowerCase().trim())) {
-                  merged.push(defaultEx);
+                  merged.push({ ...defaultEx, variations: Array.isArray(defaultEx.variations) ? defaultEx.variations : [] });
                   loadedIds.add(defaultEx.id);
                 }
               });
               setExercisesList(merged);
+              exercisesListRef.current = merged;
             }
             if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
             if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
@@ -1255,7 +1257,20 @@ function App() {
   }, []);
 
   const handleUpdateExerciseVariations = React.useCallback((id: string, variations: string[]) => {
-    setExercisesList(prev => prev.map(e => e.id === id ? { ...e, variations } : e));
+    setExercisesList(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, variations } : e);
+      exercisesListRef.current = updated;
+      if (latestAppDataRef.current) {
+        latestAppDataRef.current = {
+          ...latestAppDataRef.current,
+          exercisesList: updated,
+        };
+        saveToDb(STORAGE_KEY, latestAppDataRef.current).catch(e => {
+          console.error('[SAVE] Error saving updated variations to DB:', e);
+        });
+      }
+      return updated;
+    });
   }, []);
 
   const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => {
@@ -1501,6 +1516,12 @@ function App() {
   const editingSessionIdRef = React.useRef(editingSessionId);
   const workoutNameRef = React.useRef(workoutName);
   const startTimeRef = React.useRef(startTime);
+  const workoutExercisesRef = React.useRef(workoutExercises);
+
+  const setWorkoutExercisesAndRef = React.useCallback((exercises: any[]) => {
+    workoutExercisesRef.current = exercises;
+    setWorkoutExercises(exercises);
+  }, []);
 
   React.useEffect(() => {
     templatesListRef.current = templatesList;
@@ -1510,7 +1531,8 @@ function App() {
     editingSessionIdRef.current = editingSessionId;
     workoutNameRef.current = workoutName;
     startTimeRef.current = startTime;
-  }, [templatesList, exercisesList, sessionsList, user, editingSessionId, workoutName, startTime]);
+    workoutExercisesRef.current = workoutExercises;
+  }, [templatesList, exercisesList, sessionsList, user, editingSessionId, workoutName, startTime, workoutExercises]);
 
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     setWorkoutName(name);
@@ -1805,19 +1827,12 @@ function App() {
   const isWorkoutActiveRef = React.useRef(isWorkoutActive);
   const isWorkoutModalVisibleRef = React.useRef(isWorkoutModalVisible);
   const activeWorkoutCommentRef = React.useRef(activeWorkoutComment);
-  const workoutExercisesRef = React.useRef(workoutExercises);
-
   React.useEffect(() => {
     isWorkoutActiveRef.current = isWorkoutActive;
     isWorkoutModalVisibleRef.current = isWorkoutModalVisible;
     activeWorkoutCommentRef.current = activeWorkoutComment;
     workoutExercisesRef.current = workoutExercises;
   }, [isWorkoutActive, isWorkoutModalVisible, activeWorkoutComment, workoutExercises]);
-
-  const setWorkoutExercisesAndRef = React.useCallback((exercises: any[]) => {
-    workoutExercisesRef.current = exercises;
-    setWorkoutExercises(exercises);
-  }, []);
 
   const getFreshWorkoutState = React.useCallback(() => {
     if (!isWorkoutActiveRef.current) return null;

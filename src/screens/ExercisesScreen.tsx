@@ -1212,6 +1212,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                               onPress={() => {
                                 if (onUpdateExerciseVariations && selectedExercise) {
                                   const updated = removeVariationFromExercise(selectedExercise, tag);
+                                  setSelectedExercise(updated);
                                   onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
                                 }
                               }}
@@ -1249,6 +1250,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                           }
                           if (onUpdateExerciseVariations && selectedExercise) {
                             const updated = addVariationToExercise(selectedExercise, newTagText);
+                            setSelectedExercise(updated);
                             onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
                             setNewTagText('');
                           }

@@ -47,11 +47,12 @@ export function addVariationToExercise(exercise: Exercise, tag: string): Exercis
  */
 export function removeVariationFromExercise(exercise: Exercise, tag: string): Exercise {
   const normalized = normalizeTag(tag);
-  if (!normalized || !exercise.variations) return exercise;
+  const currentVars = exercise.variations || [];
+  if (!normalized) return { ...exercise, variations: currentVars };
   
   return {
     ...exercise,
-    variations: exercise.variations.filter(v => v.toLowerCase() !== normalized.toLowerCase()),
+    variations: currentVars.filter(v => v.toLowerCase() !== normalized.toLowerCase()),
   };
 }
 
