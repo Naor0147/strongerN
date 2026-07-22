@@ -7,6 +7,7 @@ import { saveCrashLogSync } from '../../utils/crashLogger';
 
 interface Props {
   children: ReactNode;
+  onReset?: () => void;
 }
 
 interface State {
@@ -48,6 +49,13 @@ export class ErrorBoundary extends Component<Props, State> {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
     
+    // Trigger reset callback if provided (e.g. to clean up corrupt state)
+    try {
+      this.props.onReset?.();
+    } catch (e) {
+      console.warn('[ErrorBoundary] Error during onReset callback execution:', e);
+    }
+
     // Attempt state reset
     this.setState({ hasError: false, error: null });
     

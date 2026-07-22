@@ -1326,26 +1326,30 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const sessionsByExerciseMap = useMemo(() => {
     const map = new Map<string, any[]>();
     if (!sessions) return map;
-    for (let i = 0; i < sessions.length; i++) {
-      const s = sessions[i];
-      if (s && s.exercises) {
-        for (let j = 0; j < s.exercises.length; j++) {
-          const ex = s.exercises[j];
-          if (ex && ex.name) {
-            const key = ex.name.trim().toLowerCase();
-            let list = map.get(key);
-            if (!list) {
-              list = [];
-              map.set(key, list);
+    try {
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (s && s.exercises && Array.isArray(s.exercises)) {
+          for (let j = 0; j < s.exercises.length; j++) {
+            const ex = s.exercises[j];
+            if (ex && ex.name && typeof ex.name === 'string') {
+              const key = ex.name.trim().toLowerCase();
+              let list = map.get(key);
+              if (!list) {
+                list = [];
+                map.set(key, list);
+              }
+              list.push({ datetime: s.datetime, ex });
             }
-            list.push({ datetime: s.datetime, ex });
           }
         }
       }
+      map.forEach(list => {
+        list.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+      });
+    } catch (e) {
+      console.warn('[sessionsByExerciseMap] Error building sessions map:', e);
     }
-    map.forEach(list => {
-      list.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-    });
     return map;
   }, [sessions]);
 
@@ -1393,9 +1397,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         resumeStartTime.current = isEditing ? new Date() : (startTime || new Date());
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
         setWorkoutNote(editingComment || '');
-        setLocalWorkoutName(workoutName);
-
-        const initial = exercises.map((ex: ExerciseSet, exIdx): ActiveExercise => {
+        setLocalWorkoutName(workoutName);        const initial = (exercises || [])
+          .filter((ex: ExerciseSet) => Boolean(ex && ex.name && typeof ex.name === 'string'))
+          .map((ex: ExerciseSet, exIdx): ActiveExercise => {
           const setsCount = ex.sets;
           const useRoutineTargets = (ex as any).useRoutineTargets || false;
           const existingDetails = ex.setsDetails;
@@ -1427,7 +1431,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     suggestedRightReps = s.suggestedRightReps?.toString() || (s.rightReps && s.rightReps !== '0' ? s.rightReps.toString() : suggestedReps);
                   }
                 } else {
-                  const hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+                  let hist: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+                  try {
+                    hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+                  } catch (err) {
+                    console.warn('[ActiveWorkout] Error getting previous set suggestion:', err);
+                  }
                   if (hist.weight || hist.reps || hist.leftWeight || hist.rightWeight) {
                     suggestedWeight = hist.weight;
                     suggestedReps = hist.reps;
@@ -1479,7 +1488,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
              sets: Array.from({ length: setsCount }).map((_, setIdx) => {
                const isUnilateral = ex.setsDetails?.[0]?.isUnilateral || false;
                const category = 'S';
-               const hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+               let hist: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+               try {
+                 hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+               } catch (err) {
+                 console.warn('[ActiveWorkout] Error getting previous set suggestion:', err);
+               }
                return {
                  id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
                  weight:    '',
@@ -2250,7 +2264,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const handleSelectVariation = useCallback((exIdx: number, newVariation: string | undefined) => {
     setActiveExercises((prev: ActiveExercise[]) => {
-      if (!prev[exIdx]) return prev;
+      if (!prev[exIdx] || !prev[exIdx].name || typeof prev[exIdx].name !== 'string') return prev;
       const targetEx = prev[exIdx];
       const libEx = exerciseLibraryMap.get(targetEx.name.toLowerCase());
       const isUnilateral = libEx?.isUnilateral || false;
@@ -2276,17 +2290,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         };
 
         if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          const perfSuggested = getBestPerformanceSuggestionForSet(
-            targetEx.name,
-            category,
-            positionInCategory,
-            sessions,
-            isUnilateral,
-            newVariation,
-            libEx
-          );
-          if (perfSuggested.weight || perfSuggested.reps) {
-            suggested = perfSuggested;
+          try {
+            const perfSuggested = getBestPerformanceSuggestionForSet(
+              targetEx.name,
+              category,
+              positionInCategory,
+              sessions,
+              isUnilateral,
+              newVariation,
+              libEx
+            );
+            if (perfSuggested.weight || perfSuggested.reps) {
+              suggested = perfSuggested;
+            }
+          } catch (err) {
+            console.warn('[ActiveWorkout] Error getting performance suggestion for variation:', err);
           }
         }
 
@@ -2970,7 +2988,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           }));
 
                           // 2. Update global exercises list mode state
-                          const libEx = exerciseLibraryMap.get(currentEx.name.toLowerCase());
+                          const libEx = currentEx?.name ? exerciseLibraryMap.get(currentEx.name.toLowerCase()) : undefined;
                           if (libEx && onUpdateExercise) {
                             onUpdateExercise(
                               libEx.id,
@@ -3145,7 +3163,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             )}
 
             {/* Modal: Exercise Insights */}
-            {isExerciseInsightsVisible && activeExerciseMenuIndex !== null && (
+            {isExerciseInsightsVisible && activeExerciseMenuIndex !== null && activeExercises[activeExerciseMenuIndex]?.name && (
               <ExerciseInsightsModal
                 visible={isExerciseInsightsVisible}
                 exerciseName={activeExercises[activeExerciseMenuIndex].name}
@@ -4039,7 +4057,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', columnGap: spacing.xs }}>
               {(() => {
-                const libEx = exerciseLibraryMap.get(exercise.name.toLowerCase());
+                const libEx = exercise.name ? exerciseLibraryMap.get(exercise.name.toLowerCase()) : undefined;
                 const variationsList = libEx?.variations || [];
                 if (variationsList.length > 0 || exercise.variation) {
                   return (
@@ -4068,7 +4086,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           </View>
 
           {(() => {
-            const libEx = exerciseLibraryMap.get(exercise.name.toLowerCase());
+            const libEx = exercise.name ? exerciseLibraryMap.get(exercise.name.toLowerCase()) : undefined;
             const noteContent = exercise.note || libEx?.notes;
             if (noteContent) {
               return (

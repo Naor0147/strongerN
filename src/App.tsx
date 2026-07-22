@@ -498,11 +498,13 @@ function App() {
             if (savedWorkout && (savedWorkout.isWorkoutActive !== false) && (savedWorkout.workoutName || savedWorkout.startTime)) {
               console.log('[RESTORE] Restoring workout state, exercises count:', savedWorkout.workoutExercises?.length ?? 0);
               const restoredExercises = Array.isArray(savedWorkout.workoutExercises)
-                ? savedWorkout.workoutExercises.map((ex: any) => ({
-                    ...ex,
-                    variation: ex.variation || undefined,
-                    setsDetails: Array.isArray(ex.setsDetails) ? ex.setsDetails : [],
-                  }))
+                ? savedWorkout.workoutExercises
+                    .filter((ex: any) => Boolean(ex && ex.name && typeof ex.name === 'string' && ex.name.trim().length > 0))
+                    .map((ex: any) => ({
+                      ...ex,
+                      variation: ex.variation || undefined,
+                      setsDetails: Array.isArray(ex.setsDetails) ? ex.setsDetails : [],
+                    }))
                 : [];
 
               isWorkoutActiveRef.current = true;
@@ -1549,7 +1551,9 @@ function App() {
   const startTimeRef = React.useRef(startTime);
   const workoutExercisesRef = React.useRef(workoutExercises);
 
+  const flushVersionRef = React.useRef(0);
   const setWorkoutExercisesAndRef = React.useCallback((exercises: any[]) => {
+    flushVersionRef.current += 1;
     workoutExercisesRef.current = exercises;
     setWorkoutExercises(exercises);
   }, []);
@@ -1884,6 +1888,16 @@ function App() {
     }
     const freshState = getFreshWorkoutState();
     if (freshState) {
+      // Validate exercises before persisting
+      const validExercises = Array.isArray(freshState.workoutExercises)
+        ? freshState.workoutExercises.filter(
+            (ex: any) => Boolean(ex && ex.name && typeof ex.name === 'string' && ex.name.trim().length > 0)
+          )
+        : [];
+      if (validExercises.length < freshState.workoutExercises.length) {
+        console.warn('[SAVE] Filtered out', freshState.workoutExercises.length - validExercises.length, 'invalid exercises before saving');
+      }
+      freshState.workoutExercises = validExercises;
       console.log('[SAVE] Saving active workout state, exercises count:', freshState.workoutExercises.length);
       saveToDb('strongern_active_workout_state', freshState).catch(e => {
         console.error('[SAVE] Error saving active workout state:', e);
@@ -2103,6 +2117,21 @@ function App() {
 
 
 
+  const handleWorkoutCrashRecovery = React.useCallback(() => {
+    console.warn('[RECOVERY] Resetting active workout state after ErrorBoundary caught crash');
+    try {
+      deleteFromDb('strongern_active_workout_state');
+    } catch (e) {
+      console.error('Error deleting corrupt active workout state:', e);
+    }
+    setWorkoutExercisesAndRef([]);
+    isWorkoutActiveRef.current = false;
+    setIsWorkoutActive(false);
+    isWorkoutModalVisibleRef.current = false;
+    setIsWorkoutModalVisible(false);
+    activeWorkoutStateSavedRef.current = false;
+  }, [setWorkoutExercisesAndRef]);
+
   // Show login/onboarding if not yet completed
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -2239,7 +2268,7 @@ function App() {
           )}
 
           {/* Active Workout Interactive Modal Sheet — wrapped in ErrorBoundary (Phase A3) */}
-          <ErrorBoundary>
+          <ErrorBoundary onReset={handleWorkoutCrashRecovery}>
             <ActiveWorkoutModal
               visible={isWorkoutModalVisible}
               workoutName={workoutName}
