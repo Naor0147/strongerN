@@ -241,6 +241,11 @@ const getBestPerformanceSuggestionForSet = (
   exerciseObj?: any,
   sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
+  if (!exName || typeof exName !== 'string') {
+    return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
+  }
+  const normTargetExName = exName.toLowerCase().trim();
+
   const parseWeight = (val: any): number => {
     if (val === undefined || val === null || val === '') return 0;
     const num = typeof val === 'number' ? val : parseFloat(val);
@@ -257,8 +262,8 @@ const getBestPerformanceSuggestionForSet = (
     const varSessions = getSessionsForExerciseVariation(exName, targetVariation, exerciseObj, sessions || []);
     matchingSessions = varSessions
       .reduce<any[]>((acc, s) => {
-        if (s.exercises) {
-          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+        if (s && typeof s === 'object' && Array.isArray(s.exercises)) {
+          const ex = s.exercises.find((e: any) => Boolean(e && typeof e === 'object' && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normTargetExName));
           if (ex) {
             acc.push({ datetime: s.datetime, ex });
           }
@@ -267,12 +272,12 @@ const getBestPerformanceSuggestionForSet = (
       }, [])
       .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
   } else if (sessionsMap) {
-    matchingSessions = sessionsMap.get(exName.toLowerCase()) || [];
+    matchingSessions = sessionsMap.get(normTargetExName) || [];
   } else {
     matchingSessions = (sessions || [])
       .reduce<any[]>((acc, s) => {
-        if (s.exercises) {
-          const ex = s.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+        if (s && typeof s === 'object' && Array.isArray(s.exercises)) {
+          const ex = s.exercises.find((e: any) => Boolean(e && typeof e === 'object' && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normTargetExName));
           if (ex) {
             acc.push({ datetime: s.datetime, ex });
           }

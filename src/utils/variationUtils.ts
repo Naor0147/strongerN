@@ -5,8 +5,8 @@ import { Exercise, WorkoutSession } from '../data/mockData';
  * collapses internal multiple spaces into single space, and Title Cases words.
  * Example: "  icon   push  " -> "Icon Push"
  */
-export function normalizeTag(input: string): string {
-  if (!input) return '';
+export function normalizeTag(input: any): string {
+  if (!input || typeof input !== 'string') return '';
   const trimmed = input.trim().replace(/\s+/g, ' ');
   if (!trimmed) return '';
   
@@ -31,7 +31,7 @@ export function addVariationToExercise(exercise: Exercise, tag: string): Exercis
   const normalized = normalizeTag(tag);
   if (!normalized || !isValidTag(normalized)) return exercise;
   
-  const currentVars = (exercise.variations || []).filter((v): v is string => Boolean(v && typeof v === 'string'));
+  const currentVars = (exercise?.variations || []).filter((v): v is string => Boolean(v && typeof v === 'string'));
   if (currentVars.some(v => v.toLowerCase() === normalized.toLowerCase())) {
     return exercise;
   }
@@ -47,7 +47,7 @@ export function addVariationToExercise(exercise: Exercise, tag: string): Exercis
  */
 export function removeVariationFromExercise(exercise: Exercise, tag: string): Exercise {
   const normalized = normalizeTag(tag);
-  const currentVars = (exercise.variations || []).filter((v): v is string => Boolean(v && typeof v === 'string'));
+  const currentVars = (exercise?.variations || []).filter((v): v is string => Boolean(v && typeof v === 'string'));
   return {
     ...exercise,
     variations: currentVars.filter(v => v.toLowerCase() !== normalized.toLowerCase()),
@@ -55,7 +55,7 @@ export function removeVariationFromExercise(exercise: Exercise, tag: string): Ex
 }
 
 /**
- * Filters sessions for a given exercise variation tag.
+ * Filters sessions for a given exercise variation tag safely.
  * Implements "First Tag Inheritance":
  *   - If no variation is selected (Base State), return sessions with empty/undefined variation.
  *   - If this is the FIRST tag created/selected for an exercise with no other tag history,
@@ -68,26 +68,37 @@ export function getSessionsForExerciseVariation(
   exercise: Exercise | undefined,
   sessions: WorkoutSession[]
 ): WorkoutSession[] {
-  if (!exerciseName || !sessions || !Array.isArray(sessions) || sessions.length === 0) return [];
+  if (!exerciseName || typeof exerciseName !== 'string' || !sessions || !Array.isArray(sessions) || sessions.length === 0) return [];
   
   const normExName = exerciseName.toLowerCase().trim();
-  const normVar = variation ? normalizeTag(variation) : undefined;
+  const normVar = (variation && typeof variation === 'string') ? normalizeTag(variation) : undefined;
   
+  const isMatchExName = (e: any): boolean => {
+    return Boolean(e && typeof e === 'object' && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName);
+  };
+
+  const getVarStr = (e: any): string => {
+    if (!e || typeof e !== 'object' || e.variation === undefined || e.variation === null) return '';
+    return typeof e.variation === 'string' ? e.variation.trim() : '';
+  };
+
   // 1. If no variation selected (Base State), return sessions that have no variation logged
   if (!normVar) {
     return sessions.filter(s =>
-      s && Array.isArray(s.exercises) && s.exercises.some(e =>
-        e && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName && (!e.variation || e.variation.trim() === '')
-      )
+      s && typeof s === 'object' && Array.isArray(s.exercises) && s.exercises.some(e => {
+        if (!isMatchExName(e)) return false;
+        return getVarStr(e) === '';
+      })
     );
   }
   
   // 2. Look for sessions explicitly matching this variation
   const exactMatches = sessions.filter(s =>
-    s && Array.isArray(s.exercises) && s.exercises.some(e =>
-      e && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName &&
-      e.variation && typeof e.variation === 'string' && normalizeTag(e.variation) === normVar
-    )
+    s && typeof s === 'object' && Array.isArray(s.exercises) && s.exercises.some(e => {
+      if (!isMatchExName(e)) return false;
+      const vStr = getVarStr(e);
+      return vStr !== '' && normalizeTag(vStr) === normVar;
+    })
   );
   
   if (exactMatches.length > 0) {
@@ -97,19 +108,21 @@ export function getSessionsForExerciseVariation(
   // 3. First Tag Inheritance rule:
   // Check if any OTHER variation already has logged history for this exercise.
   const hasOtherVariationHistory = sessions.some(s =>
-    s && Array.isArray(s.exercises) && s.exercises.some(e =>
-      e && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName &&
-      e.variation && typeof e.variation === 'string' && normalizeTag(e.variation) !== normVar
-    )
+    s && typeof s === 'object' && Array.isArray(s.exercises) && s.exercises.some(e => {
+      if (!isMatchExName(e)) return false;
+      const vStr = getVarStr(e);
+      return vStr !== '' && normalizeTag(vStr) !== normVar;
+    })
   );
 
   // If no other variation has history, and this is the first tag assigned to the exercise,
   // inherit the base exercise's existing history (sessions where variation is empty/undefined).
   if (!hasOtherVariationHistory) {
     const baseSessions = sessions.filter(s =>
-      s && Array.isArray(s.exercises) && s.exercises.some(e =>
-        e && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName && (!e.variation || e.variation.trim() === '')
-      )
+      s && typeof s === 'object' && Array.isArray(s.exercises) && s.exercises.some(e => {
+        if (!isMatchExName(e)) return false;
+        return getVarStr(e) === '';
+      })
     );
     return baseSessions;
   }
