@@ -316,58 +316,47 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
           <TabErrorBoundary key={activeTab}>
             {activeTab === 'info' && (
               <View style={styles.tabContent}>
-                <View style={styles.imagePlaceholder}>
-                  {exerciseLibraryEntry?.imageUri ? (
+                {/* Only show image area if a real imageUri exists */}
+                {exerciseLibraryEntry?.imageUri && (
+                  <View style={styles.imagePlaceholder}>
                     <Image
                       source={{ uri: exerciseLibraryEntry.imageUri }}
                       style={styles.exerciseImage}
                       resizeMode="cover"
                     />
-                  ) : (
-                    <View style={styles.noImageContainer}>
-                      <Ionicons name="barbell" size={36} color={colors.textMuted} />
-                    </View>
-                  )}
-                </View>
+                  </View>
+                )}
 
-                {/* Target Muscle Groups & Targeted Anatomy Section */}
+                {/* 1 — Targeted Muscle Groups & Anatomy */}
                 {currentExercise?.muscleGroup && (
                   <Card style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>TARGETED MUSCLE GROUPS & ANATOMY</Text>
                     <View style={styles.badgesRow}>
-                      <View style={[
-                        styles.detailsBadge,
-                        { backgroundColor: getMuscleColor(currentExercise.muscleGroup) + '22' }
-                      ]}>
-                        <Text style={[styles.detailsBadgeText, { color: getMuscleColor(currentExercise.muscleGroup) }]}>
+                      {/* Primary muscle — accent tint */}
+                      <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
+                        <Text style={[styles.detailsBadgeText, { color: colors.accent }]}>
                           {getMuscleDisplayName(currentExercise.muscleGroup, exerciseNameLanguage).toUpperCase()}
                         </Text>
                       </View>
 
-                      <View style={[
-                        styles.detailsBadge,
-                        { backgroundColor: colors.highlight + '15' }
-                      ]}>
-                        <Text style={[styles.detailsBadgeText, { color: colors.highlight }]}>
+                      {/* Secondary muscles — slightly dimmer accent tint */}
+                      <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
+                        <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
                           {getSecondaryMuscles(currentExercise.muscleGroup).toUpperCase()}
                         </Text>
                       </View>
 
-                      <View style={[
-                        styles.detailsBadge,
-                        { backgroundColor: colors.accentGlow }
-                      ]}>
-                        <Text style={[styles.detailsBadgeText, { color: colors.accent }]}>
+                      {/* Equipment */}
+                      <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
+                        <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
                           {(currentExercise.equipment || 'Other').toUpperCase()}
                         </Text>
                       </View>
 
+                      {/* Bilateral / Unilateral */}
                       {currentExercise.isUnilateral !== undefined && (
-                        <View style={[
-                          styles.detailsBadge,
-                          { backgroundColor: colors.surfaceHigh }
-                        ]}>
-                          <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
+                        <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
+                          <Text style={[styles.detailsBadgeText, { color: colors.textMuted }]}>
                             {currentExercise.isUnilateral ? 'UNILATERAL' : 'BILATERAL'}
                           </Text>
                         </View>
@@ -376,13 +365,43 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                   </Card>
                 )}
 
-                {/* Variations & Tags Management Section */}
-                {currentExercise && (
+                {/* 2 — Exercise Insights Notes (moved up to 2nd) */}
+                {exerciseLibraryEntry?.id && (
                   <Card style={styles.sectionCard}>
                     <View style={styles.notesHeader}>
-                      <Text style={styles.sectionTitle}>
-                        {i18n.t('variations.title', { defaultValue: 'Variations & Tags' })}
-                      </Text>
+                      <Text style={styles.sectionTitle}>EXERCISE INSIGHTS NOTES</Text>
+                      {savedJustNow && (
+                        <Text style={styles.savedBadgeText}>Saved</Text>
+                      )}
+                    </View>
+                    <TextInput
+                      style={styles.notesInput}
+                      value={notes}
+                      onChangeText={setNotes}
+                      onBlur={handleAutoSaveNotes}
+                      placeholder="Add personal cues, seat settings, or notes for this exercise..."
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                      testID="insights-notes-input"
+                    />
+                  </Card>
+                )}
+
+                {/* 3 — Variations & Tags (polished design) */}
+                {currentExercise && (
+                  <Card style={[styles.sectionCard, styles.tagsCard]}>
+                    <View style={styles.tagsCardHeader}>
+                      <View style={styles.tagsCardHeaderLeft}>
+                        <Ionicons name="bookmark-outline" size={14} color={colors.accent} />
+                        <Text style={styles.sectionTitle}>VARIATIONS & TAGS</Text>
+                      </View>
+                      {currentExercise.variations && currentExercise.variations.length > 0 && (
+                        <View style={styles.tagCountBadge}>
+                          <Text style={styles.tagCountText}>{currentExercise.variations.length}</Text>
+                        </View>
+                      )}
                     </View>
 
                     {currentExercise.variations && currentExercise.variations.length > 0 ? (
@@ -411,7 +430,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       </View>
                     ) : (
                       <Text style={styles.emptyTagText}>
-                        {i18n.t('variations.noHistory', { defaultValue: 'No variation tags created yet.' })}
+                        No tags yet — add one below to filter workouts by variation.
                       </Text>
                     )}
 
@@ -424,6 +443,18 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                         onChangeText={setNewTagText}
                         keyboardAppearance="dark"
                         maxLength={40}
+                        onSubmitEditing={() => {
+                          if (!newTagText.trim() || !currentExercise) return;
+                          if (!isValidTag(newTagText)) return;
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const updated = addVariationToExercise(currentExercise, newTagText);
+                          setCurrentExercise(updated);
+                          if (onUpdateExerciseVariations) {
+                            onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
+                          }
+                          setNewTagText('');
+                        }}
+                        returnKeyType="done"
                       />
                       <Pressable
                         style={styles.addTagBtn}
@@ -454,6 +485,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                   </Card>
                 )}
 
+                {/* 4 — Instructions */}
                 {exerciseLibraryEntry?.instructions && (
                   <Card style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>INSTRUCTIONS</Text>
@@ -471,29 +503,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                   </Card>
                 )}
 
-                {exerciseLibraryEntry?.id && (
-                  <Card style={styles.sectionCard}>
-                    <View style={styles.notesHeader}>
-                      <Text style={styles.sectionTitle}>EXERCISE INSIGHTS NOTES</Text>
-                      {savedJustNow && (
-                        <Text style={styles.savedBadgeText}>Saved</Text>
-                      )}
-                    </View>
-                    <TextInput
-                      style={styles.notesInput}
-                      value={notes}
-                      onChangeText={setNotes}
-                      onBlur={handleAutoSaveNotes}
-                      placeholder="Add personal cues, seat settings, or notes for this exercise..."
-                      placeholderTextColor={colors.textMuted}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                      testID="insights-notes-input"
-                    />
-                  </Card>
-                )}
-
+                {/* Delete custom exercise */}
                 {exerciseLibraryEntry?.id.startsWith('ex-custom-') && onDeleteExercise && (
                   <Pressable
                     style={styles.deleteExBtn}
@@ -1044,6 +1054,35 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: font.sizes.xs,
     letterSpacing: 0.5,
+  },
+  tagsCard: {
+    borderWidth: 1,
+    borderColor: colors.accent + '25',
+  },
+  tagsCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  tagsCardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tagCountBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  tagCountText: {
+    color: colors.bg,
+    fontFamily: font.bold,
+    fontSize: 10,
+    lineHeight: 16,
   },
 });
 
