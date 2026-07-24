@@ -27,6 +27,10 @@ import {
   avgRepsPerWorkout,
 } from '../utils/exerciseStats';
 
+import i18n from '../utils/i18n';
+import { getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
+import { addVariationToExercise, removeVariationFromExercise, isValidTag } from '../utils/variationUtils';
+
 class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
@@ -58,6 +62,40 @@ class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { 
     return this.props.children;
   }
 }
+
+const getMuscleColor = (muscleGroup: string): string => {
+  const group = (muscleGroup || '').toLowerCase();
+  if (group.includes('chest')) return colors.muscle.chest;
+  if (group.includes('back')) return colors.muscle.back;
+  if (group.includes('quad')) return colors.muscle.quads;
+  if (group.includes('hamstring')) return colors.muscle.hamstrings;
+  if (group.includes('shoulder')) return colors.muscle.shoulders;
+  if (group.includes('bicep')) return colors.muscle.biceps;
+  if (group.includes('tricep')) return colors.muscle.triceps;
+  if (group.includes('glute')) return colors.muscle.glutes;
+  if (group.includes('rear')) return colors.muscle.rearDelts;
+  if (group.includes('calv')) return colors.highlight;
+  if (group.includes('core')) return colors.gold;
+  if (group.includes('forearm')) return colors.muscle.biceps;
+  return colors.muscle.default;
+};
+
+const getSecondaryMuscles = (primary: string): string => {
+  const group = (primary || '').toLowerCase();
+  if (group.includes('chest')) return 'Shoulders, Triceps';
+  if (group.includes('back')) return 'Biceps, Rear Delts';
+  if (group.includes('quad')) return 'Hamstrings, Glutes';
+  if (group.includes('hamstring')) return 'Glutes, Calves';
+  if (group.includes('shoulder')) return 'Triceps';
+  if (group.includes('bicep')) return 'Forearms';
+  if (group.includes('tricep')) return 'Shoulders';
+  if (group.includes('glute')) return 'Hamstrings';
+  if (group.includes('rear')) return 'Back';
+  if (group.includes('calv')) return 'Hamstrings';
+  if (group.includes('core')) return 'Lower Back';
+  if (group.includes('forearm')) return 'Biceps, Wrist';
+  return 'Core';
+};
 
 function normalCDF(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
@@ -101,6 +139,9 @@ export interface ExerciseInsightsModalProps {
   sessions: WorkoutSession[];
   onClose: () => void;
   onUpdateExerciseInsightsNotes?: (id: string, insightsNotes?: string) => void;
+  onUpdateExerciseVariations?: (id: string, variations: string[]) => void;
+  onDeleteExercise?: (id: string) => void;
+  exerciseNameLanguage?: 'en' | 'he';
 }
 
 const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
@@ -110,12 +151,22 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
   sessions,
   onClose,
   onUpdateExerciseInsightsNotes,
+  onUpdateExerciseVariations,
+  onDeleteExercise,
+  exerciseNameLanguage = 'en',
 }) => {
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<'info' | 'data' | 'history'>('info');
   const [notes, setNotes] = useState(exerciseLibraryEntry?.insightsNotes || '');
+  const [newTagText, setNewTagText] = useState('');
+  const [currentExercise, setCurrentExercise] = useState<Exercise | undefined>(exerciseLibraryEntry);
   const [savedJustNow, setSavedJustNow] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setCurrentExercise(exerciseLibraryEntry);
+    setNotes(exerciseLibraryEntry?.insightsNotes || '');
+  }, [exerciseLibraryEntry]);
 
   const toggleSessionExpand = useCallback((sessionId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -279,6 +330,130 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                   )}
                 </View>
 
+                {/* Target Muscle Groups & Targeted Anatomy Section */}
+                {currentExercise?.muscleGroup && (
+                  <Card style={styles.sectionCard}>
+                    <Text style={styles.sectionTitle}>TARGETED MUSCLE GROUPS & ANATOMY</Text>
+                    <View style={styles.badgesRow}>
+                      <View style={[
+                        styles.detailsBadge,
+                        { backgroundColor: getMuscleColor(currentExercise.muscleGroup) + '22' }
+                      ]}>
+                        <Text style={[styles.detailsBadgeText, { color: getMuscleColor(currentExercise.muscleGroup) }]}>
+                          {getMuscleDisplayName(currentExercise.muscleGroup, exerciseNameLanguage).toUpperCase()}
+                        </Text>
+                      </View>
+
+                      <View style={[
+                        styles.detailsBadge,
+                        { backgroundColor: colors.highlight + '15' }
+                      ]}>
+                        <Text style={[styles.detailsBadgeText, { color: colors.highlight }]}>
+                          {getSecondaryMuscles(currentExercise.muscleGroup).toUpperCase()}
+                        </Text>
+                      </View>
+
+                      <View style={[
+                        styles.detailsBadge,
+                        { backgroundColor: colors.accentGlow }
+                      ]}>
+                        <Text style={[styles.detailsBadgeText, { color: colors.accent }]}>
+                          {(currentExercise.equipment || 'Other').toUpperCase()}
+                        </Text>
+                      </View>
+
+                      {currentExercise.isUnilateral !== undefined && (
+                        <View style={[
+                          styles.detailsBadge,
+                          { backgroundColor: colors.surfaceHigh }
+                        ]}>
+                          <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
+                            {currentExercise.isUnilateral ? 'UNILATERAL' : 'BILATERAL'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </Card>
+                )}
+
+                {/* Variations & Tags Management Section */}
+                {currentExercise && (
+                  <Card style={styles.sectionCard}>
+                    <View style={styles.notesHeader}>
+                      <Text style={styles.sectionTitle}>
+                        {i18n.t('variations.title', { defaultValue: 'Variations & Tags' })}
+                      </Text>
+                    </View>
+
+                    {currentExercise.variations && currentExercise.variations.length > 0 ? (
+                      <View style={styles.tagChipsContainer}>
+                        {currentExercise.variations.map((tag) => (
+                          <View key={tag} style={styles.cleanTagChip}>
+                            <Text style={styles.cleanTagChipText}>{tag}</Text>
+                            <Pressable
+                              onPress={() => {
+                                if (currentExercise) {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  const updated = removeVariationFromExercise(currentExercise, tag);
+                                  setCurrentExercise(updated);
+                                  if (onUpdateExerciseVariations) {
+                                    onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
+                                  }
+                                }
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              style={{ marginLeft: 6 }}
+                            >
+                              <Ionicons name="close-circle" size={14} color={colors.textMuted} />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptyTagText}>
+                        {i18n.t('variations.noHistory', { defaultValue: 'No variation tags created yet.' })}
+                      </Text>
+                    )}
+
+                    <View style={styles.addTagRow}>
+                      <TextInput
+                        style={styles.addTagInput}
+                        placeholder={i18n.t('variations.placeholder', { defaultValue: 'e.g. gym, home...' })}
+                        placeholderTextColor={colors.textMuted}
+                        value={newTagText}
+                        onChangeText={setNewTagText}
+                        keyboardAppearance="dark"
+                        maxLength={40}
+                      />
+                      <Pressable
+                        style={styles.addTagBtn}
+                        onPress={() => {
+                          if (!newTagText.trim()) return;
+                          if (!isValidTag(newTagText)) {
+                            Alert.alert(
+                              i18n.t('common.error'),
+                              i18n.t('variations.tooLong', { defaultValue: 'Tag name too long (max 40 chars)' })
+                            );
+                            return;
+                          }
+                          if (currentExercise) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            const updated = addVariationToExercise(currentExercise, newTagText);
+                            setCurrentExercise(updated);
+                            if (onUpdateExerciseVariations) {
+                              onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
+                            }
+                            setNewTagText('');
+                          }
+                        }}
+                        android_ripple={ripple.accent}
+                      >
+                        <Text style={styles.addTagBtnText}>{i18n.t('common.add', { defaultValue: 'Add' })}</Text>
+                      </Pressable>
+                    </View>
+                  </Card>
+                )}
+
                 {exerciseLibraryEntry?.instructions && (
                   <Card style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>INSTRUCTIONS</Text>
@@ -317,6 +492,22 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       testID="insights-notes-input"
                     />
                   </Card>
+                )}
+
+                {exerciseLibraryEntry?.id.startsWith('ex-custom-') && onDeleteExercise && (
+                  <Pressable
+                    style={styles.deleteExBtn}
+                    onPress={() => {
+                      if (onDeleteExercise && exerciseLibraryEntry) {
+                        onDeleteExercise(exerciseLibraryEntry.id);
+                        onClose();
+                      }
+                    }}
+                    android_ripple={ripple.borderless}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.error} />
+                    <Text style={styles.deleteExBtnText}>{i18n.t('extras.deleteExerciseBtn', { defaultValue: 'DELETE EXERCISE' })}</Text>
+                  </Pressable>
                 )}
               </View>
             )}
@@ -757,6 +948,102 @@ const styles = StyleSheet.create({
   },
   expandedSetTimesText: {
     color: colors.textMuted,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  detailsBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  detailsBadgeText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
+  },
+  tagChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: spacing.xs,
+  },
+  cleanTagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(79, 142, 247, 0.15)',
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+  },
+  cleanTagChipText: {
+    color: colors.textPrimary,
+    fontFamily: font.semibold,
+    fontSize: font.sizes.xs,
+  },
+  emptyTagText: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    marginVertical: spacing.xs,
+  },
+  addTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  addTagInput: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    borderRadius: radius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontFamily: font.regular,
+    fontSize: font.sizes.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addTagBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: radius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    height: 38,
+  },
+  addTagBtnText: {
+    color: colors.bg,
+    fontFamily: font.bold,
+    fontSize: font.sizes.xs,
+  },
+  deleteExBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.error + '15',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.error + '40',
+    marginTop: spacing.md,
+  },
+  deleteExBtnText: {
+    color: colors.error,
+    fontFamily: font.bold,
+    fontSize: font.sizes.xs,
+    letterSpacing: 0.5,
   },
 });
 

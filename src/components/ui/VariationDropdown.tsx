@@ -52,7 +52,6 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
         android_ripple={rippleTokens.surface}
         accessibilityLabel={`Variation dropdown, current: ${displayText}`}
       >
-        <Ionicons name="pricetag-outline" size={12} color={activeVariation ? colors.accent : colors.textMuted} style={{ marginRight: 4 }} />
         <Text style={[styles.chipText, activeVariation ? styles.chipTextActive : null]} numberOfLines={1}>
           {displayText}
         </Text>
@@ -73,9 +72,8 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
         <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.dropdownMenu}>
             <View style={styles.menuHeader}>
-              <Ionicons name="pricetags" size={16} color={colors.accent} />
               <Text style={styles.menuTitle}>
-                {i18n.t('variations.selectTitle', { defaultValue: 'Select Variation' })}
+                {i18n.t('variations.selectTitle', { defaultValue: 'Select Variation Tag' })}
               </Text>
             </View>
 
@@ -138,7 +136,6 @@ export const VariationDropdown: React.FC<VariationDropdownProps> = ({
                 }}
                 android_ripple={rippleTokens.surface}
               >
-                <Ionicons name="add-circle-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
                 <Text style={styles.manageBtnText}>
                   {i18n.t('variations.manage', { defaultValue: 'Manage Tags' })}
                 </Text>

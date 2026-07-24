@@ -2300,6 +2300,7 @@ function App() {
               onUpdateActiveExercises={setWorkoutExercisesAndRef}
               onUpdateExerciseNotes={handleUpdateExerciseNotes}
               onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
+              onUpdateExerciseVariations={handleUpdateExerciseVariations}
               onAddCustomExercise={handleAddExercise}
               isLiveHeartRateEnabled={isLiveHeartRateEnabled}
               onUpdateExercise={handleUpdateExercise}

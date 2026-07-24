@@ -158,6 +158,7 @@ interface ActiveWorkoutModalProps {
   onUpdateActiveExercises?: (exercises: any[]) => void;
   onUpdateExerciseNotes?: (exerciseId: string, notes?: string) => void;
   onUpdateExerciseInsightsNotes?: (exerciseId: string, insightsNotes?: string) => void;
+  onUpdateExerciseVariations?: (id: string, variations: string[]) => void;
   onAddCustomExercise?:   (name: string, muscleGroup: string, equipment?: string, isUnilateral?: boolean) => any;
   isLiveHeartRateEnabled?: boolean;
   onUpdateExercise?: (id: string, name: string, muscleGroup: string, equipment: string, isUnilateral: boolean) => void;
@@ -985,6 +986,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateActiveExercises,
   onUpdateExerciseNotes,
   onUpdateExerciseInsightsNotes,
+  onUpdateExerciseVariations,
   onAddCustomExercise,
   isLiveHeartRateEnabled = false,
 
@@ -2264,6 +2266,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setIsExMenuVisible(true);
   }, []);
 
+  const handleOpenExerciseInsights = useCallback((exIdx: number) => {
+    setActiveExerciseMenuIndex(exIdx);
+    setIsExerciseInsightsVisible(true);
+  }, []);
+
   const handleRemoveExercise = () => {
     if (activeExerciseMenuIndex !== null) {
       WebSafeAlert.alert(
@@ -2804,6 +2811,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       superSetColor={superSetColor}
                       handleDeleteExercise={handleDeleteExercise}
                       handleExerciseMenuPress={handleExerciseMenuPress}
+                      handleOpenExerciseInsights={handleOpenExerciseInsights}
                       handleSelectVariation={handleSelectVariation}
                       exerciseLibraryMap={exerciseLibraryMap}
                       handleSetFocus={handleSetFocus}
@@ -3208,6 +3216,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 sessions={sessions}
                 onClose={() => setIsExerciseInsightsVisible(false)}
                 onUpdateExerciseInsightsNotes={onUpdateExerciseInsightsNotes}
+                onUpdateExerciseVariations={onUpdateExerciseVariations}
               />
             )}
 
@@ -3989,6 +3998,7 @@ interface ActiveExerciseRowProps {
   prevIsSameSuperSet: boolean;
   superSetColor: string | undefined;
   handleExerciseMenuPress: (idx: number) => void;
+  handleOpenExerciseInsights?: (idx: number) => void;
   handleSelectVariation?: (exIdx: number, variation: string | undefined) => void;
   exerciseLibraryMap: Map<string, any>;
   handleSetFocus: any;
@@ -4009,6 +4019,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   prevIsSameSuperSet,
   superSetColor,
   handleExerciseMenuPress,
+  handleOpenExerciseInsights,
   handleSelectVariation,
   exerciseLibraryMap,
   handleSetFocus,
@@ -4102,7 +4113,7 @@ const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                       variations={variationsList}
                       activeVariation={exercise.variation}
                       onSelectVariation={(v) => handleSelectVariation && handleSelectVariation(exIdx, v)}
-                      onManageVariations={() => handleExerciseMenuPress(exIdx)}
+                      onManageVariations={() => handleOpenExerciseInsights ? handleOpenExerciseInsights(exIdx) : handleExerciseMenuPress(exIdx)}
                     />
                   );
                 }
@@ -4211,6 +4222,7 @@ interface ActiveExerciseCardProps {
   superSetColor: string | undefined;
   handleDeleteExercise: (idx: number) => void;
   handleExerciseMenuPress: (idx: number) => void;
+  handleOpenExerciseInsights?: (idx: number) => void;
   handleSelectVariation?: (exIdx: number, variation: string | undefined) => void;
   exerciseLibraryMap: Map<string, any>;
   handleSetFocus: any;
@@ -4232,6 +4244,7 @@ const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
   superSetColor,
   handleDeleteExercise,
   handleExerciseMenuPress,
+  handleOpenExerciseInsights,
   handleSelectVariation,
   exerciseLibraryMap,
   handleSetFocus,
@@ -4264,6 +4277,7 @@ const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
           prevIsSameSuperSet={prevIsSameSuperSet}
           superSetColor={superSetColor}
           handleExerciseMenuPress={handleExerciseMenuPress}
+          handleOpenExerciseInsights={handleOpenExerciseInsights}
           handleSelectVariation={handleSelectVariation}
           exerciseLibraryMap={exerciseLibraryMap}
           handleSetFocus={handleSetFocus}

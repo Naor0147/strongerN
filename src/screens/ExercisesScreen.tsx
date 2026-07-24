@@ -29,6 +29,7 @@ import { sectionListGetItemLayout } from '../utils/listLayout';
 import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 import { normalizeTag, isValidTag, addVariationToExercise, removeVariationFromExercise } from '../utils/variationUtils';
+import ExerciseInsightsModal from './ExerciseInsightsModal';
 
 const ITEM_HEIGHT   = 72;
 const HEADER_HEIGHT = 48;
@@ -315,7 +316,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [sortMode, setSortMode] = useState<'alphabetical-asc' | 'alphabetical-desc' | 'sets'>('alphabetical-asc');
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-  const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
+  const [isInsightsModalVisible, setIsInsightsModalVisible] = useState(false);
   const [selectedExerciseState, setSelectedExercise] = useState<Exercise | null>(null);
 
   // ── Memoized & Deferred data enrichment ─────────────────────────────────────
@@ -376,65 +377,6 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [editExEquipment, setEditExEquipment] = useState('Barbell');
   const [editExUnilateral, setEditExUnilateral] = useState(false);
   const [editExShowAdvanced, setEditExShowAdvanced] = useState(false);
-
-  // Exercise history and PRs memos
-  // ── Gated behind isDetailsModalVisible ──────────────────────────────────────
-  // These three memos only matter when the Details modal is open. By gating
-  // them we avoid iterating sessions on every keystroke / filter change.
-  const exerciseHistory = useMemo(() => {
-    if (!isDetailsModalVisible || !selectedExercise) return [];
-    const history: { weight: number; reps: number; date: string; volume: number; estimated1RM: number }[] = [];
-    (sessions || []).forEach(session => {
-      const performed = (session.exercises || []).find(
-        (ex: any) => ex.name.toLowerCase() === selectedExercise.name.toLowerCase()
-      );
-      if (performed) {
-        const d = new Date(session.datetime);
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const dateStr = `${monthNames[d.getMonth()]} ${d.getDate()}`;
-        const setsCount = performed.sets || 3;
-        const weight = performed.bestWeight || 0;
-        const reps = performed.bestReps || 0;
-        
-        // Epley 1RM Formula: Weight * (1 + Reps / 30)
-        const est1RM = reps > 1 ? Math.round(weight * (1 + reps / 30) * 10) / 10 : weight;
-
-        history.push({
-          weight,
-          reps,
-          date: dateStr,
-          volume: weight * reps * setsCount,
-          estimated1RM: est1RM,
-        });
-      }
-    });
-    return history.reverse(); // Chronological order
-  }, [isDetailsModalVisible, selectedExercise, sessions]);
-
-  const exercisePRs = useMemo(() => {
-    if (exerciseHistory.length === 0) return [];
-    // Sort descending by weight
-    const sorted = [...exerciseHistory].sort((a, b) => b.weight - a.weight);
-    // Keep top 3 unique by weight
-    const uniqueWeights = new Map<number, typeof sorted[number]>();
-    sorted.forEach(item => {
-      if (!uniqueWeights.has(item.weight)) {
-        uniqueWeights.set(item.weight, item);
-      }
-    });
-    return Array.from(uniqueWeights.values()).slice(0, 3);
-  }, [exerciseHistory]);
-
-  const trendData = useMemo(() => {
-    if (exerciseHistory.length === 0) return null;
-    const last5 = exerciseHistory.slice(-5);
-    const max1RM = Math.max(...exerciseHistory.map(h => h.estimated1RM || h.weight), 1);
-    return last5.map(h => {
-      const val1RM = h.estimated1RM || h.weight;
-      const percentage = max1RM > 0 ? (val1RM / max1RM) * 100 : 0;
-      return { date: h.date, val1RM, weight: h.weight, reps: h.reps, percentage };
-    });
-  }, [exerciseHistory]);
 
   // Toggle muscle filter
   const handleToggleMuscle = useCallback((muscle: string) => {
@@ -540,7 +482,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   const handleRowPress = useCallback((ex: Exercise) => {
     setSelectedExercise(ex);
-    setIsDetailsModalVisible(true);
+    setIsInsightsModalVisible(true);
   }, []);
 
   const handleMenuPress = useCallback((ex: Exercise) => {
@@ -617,10 +559,12 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     }
   }, [editExName, editExMuscle, editExEquipment, editExUnilateral, onUpdateExercise]);
 
-  const handleDeletePress = useCallback((ex: Exercise) => {
+  const handleDeletePress = useCallback((ex: Exercise | string) => {
+    const targetId = typeof ex === 'string' ? ex : ex.id;
+    const targetName = typeof ex === 'string' ? (selectedExercise?.name || '') : ex.name;
     Alert.alert(
       i18n.t('exercises.deleteExercise'),
-      i18n.t('exercises.deleteExerciseMsg', { name: ex.name }),
+      i18n.t('exercises.deleteExerciseMsg', { name: targetName }),
       [
         { text: i18n.t('common.cancel'), style: 'cancel' },
         {
@@ -628,15 +572,15 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           style: 'destructive',
           onPress: () => {
             if (onDeleteExercise) {
-              onDeleteExercise(ex.id);
-              setIsDetailsModalVisible(false);
+              onDeleteExercise(targetId);
+              setIsInsightsModalVisible(false);
               setSelectedExercise(null);
             }
           }
         }
       ]
     );
-  }, [onDeleteExercise]);
+  }, [onDeleteExercise, selectedExercise]);
 
   const handleToggleSort = useCallback(() => {
     setSortMode(prev => {
@@ -1095,261 +1039,19 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
         </Modal>
       )}
 
-      {/* Modal 2: Exercise Details */}
+      {/* Exercise Info / Insights Modal */}
       {selectedExercise && (
-        <Modal
-          visible={isDetailsModalVisible}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setIsDetailsModalVisible(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={[styles.modalCard, styles.detailsCard]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{i18n.t('extras.exerciseInfoTitle')}</Text>
-                <IconButton
-                  name="close"
-                  size={22}
-                  color={colors.textSecondary}
-                  onPress={() => setIsDetailsModalVisible(false)}
-                />
-              </View>
-
-              <ScrollView 
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.detailsScrollContent}
-              >
-                <View style={styles.detailsContent}>
-                  <View style={[
-                    styles.detailsHeaderCircle,
-                    { backgroundColor: detailsMuscleColor + '15' }
-                  ]}>
-                    <Ionicons name="barbell" size={40} color={detailsMuscleColor} />
-                  </View>
-
-                  <Text style={styles.detailsName}>{getDisplayName(selectedExercise.name, exerciseNameLanguage)}</Text>
-                  
-                  <View style={styles.badgesRow}>
-                    <View style={[
-                      styles.detailsBadge,
-                      { backgroundColor: detailsMuscleColor + '22' }
-                    ]}>
-                      <Text style={[styles.detailsBadgeText, { color: detailsMuscleColor }]}>
-                        {selectedExercise.muscleGroup.toUpperCase()}
-                      </Text>
-                    </View>
-                    
-                    <View style={[
-                      styles.detailsBadge,
-                      { backgroundColor: colors.highlight + '15' }
-                    ]}>
-                      <Text style={[styles.detailsBadgeText, { color: colors.highlight }]}>
-                        {getSecondaryMuscles(selectedExercise.muscleGroup).toUpperCase()}
-                      </Text>
-                    </View>
-
-                    <View style={[
-                      styles.detailsBadge,
-                      { backgroundColor: colors.highlight + '15' }
-                    ]}>
-                      <Text style={[styles.detailsBadgeText, { color: colors.highlight }]}>
-                        {(selectedExercise.equipment || 'Other').toUpperCase()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailsStatsRow}>
-                    <View style={styles.detailsStatBox}>
-                      <Text style={styles.detailsStatValue}>
-                        {(selectedExercise as any).allTimeSets || 0}
-                      </Text>
-                      <Text style={styles.detailsStatLabel}>{i18n.t('extras.allTimeSets')}</Text>
-                    </View>
-                    <View style={styles.detailsStatDivider} />
-                    <View style={styles.detailsStatBox}>
-                      <Text style={styles.detailsStatValue}>{selectedExercise.weeklySets}</Text>
-                      <Text style={styles.detailsStatLabel}>{i18n.t('extras.weeklySets')}</Text>
-                    </View>
-                  </View>
-
-                  {/* Custom Note Indicator inside Details */}
-                  <View style={styles.detailsNoteContainer}>
-                    <View style={styles.detailsNoteHeader}>
-                      <Text style={styles.sectionTitle}>{i18n.t('extras.myExerciseNotes')}</Text>
-                      <Pressable 
-                        onPress={() => {
-                          setIsDetailsModalVisible(false);
-                          setNoteEditExercise(selectedExercise);
-                          setNoteText(selectedExercise.notes || '');
-                          setIsNoteModalVisible(true);
-                        }}
-                        style={styles.editNoteLink}
-                      >
-                        <Ionicons name="create-outline" size={14} color={colors.accent} />
-                        <Text style={styles.editNoteLinkText}>{i18n.t('extras.edit')}</Text>
-                      </Pressable>
-                    </View>
-                    {selectedExercise.notes ? (
-                      <Text style={styles.detailsNoteText}>{selectedExercise.notes}</Text>
-                    ) : (
-                      <Text style={styles.detailsNoteEmptyText}>{i18n.t('extras.noCustomCues')}</Text>
-                    )}
-                  </View>
-
-                  {/* Exercise Variations / Tags Section */}
-                  <View style={styles.detailsNoteContainer}>
-                    <View style={styles.detailsNoteHeader}>
-                      <Text style={styles.sectionTitle}>{i18n.t('variations.title', { defaultValue: 'Variations & Tags' })}</Text>
-                    </View>
-
-                    {selectedExercise.variations && selectedExercise.variations.length > 0 ? (
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: spacing.xs }}>
-                        {selectedExercise.variations.map(tag => (
-                          <View key={tag} style={tagStyles.tagChip}>
-                            <Ionicons name="pricetag" size={11} color={colors.accent} style={{ marginRight: 4 }} />
-                            <Text style={tagStyles.tagChipText}>{tag}</Text>
-                            <Pressable
-                              onPress={() => {
-                                if (onUpdateExerciseVariations && selectedExercise) {
-                                  const updated = removeVariationFromExercise(selectedExercise, tag);
-                                  setSelectedExercise(updated);
-                                  onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
-                                }
-                              }}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={{ marginLeft: 6 }}
-                            >
-                              <Ionicons name="close-circle" size={14} color={colors.textMuted} />
-                            </Pressable>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={styles.detailsNoteEmptyText}>
-                        {i18n.t('variations.noHistory', { defaultValue: 'No variation tags created yet.' })}
-                      </Text>
-                    )}
-
-                    <View style={tagStyles.addTagRow}>
-                      <TextInput
-                        style={tagStyles.addTagInput}
-                        placeholder={i18n.t('variations.placeholder', { defaultValue: 'e.g. Icon Push, Bereshit Upper...' })}
-                        placeholderTextColor={colors.textMuted}
-                        value={newTagText}
-                        onChangeText={setNewTagText}
-                        keyboardAppearance="dark"
-                        maxLength={40}
-                      />
-                      <Pressable
-                        style={tagStyles.addTagBtn}
-                        onPress={() => {
-                          if (!newTagText.trim()) return;
-                          if (!isValidTag(newTagText)) {
-                            Alert.alert(i18n.t('common.error'), i18n.t('variations.tooLong', { defaultValue: 'Tag name too long (max 40 chars)' }));
-                            return;
-                          }
-                          if (onUpdateExerciseVariations && selectedExercise) {
-                            const updated = addVariationToExercise(selectedExercise, newTagText);
-                            setSelectedExercise(updated);
-                            onUpdateExerciseVariations(selectedExercise.id, updated.variations || []);
-                            setNewTagText('');
-                          }
-                        }}
-                        android_ripple={rippleTokens.accent}
-                      >
-                        <Ionicons name="add" size={16} color="#0D0F14" />
-                        <Text style={tagStyles.addTagBtnText}>{i18n.t('common.add', { defaultValue: 'Add' })}</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  {/* Progression Trend Chart */}
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>{i18n.t('extras.progressionTrend')}</Text>
-                    {exerciseHistory.length > 0 ? (
-                      <View style={styles.trendContainer}>
-                        {trendData && trendData.map((item, idx) => (
-                          <View key={`trend-${item.date}`} style={styles.trendRow}>
-                            <Text style={styles.trendDate}>{item.date}</Text>
-                            <View style={styles.trendBarContainer}>
-                              <View style={[styles.trendBar, { width: `${Math.max(15, item.percentage)}%` }]}>
-                                <LinearGradient
-                                  colors={[colors.highlight, colors.accent]}
-                                  start={GRADIENT_START}
-                                  end={GRADIENT_END}
-                                  style={StyleSheet.absoluteFill}
-                                />
-                              </View>
-                            </View>
-                            <View style={styles.trendValueContainer}>
-                              <Text style={styles.trendWeight}>
-                                {item.val1RM} {i18n.t('extras.kgSuffix')}
-                              </Text>
-                              <Text style={styles.trendSubtext}>
-                                {item.weight} {i18n.t('extras.kgSuffix')} x {item.reps}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={styles.emptyText}>{i18n.t('extras.noWorkoutSessions')}</Text>
-                    )}
-                  </View>
-
-                  {/* Top 3 PRs Table */}
-                  <View style={styles.detailsSection}>
-                    <Text style={styles.sectionTitle}>{i18n.t('extras.personalRecordsTopLifts')}</Text>
-                    {exercisePRs.length > 0 ? (
-                      <View style={styles.prTable}>
-                        <View style={styles.prTableHeader}>
-                          <Text style={[styles.prTableHeaderText, { width: '15%' }]}>{i18n.t('extras.thNumber')}</Text>
-                          <Text style={[styles.prTableHeaderText, { width: '35%' }]}>{i18n.t('extras.thWeight')}</Text>
-                          <Text style={[styles.prTableHeaderText, { width: '25%' }]}>{i18n.t('extras.thReps')}</Text>
-                          <Text style={[styles.prTableHeaderText, { width: '25%', textAlign: 'right' }]}>{i18n.t('extras.thDate')}</Text>
-                        </View>
-                        {exercisePRs.map((pr, idx) => (
-                          <View key={`pr-${pr.date}-${pr.weight}-${pr.reps}`} style={styles.prTableRow}>
-                            <Text style={[styles.prTableText, styles.prRank, { width: '15%' }]}>
-                              {idx + 1}
-                            </Text>
-                            <Text style={[styles.prTableWeight, { width: '35%' }]}>
-                              {pr.weight} {i18n.t('extras.kgSuffix')}
-                            </Text>
-                            <Text style={[styles.prTableText, { width: '25%' }]}>
-                              {pr.reps} {i18n.t('extras.repsSuffix')}
-                            </Text>
-                            <Text style={[styles.prTableText, { width: '25%', textAlign: 'right' }]}>
-                              {pr.date}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={styles.emptyText}>{i18n.t('extras.performMovement')}</Text>
-                    )}
-                  </View>
-
-                  {selectedExercise.id.startsWith('ex-custom-') ? (
-                    <Pressable
-                      style={[styles.deleteExBtn, { marginTop: spacing.md }]}
-                      onPress={() => handleDeletePress(selectedExercise)}
-                      android_ripple={rippleTokens.borderless}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={colors.error} />
-                      <Text style={styles.deleteExBtnText}>{i18n.t('extras.deleteExerciseBtn')}</Text>
-                    </Pressable>
-                  ) : (
-                    <View style={[styles.lockInfo, { marginTop: spacing.md }]}>
-                      <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} />
-                      <Text style={styles.lockInfoText}>{i18n.t('extras.standardGym')}</Text>
-                    </View>
-                  )}
-                </View>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        <ExerciseInsightsModal
+          visible={isInsightsModalVisible}
+          exerciseName={selectedExercise.name}
+          exerciseLibraryEntry={selectedExercise}
+          sessions={sessions}
+          onClose={() => setIsInsightsModalVisible(false)}
+          onUpdateExerciseInsightsNotes={onUpdateExerciseNotes}
+          onUpdateExerciseVariations={onUpdateExerciseVariations}
+          onDeleteExercise={handleDeletePress}
+          exerciseNameLanguage={exerciseNameLanguage}
+        />
       )}
 
       {/* Modal: Exercise Row 3-Dot Options */}
