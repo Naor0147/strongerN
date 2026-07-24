@@ -1552,10 +1552,14 @@ function App() {
   const workoutExercisesRef = React.useRef(workoutExercises);
 
   const flushVersionRef = React.useRef(0);
+  const saveActiveWorkoutStateRef = React.useRef<(forceFlush?: boolean) => void>(() => {});
   const setWorkoutExercisesAndRef = React.useCallback((exercises: any[]) => {
     flushVersionRef.current += 1;
     workoutExercisesRef.current = exercises;
     setWorkoutExercises(exercises);
+    if (isWorkoutActiveRef.current && saveActiveWorkoutStateRef.current) {
+      saveActiveWorkoutStateRef.current(false);
+    }
   }, []);
 
   React.useEffect(() => {
@@ -1909,6 +1913,10 @@ function App() {
       activeWorkoutStateSavedRef.current = false;
     }
   }, [getFreshWorkoutState]);
+
+  React.useEffect(() => {
+    saveActiveWorkoutStateRef.current = saveActiveWorkoutState;
+  }, [saveActiveWorkoutState]);
 
   const flushSave = React.useCallback(() => {
     console.log('[SAVE] AppState change/flush save triggered');

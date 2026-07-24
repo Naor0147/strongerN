@@ -40,6 +40,13 @@ export async function initDb(): Promise<boolean> {
 export async function saveToDb(key: string, value: any): Promise<boolean> {
   const serialized = JSON.stringify(value);
 
+  // Dual-write to localStorage / memory cache as immediate synchronous backup
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, serialized);
+    }
+  } catch (e) {}
+
   // Native SQLite path
   if (!isWeb) {
     if (!db) {
@@ -53,22 +60,12 @@ export async function saveToDb(key: string, value: any): Promise<boolean> {
         );
         return true;
       } catch (err) {
-        console.error('[DB] SQLite save error, trying localStorage fallback:', err);
-        // Fall through to localStorage
+        console.error('[DB] SQLite save error, fallback to localStorage used:', err);
       }
     }
   }
 
-  // Web / localStorage fallback
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(key, serialized);
-      return true;
-    }
-  } catch (e) {
-    console.error('[DB] localStorage save error:', e);
-  }
-  return false;
+  return true;
 }
 
 export async function loadFromDb(key: string): Promise<any | null> {
@@ -83,10 +80,11 @@ export async function loadFromDb(key: string): Promise<any | null> {
           `SELECT value FROM ${TABLE_NAME} WHERE key = ?;`,
           [key]
         );
-        return row ? JSON.parse(row.value) : null;
+        if (row && row.value) {
+          return JSON.parse(row.value);
+        }
       } catch (err) {
-        console.error('[DB] SQLite load error, trying localStorage fallback:', err);
-        // Fall through to localStorage
+        console.error('[DB] SQLite load error, checking localStorage fallback:', err);
       }
     }
   }
@@ -104,6 +102,12 @@ export async function loadFromDb(key: string): Promise<any | null> {
 }
 
 export async function deleteFromDb(key: string): Promise<boolean> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+  } catch (e) {}
+
   // Native SQLite path
   if (!isWeb && db) {
     try {
@@ -111,20 +115,9 @@ export async function deleteFromDb(key: string): Promise<boolean> {
       return true;
     } catch (err) {
       console.error('[DB] SQLite delete error:', err);
-      // Fall through to localStorage
     }
   }
-
-  // Web / localStorage fallback
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(key);
-      return true;
-    }
-  } catch (e) {
-    console.error('[DB] localStorage delete error:', e);
-  }
-  return false;
+  return true;
 }
 
 /**

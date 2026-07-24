@@ -1012,15 +1012,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [customDefaultTimerValue, setCustomDefaultTimerValue] = useState('');
   const [activeExercises, _setActiveExercises] = useState<ActiveExercise[]>([]);
   const activeExercisesRef = useRef<ActiveExercise[]>([]);
+  const hasSyncedPropsRef = useRef(false);
+  const flushExercisesToParentRef = useRef<(exs: ActiveExercise[]) => void>(() => {});
 
   const setActiveExercises = useCallback((action: React.SetStateAction<ActiveExercise[]>) => {
-    _setActiveExercises((prev: ActiveExercise[]) => {
-      const next = typeof action === 'function' ? (action as (p: ActiveExercise[]) => ActiveExercise[])(prev) : action;
-      activeExercisesRef.current = next;
-      return next;
-    });
+    const current = activeExercisesRef.current;
+    const next = typeof action === 'function' ? (action as (p: ActiveExercise[]) => ActiveExercise[])(current) : action;
+    activeExercisesRef.current = next;
+    _setActiveExercises(next);
+    if (hasSyncedPropsRef.current && flushExercisesToParentRef.current) {
+      flushExercisesToParentRef.current(next);
+    }
   }, []);
-  const hasSyncedPropsRef = useRef(false);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -1463,16 +1466,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
                 return {
                   id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
-                  weight:       completed ? (s.weight ? s.weight.toString() : '') : '',
-                  reps:         completed ? (s.reps ? s.reps.toString() : '') : '',
+                  weight:       s.weight !== undefined && s.weight !== null ? s.weight.toString() : '',
+                  reps:         s.reps !== undefined && s.reps !== null ? s.reps.toString() : '',
                   completed:    completed,
-                  rpe:          completed ? (s.rpe ? s.rpe.toString() : '') : '',
+                  rpe:          s.rpe !== undefined && s.rpe !== null ? s.rpe.toString() : '',
                   category:     (category) as 'W' | 'S' | 'D' | 'F',
                   isUnilateral: isUnilateral,
-                  leftWeight:   isUnilateral ? (completed ? (s.leftWeight ? s.leftWeight.toString() : '') : '') : undefined,
-                  leftReps:     isUnilateral ? (completed ? (s.leftReps ? s.leftReps.toString() : '') : '') : undefined,
-                  rightWeight:  isUnilateral ? (completed ? (s.rightWeight ? s.rightWeight.toString() : '') : '') : undefined,
-                  rightReps:    isUnilateral ? (completed ? (s.rightReps ? s.rightReps.toString() : '') : '') : undefined,
+                  leftWeight:   isUnilateral ? (s.leftWeight !== undefined && s.leftWeight !== null ? s.leftWeight.toString() : '') : undefined,
+                  leftReps:     isUnilateral ? (s.leftReps !== undefined && s.leftReps !== null ? s.leftReps.toString() : '') : undefined,
+                  rightWeight:  isUnilateral ? (s.rightWeight !== undefined && s.rightWeight !== null ? s.rightWeight.toString() : '') : undefined,
+                  rightReps:    isUnilateral ? (s.rightReps !== undefined && s.rightReps !== null ? s.rightReps.toString() : '') : undefined,
                   suggestedWeight,
                   suggestedReps,
                   suggestedLeftWeight: isUnilateral ? suggestedLeftWeight : undefined,
@@ -1585,6 +1588,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       onUpdateActiveExercises(mapped);
     }
   }, [onUpdateActiveExercises]);
+
+  useEffect(() => {
+    flushExercisesToParentRef.current = flushExercisesToParent;
+  }, [flushExercisesToParent]);
 
   // Sync active exercises back to parent App state so they are stored
   useEffect(() => {
