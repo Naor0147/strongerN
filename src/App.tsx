@@ -1878,7 +1878,9 @@ function App() {
     return {
       isWorkoutActive: true,
       workoutName: workoutNameRef.current || 'Active Workout',
-      startTime: startTimeRef.current ? startTimeRef.current.toISOString() : new Date().toISOString(),
+      startTime: startTimeRef.current
+        ? (startTimeRef.current instanceof Date ? startTimeRef.current.toISOString() : new Date(startTimeRef.current).toISOString())
+        : new Date().toISOString(),
       workoutExercises: workoutExercisesRef.current || [],
       isWorkoutModalVisible: isWorkoutModalVisibleRef.current,
       comment: activeWorkoutCommentRef.current || '',
@@ -1920,10 +1922,14 @@ function App() {
 
   const flushSave = React.useCallback(() => {
     console.log('[SAVE] AppState change/flush save triggered');
-    // 1. Flush main root data (exercises, tags, sessions, user settings)
-    flushMainAppData();
-    // 2. Flush active workout state from live refs
-    saveActiveWorkoutState(true);
+    try {
+      // 1. Flush main root data (exercises, tags, sessions, user settings)
+      flushMainAppData();
+      // 2. Flush active workout state from live refs
+      saveActiveWorkoutState(true);
+    } catch (e) {
+      console.error('[SAVE] Error during flushSave:', e);
+    }
   }, [flushMainAppData, saveActiveWorkoutState]);
 
   // Flush on web beforeunload
@@ -1945,11 +1951,15 @@ function App() {
   // Save workout state when app goes to background (native)
   React.useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        Notifications.dismissAllNotificationsAsync().catch(() => {});
-      }
-      if (state === 'background' || state === 'inactive') {
-        flushSave();
+      try {
+        if (state === 'active') {
+          Notifications.dismissAllNotificationsAsync().catch(() => {});
+        }
+        if (state === 'background' || state === 'inactive') {
+          flushSave();
+        }
+      } catch (e) {
+        console.error('[AppState Error in App.tsx]:', e);
       }
     });
     return () => sub.remove();

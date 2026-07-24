@@ -26,11 +26,11 @@ function getNotifee() {
 }
 
 /**
- * Initialize the Android Foreground Service channel & runner.
+ * Register headless task handler at app bundle load time.
+ * On Android, this MUST execute before AppRegistry or backgrounding.
  */
-export async function initForegroundNotification() {
+export function registerForegroundServiceHeadless() {
   if (Platform.OS === 'web') return;
-
   const notifee = getNotifee();
   if (!notifee) return;
 
@@ -43,6 +43,25 @@ export async function initForegroundNotification() {
       });
       isForegroundServiceRegistered = true;
     }
+  } catch (e) {
+    console.warn('[ForegroundNotif Error] Headless service registration failed:', e);
+  }
+}
+
+// Auto-register headless task handler as early as possible
+registerForegroundServiceHeadless();
+
+/**
+ * Initialize the Android Foreground Service channel & runner.
+ */
+export async function initForegroundNotification() {
+  if (Platform.OS === 'web') return;
+
+  const notifee = getNotifee();
+  if (!notifee) return;
+
+  try {
+    registerForegroundServiceHeadless();
 
     if (Platform.OS === 'android') {
       await notifee.createChannel({

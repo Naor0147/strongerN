@@ -183,9 +183,20 @@ interface ActiveWorkoutModalProps {
   isKeyboardDismissOnNextEnabled?: boolean;
 }
 
-function formatElapsed(startTime: Date, offsetSeconds: number = 0): string {
-  const sessionSec = Math.floor((Date.now() - startTime.getTime()) / 1000);
-  const totalSec = Math.max(0, sessionSec + offsetSeconds);
+function formatElapsed(startTime: Date | string | number | null | undefined, offsetSeconds: number = 0): string {
+  if (!startTime) return '0:00';
+  let startMs: number;
+  if (startTime instanceof Date) {
+    startMs = startTime.getTime();
+  } else if (typeof startTime === 'number') {
+    startMs = startTime;
+  } else {
+    startMs = new Date(startTime).getTime();
+  }
+  if (isNaN(startMs)) return '0:00';
+
+  const sessionSec = Math.floor((Date.now() - startMs) / 1000);
+  const totalSec = Math.max(0, sessionSec + (offsetSeconds || 0));
   const h = Math.floor(totalSec / 3600);
   const min = Math.floor((totalSec % 3600) / 60);
   const sec = totalSec % 60;
@@ -1391,7 +1402,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Sync props to state when modal becomes visible
   useEffect(() => {
     if (visible) {
-      const startKey = startTime.toISOString();
+      const validStartTime = startTime instanceof Date ? startTime : (startTime ? new Date(startTime) : new Date());
+      const safeStart = isNaN(validStartTime.getTime()) ? new Date() : validStartTime;
+      const startKey = safeStart.toISOString();
       const isNewWorkout = lastStartTimeRef.current !== startKey;
 
       if (!wasInitializedRef.current || isNewWorkout) {
@@ -1402,7 +1415,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         wasInitializedRef.current = true;
 
         // Reset timer refs and note state on a fresh track/edit session start
-        resumeStartTime.current = isEditing ? new Date() : (startTime || new Date());
+        resumeStartTime.current = isEditing ? new Date() : safeStart;
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
         setWorkoutNote(editingComment || '');
         setLocalWorkoutName(workoutName);        const initial = (exercises || [])
@@ -1626,83 +1639,95 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     let restTimerUnsubscribe: (() => void) | null = null;
 
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active') {
-        if (restTimerUnsubscribe) {
-          restTimerUnsubscribe();
-          restTimerUnsubscribe = null;
-        }
-        await stopWorkoutForeground();
-        await dismissWorkoutBackgroundNotification();
-      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (activeInputRef.current) {
-          updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
-        }
-        if (hasSyncedPropsRef.current) {
-          flushExercisesToParent(activeExercisesRef.current);
-        }
-        if (visibleRef.current) {
-          const workoutNameStr = localWorkoutNameRef.current || 'Workout';
-          await startWorkoutForeground(workoutNameStr);
-
-          const initialActive = restTimerEmitter.isActive();
-          const initialRemaining = restTimerEmitter.getRemaining();
-
-          const buildWorkoutBody = (timerActive: boolean, timerRemaining: number, timerJustFinished: boolean) => {
-            const currentExerciseName = activeExercisesRef.current.length > 0
-              ? activeExercisesRef.current[0].name
-              : 'Workout in Progress';
-            const elapsedStr = formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current);
-            if (timerJustFinished) {
-              return `${currentExerciseName} • ${elapsedStr} • Rest complete — next set ready`;
-            }
-            return `${currentExerciseName} • ${elapsedStr}${timerActive ? ` • Rest: ${timerRemaining}s` : ''}`;
-          };
-
-          const initialBody = buildWorkoutBody(initialActive, initialRemaining, false);
-          await showWorkoutBackgroundNotification({
-            title: workoutNameStr,
-            body: initialBody,
-          });
-
+      try {
+        if (nextAppState === 'active') {
           if (restTimerUnsubscribe) {
-            restTimerUnsubscribe();
+            try { restTimerUnsubscribe(); } catch (e) {}
+            restTimerUnsubscribe = null;
           }
+          await stopWorkoutForeground().catch((err) => console.warn('[ForegroundNotif] stop error:', err));
+          await dismissWorkoutBackgroundNotification().catch((err) => console.warn('[Notif] dismiss error:', err));
+        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+          if (activeInputRef.current) {
+            try {
+              updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+            } catch (e) {}
+          }
+          if (hasSyncedPropsRef.current) {
+            try {
+              flushExercisesToParent(activeExercisesRef.current);
+            } catch (e) {}
+          }
+          if (visibleRef.current) {
+            const workoutNameStr = localWorkoutNameRef.current || 'Workout';
+            await startWorkoutForeground(workoutNameStr).catch((err) => console.warn('[ForegroundNotif] start error:', err));
 
-          let prevActive = initialActive;
-          let prevRemaining = initialRemaining;
+            const initialActive = restTimerEmitter.isActive();
+            const initialRemaining = restTimerEmitter.getRemaining();
 
-          restTimerUnsubscribe = restTimerEmitter.subscribe(async (timerState) => {
-            const activeFlips = timerState.active !== prevActive;
-            const remainingHitsZero = timerState.remaining === 0 && prevRemaining > 0;
-
-            if (timerState.active && timerState.remaining > 0) {
-              await updateTimerCountdown(timerState.remaining, workoutNameStr);
-            }
-
-            if (activeFlips || remainingHitsZero) {
-              const timerJustFinished = !timerState.active && prevActive;
+            const buildWorkoutBody = (timerActive: boolean, timerRemaining: number, timerJustFinished: boolean) => {
+              const currentExerciseName = (activeExercisesRef.current && activeExercisesRef.current.length > 0 && activeExercisesRef.current[0]?.name)
+                ? activeExercisesRef.current[0].name
+                : 'Workout in Progress';
+              const elapsedStr = formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current);
               if (timerJustFinished) {
-                await showTimerComplete(workoutNameStr);
+                return `${currentExerciseName} • ${elapsedStr} • Rest complete — next set ready`;
               }
+              return `${currentExerciseName} • ${elapsedStr}${timerActive ? ` • Rest: ${timerRemaining}s` : ''}`;
+            };
 
-              const body = buildWorkoutBody(timerState.active, timerState.remaining, timerJustFinished);
-              await showWorkoutBackgroundNotification({
-                title: workoutNameStr,
-                body,
-              });
+            const initialBody = buildWorkoutBody(initialActive, initialRemaining, false);
+            await showWorkoutBackgroundNotification({
+              title: workoutNameStr,
+              body: initialBody,
+            }).catch(() => {});
+
+            if (restTimerUnsubscribe) {
+              try { restTimerUnsubscribe(); } catch (e) {}
             }
 
-            prevActive = timerState.active;
-            prevRemaining = timerState.remaining;
-          });
+            let prevActive = initialActive;
+            let prevRemaining = initialRemaining;
+
+            restTimerUnsubscribe = restTimerEmitter.subscribe(async (timerState) => {
+              try {
+                const activeFlips = timerState.active !== prevActive;
+                const remainingHitsZero = timerState.remaining === 0 && prevRemaining > 0;
+
+                if (timerState.active && timerState.remaining > 0) {
+                  await updateTimerCountdown(timerState.remaining, workoutNameStr).catch(() => {});
+                }
+
+                if (activeFlips || remainingHitsZero) {
+                  const timerJustFinished = !timerState.active && prevActive;
+                  if (timerJustFinished) {
+                    await showTimerComplete(workoutNameStr).catch(() => {});
+                  }
+
+                  const body = buildWorkoutBody(timerState.active, timerState.remaining, timerJustFinished);
+                  await showWorkoutBackgroundNotification({
+                    title: workoutNameStr,
+                    body,
+                  }).catch(() => {});
+                }
+
+                prevActive = timerState.active;
+                prevRemaining = timerState.remaining;
+              } catch (e) {
+                console.warn('[ActiveWorkout] Error in restTimerEmitter background subscriber:', e);
+              }
+            });
+          }
         }
+      } catch (e) {
+        console.error('[AppState Error in ActiveWorkoutModal]:', e);
       }
     });
 
     return () => {
       subscription.remove();
       if (restTimerUnsubscribe) {
-        restTimerUnsubscribe();
+        try { restTimerUnsubscribe(); } catch (e) {}
       }
       stopWorkoutForeground().catch(() => {});
       dismissWorkoutBackgroundNotification().catch(() => {});

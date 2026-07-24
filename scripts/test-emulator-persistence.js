@@ -25,7 +25,7 @@ async function runEmulatorTest() {
   console.log('======================================================================');
 
   // 1. Check connected device
-  console.log('\n[1/6] Checking attached Android device/emulator...');
+  console.log('\n[1/7] Checking attached Android device/emulator...');
   const devicesOutput = runAdb('devices');
   console.log(devicesOutput);
   if (!devicesOutput.includes('emulator') && !devicesOutput.includes('device')) {
@@ -34,20 +34,32 @@ async function runEmulatorTest() {
   }
   console.log('✅ Android emulator connected.');
 
-  // 2. Clear logcat log buffer
-  console.log('\n[2/6] Clearing logcat buffer...');
+  // 2. Clear logcat buffer
+  console.log('\n[2/7] Clearing logcat buffer...');
   runAdb('logcat -c');
   console.log('✅ Logcat cleared.');
 
-  // 3. Launch application on emulator
-  console.log('\n[3/7] Launching StrongerN on emulator...');
+  // 3. Launch application & grant permissions on emulator
+  console.log('\n[3/7] Granting permissions & launching StrongerN on emulator...');
+  runAdb(`shell pm grant ${PACKAGE_NAME} android.permission.POST_NOTIFICATIONS`);
   const launchOutput = runAdb(`shell am start -n ${MAIN_ACTIVITY}`);
   console.log('   Output:', launchOutput);
-  await sleep(3000);
+  await sleep(2500);
 
-  // 4. Start active workout via ADB touch event
-  console.log('\n[4/7] Triggering "Start Workout" via ADB touch event...');
+  // Dismiss any system permission popup by tapping "Allow" (x=500, y=540)
+  runAdb('shell input tap 500 540');
+  await sleep(1000);
+
+  // 4. Start active workout & add exercise via ADB touch inputs
+  console.log('\n[4/7] Starting workout & adding exercise via ADB touch inputs...');
+  // Tap "Start Workout" button at center (x=540, y=340)
   runAdb('shell input tap 540 340');
+  await sleep(2000);
+  // Tap "+" Add Exercise button at top right (x=825, y=80)
+  runAdb('shell input tap 825 80');
+  await sleep(2000);
+  // Tap first exercise item in picker list (x=500, y=350)
+  runAdb('shell input tap 500 350');
   await sleep(2000);
 
   // 5. Simulate App Backgrounding (Home keypress)

@@ -26,9 +26,9 @@ export async function getCrashLogs(): Promise<CrashLog[]> {
     return [];
   }
 
+  let sqliteLogs: CrashLog[] = [];
   try {
     const sqliteDb = await SQLite.openDatabaseAsync('strongern_crashes.db');
-    // Ensure table is created even if reading first
     await sqliteDb.execAsync(`
       CREATE TABLE IF NOT EXISTS strongern_kv_store (
         key TEXT PRIMARY KEY,
@@ -39,11 +39,33 @@ export async function getCrashLogs(): Promise<CrashLog[]> {
       `SELECT value FROM strongern_kv_store WHERE key = ?;`,
       [CRASH_LOGS_KEY]
     );
-    return row ? JSON.parse((row as any).value) : [];
+    if (row && (row as any).value) {
+      sqliteLogs = JSON.parse((row as any).value);
+    }
   } catch (e) {
     console.error('[CrashLogger] Failed to read crash logs from SQLite:', e);
-    return [];
   }
+
+  let fileLogs: CrashLog[] = [];
+  try {
+    const fileUri = `${FileSystem.documentDirectory}strongern_crash_logs.json`;
+    const exists = await FileSystem.getInfoAsync(fileUri);
+    if (exists.exists) {
+      const content = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+      if (content) {
+        fileLogs = JSON.parse(content);
+      }
+    }
+  } catch (e) {}
+
+  const map = new Map<string, CrashLog>();
+  for (const l of [...sqliteLogs, ...fileLogs]) {
+    if (l && l.id) map.set(l.id, l);
+  }
+  const combined = Array.from(map.values()).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  return combined;
 }
 
 export async function saveCrashLogs(logs: CrashLog[]): Promise<boolean> {
@@ -58,6 +80,11 @@ export async function saveCrashLogs(logs: CrashLog[]): Promise<boolean> {
   }
 
   try {
+    const fileUri = `${FileSystem.documentDirectory}strongern_crash_logs.json`;
+    await FileSystem.writeAsStringAsync(fileUri, serialized, {
+      encoding: FileSystem.EncodingType.UTF8,
+    }).catch(() => {});
+
     const sqliteDb = await SQLite.openDatabaseAsync('strongern_crashes.db');
     await sqliteDb.execAsync(`
       CREATE TABLE IF NOT EXISTS strongern_kv_store (
@@ -78,8 +105,7 @@ export async function saveCrashLogs(logs: CrashLog[]): Promise<boolean> {
 
 /**
  * Synchronously writes a crash log directly to storage.
- * This is critical for fatal crashes, as the JS thread will be terminated
- * immediately after the error handler runs, preventing any async promises from completing.
+ * Critical for fatal crashes, ensuring logs persist across SQLite and FileSystem.
  */
 export function saveCrashLogSync(message: string, stack: string, fatal: boolean): void {
   try {
@@ -111,7 +137,26 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
         window.localStorage.setItem(CRASH_LOGS_KEY, JSON.stringify(updated));
       }
     } else {
-      // Native SQLite path
+      // 1. FileSystem fallback persistence for Native (Android/iOS)
+      if (FileSystem.documentDirectory) {
+        const fileUri = `${FileSystem.documentDirectory}strongern_crash_logs.json`;
+        FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 })
+          .then((content) => {
+            let existing: CrashLog[] = [];
+            if (content) {
+              try {
+                existing = JSON.parse(content);
+              } catch (e) {}
+            }
+            const updated = [newLog, ...existing].slice(0, 100);
+            return FileSystem.writeAsStringAsync(fileUri, JSON.stringify(updated), { encoding: FileSystem.EncodingType.UTF8 });
+          })
+          .catch(() => {
+            FileSystem.writeAsStringAsync(fileUri, JSON.stringify([newLog]), { encoding: FileSystem.EncodingType.UTF8 }).catch(() => {});
+          });
+      }
+
+      // 2. Native SQLite path
       let sqliteDb: any = null;
       try {
         sqliteDb = SQLite.openDatabaseSync('strongern_crashes.db');
@@ -126,7 +171,6 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
       }
 
       if (sqliteDb) {
-        // Read existing logs synchronously
         let existingVal: string | null = null;
         try {
           const row: any = sqliteDb.getFirstSync(
@@ -149,29 +193,14 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
         const updated = [newLog, ...logs].slice(0, 100);
         const serialized = JSON.stringify(updated);
 
-        // Write logs back synchronously
         sqliteDb.runSync(
           `INSERT OR REPLACE INTO strongern_kv_store (key, value) VALUES (?, ?);`,
           [CRASH_LOGS_KEY, serialized]
         );
-        console.log('[CrashLogger] Sync crash log saved to SQLite.');
-      } else {
-        // Fallback to localStorage on native if SQLite failed
-        if (typeof window !== 'undefined' && window.localStorage) {
-          const saved = window.localStorage.getItem(CRASH_LOGS_KEY);
-          if (saved) {
-            try {
-              logs = JSON.parse(saved);
-            } catch (e) {}
-          }
-          const updated = [newLog, ...logs].slice(0, 100);
-          window.localStorage.setItem(CRASH_LOGS_KEY, JSON.stringify(updated));
-        }
+        console.log('[CrashLogger] Sync crash log saved to SQLite & FileSystem.');
       }
     }
   } catch (err) {
-    // Use console.warn (not console.error) to avoid re-entering the hooked console.error,
-    // which would cause an infinite recursion crash loop.
     console.warn('[CrashLogger] Critical failure inside saveCrashLogSync:', err);
   }
 }
