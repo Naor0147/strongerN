@@ -135,7 +135,27 @@ if ($env:STRONGERN_AUTO -eq "1") { $AutoMode = $true }
 $ArchFlag = "-PreactNativeArchitectures=arm64-v8a"
 if ($AutoMode -or $deviceConnected) {
     Write-Host "`n[4/6] Target Architecture Auto-Selection:" -ForegroundColor $PrimaryColor
-    Write-Host "   - Selected: Physical Device (arm64-v8a) for optimal speed." -ForegroundColor $SuccessColor
+    if ($selectedDevice) {
+        try {
+            $deviceAbi = (& $adb -s $selectedDevice shell getprop ro.product.cpu.abi).Trim()
+            if ($deviceAbi -match "x86_64") {
+                $ArchFlag = "-PreactNativeArchitectures=x86_64"
+                Write-Host "   - Detected connected device ($selectedDevice) ABI: x86_64 (Emulator target)" -ForegroundColor $SuccessColor
+            } elseif ($deviceAbi -match "arm64") {
+                $ArchFlag = "-PreactNativeArchitectures=arm64-v8a"
+                Write-Host "   - Detected connected device ($selectedDevice) ABI: arm64-v8a (Physical device target)" -ForegroundColor $SuccessColor
+            } else {
+                $ArchFlag = "-PreactNativeArchitectures=arm64-v8a,x86_64"
+                Write-Host "   - Detected connected device ($selectedDevice) ABI: $deviceAbi" -ForegroundColor $SuccessColor
+            }
+        } catch {
+            $ArchFlag = "-PreactNativeArchitectures=arm64-v8a"
+            Write-Host "   - Selected fallback: Physical Device (arm64-v8a)" -ForegroundColor $SuccessColor
+        }
+    } else {
+        $ArchFlag = "-PreactNativeArchitectures=arm64-v8a"
+        Write-Host "   - Selected default: Physical Device (arm64-v8a)" -ForegroundColor $SuccessColor
+    }
 } else {
     Write-Host "`n[4/6] Target Architecture Selection" -ForegroundColor $PrimaryColor
     Write-Host "   Restricting builds to target devices builds MUCH faster." -ForegroundColor Gray
