@@ -307,19 +307,47 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
               {isCreatingCustom ? i18n.t('extras.createExerciseTitle') : title}
             </Text>
 
-            <Pressable
-              onPress={() => setIsFilterVisible(v => !v)}
-              style={[styles.filterBtn, hasFilters && styles.filterBtnActive]}
-              android_ripple={rippleTokens.borderless}
-              accessibilityLabel="Toggle filters"
-            >
-              <Ionicons
-                name="options-outline"
-                size={20}
-                color={hasFilters ? colors.accent : colors.textSecondary}
-              />
-              {hasFilters && <View style={styles.filterActiveDot} />}
-            </Pressable>
+            <View style={styles.headerRight}>
+              {!isCreatingCustom && (
+                <Pressable
+                  onPress={() => setIsFilterVisible(v => !v)}
+                  style={[styles.filterBtn, hasFilters && styles.filterBtnActive]}
+                  android_ripple={rippleTokens.borderless}
+                  accessibilityLabel="Toggle filters"
+                >
+                  <Ionicons
+                    name="options-outline"
+                    size={20}
+                    color={hasFilters ? colors.accent : colors.textSecondary}
+                  />
+                  {hasFilters && <View style={styles.filterActiveDot} />}
+                </Pressable>
+              )}
+
+              {!isCreatingCustom && !singleSelect && (
+                <Pressable
+                  onPress={() => onConfirm(selectedNames)}
+                  disabled={selectedNames.length === 0}
+                  style={[
+                    styles.confirmSquareBtn,
+                    selectedNames.length > 0 ? styles.confirmSquareBtnActive : styles.confirmSquareBtnDisabled,
+                  ]}
+                  android_ripple={rippleTokens.accent}
+                  accessibilityLabel="Confirm add exercises"
+                >
+                  <Ionicons
+                    name="checkmark"
+                    size={20}
+                    color={selectedNames.length > 0 ? colors.bg : colors.textMuted}
+                  />
+                  {selectedNames.length > 0 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{selectedNames.length}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {/* ── Filter Panel ── */}
@@ -564,30 +592,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                 />
               )}
 
-              {/* ── Confirm Bar (multi-select only) ── */}
-              {!singleSelect && (
-                <View style={styles.confirmBar}>
-                  <Text style={styles.confirmCount}>
-                    {selectedNames.length > 0
-                      ? i18n.t('extras.selectedCount', { count: selectedNames.length })
-                      : i18n.t('extras.exercisesCountLabel', { count: filteredExercises.length })}
-                  </Text>
-                  <Pressable
-                    style={[
-                      styles.confirmBtn,
-                      selectedNames.length === 0 && styles.confirmBtnDisabled,
-                    ]}
-                    onPress={() => onConfirm(selectedNames)}
-                    disabled={selectedNames.length === 0}
-                    android_ripple={rippleTokens.accent}
-                  >
-                    <Ionicons name="checkmark" size={16} color={colors.bg} style={{ marginRight: spacing.xs }} />
-                    <Text style={styles.confirmBtnText}>
-                      {i18n.t('extras.addExercisePlural', { count: selectedNames.length, plural: selectedNames.length !== 1 ? 's' : '' })}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
+
             </>
           )}
         </View>
@@ -627,6 +632,11 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     letterSpacing: 1,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing.sm,
+  },
   filterBtn: {
     width: 36,
     height: 36,
@@ -649,6 +659,43 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: colors.accent,
+  },
+  confirmSquareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.xs,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmSquareBtnActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+    ...(shadow.accentGlow as object),
+  },
+  confirmSquareBtnDisabled: {
+    opacity: 0.4,
+  },
+  countBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.bg,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  countBadgeText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontFamily: font.bold,
   },
 
   // Filter Panel
