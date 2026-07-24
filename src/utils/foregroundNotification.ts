@@ -106,7 +106,7 @@ export async function startWorkoutForeground(workoutName: string) {
       body,
       android: {
         channelId: WORKOUT_LIVE_CHANNEL_ID,
-        asForegroundService: true,
+        asForegroundService: false,
         ongoing: true,
         autoCancel: false,
         showChronometer: true,
@@ -122,7 +122,7 @@ export async function startWorkoutForeground(workoutName: string) {
 
     isServiceRunning = true;
   } catch (e) {
-    console.warn('[ForegroundNotif Error] Failed to start foreground service:', e);
+    console.warn('[ForegroundNotif Error] Failed to start foreground notification:', e);
   }
 }
 
@@ -146,7 +146,7 @@ export async function updateTimerCountdown(remainingSec: number, workoutName: st
       body: bodyText,
       android: {
         channelId: WORKOUT_LIVE_CHANNEL_ID,
-        asForegroundService: true,
+        asForegroundService: false,
         ongoing: true,
         autoCancel: false,
         color: '#4F8EF7',
@@ -181,7 +181,7 @@ export async function showTimerComplete(workoutName: string) {
       body: bodyText,
       android: {
         channelId: WORKOUT_LIVE_CHANNEL_ID,
-        asForegroundService: true,
+        asForegroundService: false,
         ongoing: true,
         autoCancel: false,
         color: '#22D97A',
