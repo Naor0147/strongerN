@@ -26,6 +26,7 @@ import {
   setsPerWeek,
   avgRepsPerWorkout,
 } from '../utils/exerciseStats';
+import { getExercisePercentile } from '../utils/strengthDistributionEngine';
 
 import i18n from '../utils/i18n';
 import { getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
@@ -97,41 +98,6 @@ const getSecondaryMuscles = (primary: string): string => {
   return 'Core';
 };
 
-function normalCDF(z: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const d = 0.3989423 * Math.exp(-z * z / 2);
-  const p = d * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  return z >= 0 ? 1 - p : p;
-}
-
-function getExercisePercentile(name: string, weight: number): number {
-  if (weight <= 0) return 0.5;
-  const exerciseNameClean = name.toLowerCase().trim();
-  let mean = 70;
-  let sd = 15;
-  if (exerciseNameClean.includes('bench press')) {
-    mean = 75;
-    sd = 15;
-  } else if (exerciseNameClean.includes('squat')) {
-    mean = 95;
-    sd = 20;
-  } else if (exerciseNameClean.includes('overhead press') || exerciseNameClean.includes('ohp')) {
-    mean = 50;
-    sd = 10;
-  } else if (exerciseNameClean.includes('pull-up') || exerciseNameClean.includes('pull up')) {
-    mean = 85;
-    sd = 15;
-  } else if (exerciseNameClean.includes('curl')) {
-    mean = 16;
-    sd = 4;
-  } else if (exerciseNameClean.includes('dip')) {
-    mean = 90;
-    sd = 18;
-  }
-  const z = (weight - mean) / sd;
-  return Math.min(0.99, Math.max(0.01, normalCDF(z)));
-}
-
 export interface ExerciseInsightsModalProps {
   visible: boolean;
   exerciseName: string;
@@ -142,6 +108,8 @@ export interface ExerciseInsightsModalProps {
   onUpdateExerciseVariations?: (id: string, variations: string[]) => void;
   onDeleteExercise?: (id: string) => void;
   exerciseNameLanguage?: 'en' | 'he';
+  userBodyweight?: number;
+  userGender?: 'male' | 'female';
 }
 
 const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
@@ -154,6 +122,8 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
   onUpdateExerciseVariations,
   onDeleteExercise,
   exerciseNameLanguage = 'en',
+  userBodyweight = 75,
+  userGender = 'male',
 }) => {
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<'info' | 'data' | 'history'>('info');
@@ -179,8 +149,8 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
   const strengthPercentile = useMemo(() => {
     const series1RM = exercise1RMSeries(exerciseName, sessions);
     const current1RM = series1RM.length > 0 ? series1RM[series1RM.length - 1].value : 0;
-    return getExercisePercentile(exerciseName, current1RM);
-  }, [exerciseName, sessions]);
+    return getExercisePercentile(exerciseName, current1RM, userBodyweight, userGender);
+  }, [exerciseName, sessions, userBodyweight, userGender]);
 
   useEffect(() => {
     setNotes(exerciseLibraryEntry?.insightsNotes || '');
