@@ -16,18 +16,18 @@ describe('strengthDistributionEngine', () => {
   });
 
   it('should calculate percentile for Barbell Bench Press accurately', () => {
-    // Male, 80kg bodyweight:
-    // P50 in 75-82.5kg bracket is ~125kg
-    const percentile125 = getExercisePercentile('Barbell Bench Press', 125, 80, 'male');
-    expect(percentile125).toBeGreaterThanOrEqual(0.48);
-    expect(percentile125).toBeLessThanOrEqual(0.55);
+    // Male 18-29, 80kg bodyweight:
+    // P50 in 75-82.5kg bracket is ~78.7kg
+    const percentile78 = getExercisePercentile('Barbell Bench Press', 78.7, 80, 'male');
+    expect(percentile78).toBeGreaterThanOrEqual(0.48);
+    expect(percentile78).toBeLessThanOrEqual(0.55);
 
-    // Very high weight (190kg) -> P99
-    const percentileElite = getExercisePercentile('Barbell Bench Press', 190, 80, 'male');
+    // Very high weight (168kg) -> P99
+    const percentileElite = getExercisePercentile('Barbell Bench Press', 168, 80, 'male');
     expect(percentileElite).toBeGreaterThanOrEqual(0.95);
 
-    // Low weight (60kg) -> ~P5-P10
-    const percentileBeginner = getExercisePercentile('Barbell Bench Press', 60, 80, 'male');
+    // Low weight (45kg) -> ~P5
+    const percentileBeginner = getExercisePercentile('Barbell Bench Press', 45, 80, 'male');
     expect(percentileBeginner).toBeLessThan(0.20);
   });
 

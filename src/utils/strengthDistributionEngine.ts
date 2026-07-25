@@ -4,12 +4,13 @@ export interface BodyweightBracket {
   minKg: number;
   maxKg: number;
   sampleSize: number;
-  confidence: 'high' | 'moderate' | 'low' | 'interpolated_no_data';
+  confidence: 'high' | 'moderate' | 'low' | 'interpolated_no_data' | 'estimated_population';
   values: number[];
 }
 
 export interface GenderGrid {
   gender: 'male' | 'female';
+  ageGroup?: string;
   brackets: BodyweightBracket[];
 }
 
@@ -29,6 +30,7 @@ export interface StrengthDataset {
   dataRangeStart: string;
   dataRangeEnd: string;
   quantileAnchors: number[];
+  populationModel?: string;
   exercises: ExerciseEntry[];
 }
 
@@ -81,7 +83,7 @@ const ALIAS_MAP: Record<string, string> = {
 };
 
 /**
-  Finds matching ExerciseEntry by string name/slug
+ * Finds matching ExerciseEntry by string name/slug
  */
 export function findExerciseEntry(name: string): ExerciseEntry | undefined {
   if (!name) return undefined;
@@ -165,13 +167,41 @@ function interpolatePercentile(
 }
 
 /**
+ * Finds the appropriate GenderGrid given gender and optional ageGroup
+ */
+function findGenderGrid(
+  entry: ExerciseEntry,
+  gender: 'male' | 'female',
+  ageGroup: string = '18-29'
+): GenderGrid | undefined {
+  // First attempt: exact gender + exact ageGroup match
+  let matched = entry.grids.find((g) => g.gender === gender && g.ageGroup === ageGroup);
+
+  // Second attempt: exact gender + default adult age group '18-29' or '30-39'
+  if (!matched) {
+    matched = entry.grids.find(
+      (g) => g.gender === gender && (g.ageGroup === '18-29' || g.ageGroup === '30-39')
+    );
+  }
+
+  // Third attempt: any matching gender grid
+  if (!matched) {
+    matched = entry.grids.find((g) => g.gender === gender);
+  }
+
+  // Fallback: first available grid
+  return matched || entry.grids[0];
+}
+
+/**
  * Main engine function to compute population strength percentile for any 1RM weight.
  */
 export function getExercisePercentile(
   exerciseName: string,
   weightKg: number,
   userBodyweightKg: number = 75,
-  gender: 'male' | 'female' = 'male'
+  gender: 'male' | 'female' = 'male',
+  ageGroup: string = '18-29'
 ): number {
   if (weightKg <= 0) return 0.5;
 
@@ -195,8 +225,10 @@ export function getExercisePercentile(
     return Math.min(0.99, Math.max(0.01, cdf));
   }
 
-  const genderGrid = entry.grids.find((g) => g.gender === gender) || entry.grids[0];
-  if (!genderGrid || genderGrid.brackets.length === 0) return 0.5;
+  const genderGrid = findGenderGrid(entry, gender, ageGroup);
+  if (!genderGrid || !genderGrid.brackets || genderGrid.brackets.length === 0) {
+    return 0.5;
+  }
 
   const bw = Math.max(40, userBodyweightKg);
 
@@ -235,7 +267,8 @@ export interface DistributionBins {
 export function getDistributionHistogramBins(
   exerciseName: string,
   userBodyweightKg: number = 75,
-  gender: 'male' | 'female' = 'male'
+  gender: 'male' | 'female' = 'male',
+  ageGroup: string = '18-29'
 ): DistributionBins {
   const entry = findExerciseEntry(exerciseName);
 
@@ -243,7 +276,7 @@ export function getDistributionHistogramBins(
     return { p5: 45, p20: 58, p50: 70, p80: 83, p95: 95, unit: 'kg' };
   }
 
-  const genderGrid = entry.grids.find((g) => g.gender === gender) || entry.grids[0];
+  const genderGrid = findGenderGrid(entry, gender, ageGroup);
   const bw = Math.max(40, userBodyweightKg);
   let bracket = genderGrid?.brackets.find((b) => bw >= b.minKg && bw < b.maxKg);
   if (!bracket && genderGrid && genderGrid.brackets.length > 0) {
@@ -255,11 +288,6 @@ export function getDistributionHistogramBins(
   }
 
   // Anchor indices: dataset.quantileAnchors is [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
-  // P5  -> index 1
-  // P20 -> index 3
-  // P50 -> index 6
-  // P80 -> index 9
-  // P95 -> index 11
   const vals = bracket.values;
 
   return {
