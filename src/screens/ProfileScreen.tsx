@@ -2663,6 +2663,29 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                             </View>
                             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                           </Pressable>
+
+                          <View style={styles.settingDivider} />
+
+                          {/* Watch Companion Simulator Row */}
+                          <Pressable
+                            style={styles.settingRow}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setIsWatchSimulatorVisible(true);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <View style={styles.settingInfo}>
+                              <Ionicons name="watch-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.settingTitle}>{i18n.t('profile.watchSimulator')}</Text>
+                                <Text style={styles.settingSubtitle}>
+                                  {i18n.t('profile.watchSimulatorDesc')}
+                                </Text>
+                              </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                          </Pressable>
                         </Card>
                       </>
                     )}
