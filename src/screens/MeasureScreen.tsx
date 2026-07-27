@@ -425,7 +425,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                             onDelete={() => {
                               Alert.alert(
                                 i18n.t('common.delete'),
-                                i18n.t('extras.confirmDeleteEntry', { defaultValue: 'Are you sure you want to delete this log entry?' }),
+                                i18n.t('extras.confirmDeleteEntry'),
                                 [
                                   { text: i18n.t('common.cancel'), style: 'cancel' },
                                   {
@@ -450,7 +450,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                                             history: updatedHistory,
                                           };
                                         });
-                                        showToast(i18n.t('extras.entryDeleted', { defaultValue: 'Entry deleted' }), 'info');
+                                        showToast(i18n.t('extras.entryDeleted'), 'info');
                                       }
                                     }
                                   }

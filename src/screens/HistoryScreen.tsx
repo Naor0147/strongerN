@@ -324,8 +324,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
         style={{ marginBottom: spacing.md }}
         onDeleteWithConfirm={(confirm, cancel) => {
           Alert.alert(
-            i18n.t('history.deleteSession', { defaultValue: 'Delete Workout Session' }),
-            i18n.t('history.deleteSessionMsg', { name: item.title, defaultValue: `Are you sure you want to delete "${item.title}"? This cannot be undone.` }),
+            i18n.t('history.deleteSession'),
+            i18n.t('history.deleteSessionMsg', { name: item.title }),
             [
               { text: i18n.t('common.cancel'), style: 'cancel', onPress: cancel },
               {
@@ -333,7 +333,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
                 style: 'destructive',
                 onPress: () => {
                   confirm(() => onDeleteSession(item.id));
-                  showToast(i18n.t('history.sessionDeleted', { defaultValue: 'Session deleted' }), 'info');
+                  showToast(i18n.t('history.sessionDeleted'), 'info');
                 },
               },
             ]

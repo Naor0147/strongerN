@@ -8,6 +8,8 @@ import { styles } from './activeWorkoutStyles';
 import { VariationDropdown } from '../ui/VariationDropdown';
 import { ActiveSetRowItem } from './ActiveSetRowItem';
 
+import i18n from '../../utils/i18n';
+
 export interface ActiveExerciseRowProps {
   exercise: any;
   exIdx: number;
@@ -168,7 +170,7 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             <Ionicons name="document-text-outline" size={14} color={colors.accent} />
             <TextInput
               style={[styles.notesText, { color: colors.textPrimary, paddingVertical: 0 }]}
-              placeholder="Add exercise note / cue..."
+              placeholder={i18n.t('activeWorkout.addExerciseNotePlaceholder')}
               placeholderTextColor={colors.textMuted}
               value={localNote}
               onChangeText={(val) => {
@@ -191,7 +193,7 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 onPress={() => onSaveLibraryNote(exercise.name, localNote.trim() || undefined)}
                 style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Save as default library note"
+                accessibilityLabel={i18n.t('activeWorkout.saveLibraryNoteA11y')}
               >
                 <Ionicons name="bookmark-outline" size={14} color={colors.textMuted} />
               </Pressable>

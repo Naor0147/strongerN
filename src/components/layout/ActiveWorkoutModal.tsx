@@ -1882,7 +1882,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 <Ionicons name="document-text-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
                 <TextInput
                   style={styles.workoutNoteInlineInput}
-                  placeholder="Add workout note..."
+                  placeholder={i18n.t('activeWorkout.addWorkoutNotePlaceholder')}
                   placeholderTextColor={colors.textMuted}
                   value={workoutNote}
                   onChangeText={(val) => {
