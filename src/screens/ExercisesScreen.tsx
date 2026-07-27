@@ -356,12 +356,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
     scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
   }, []);
 
-  // Context Menu and Notes states
+  // Context Menu state
   const [isContextMenuVisible, setIsContextMenuVisible] = useState(false);
   const [contextMenuExercise, setContextMenuExercise] = useState<Exercise | null>(null);
-  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
-  const [noteEditExercise, setNoteEditExercise] = useState<Exercise | null>(null);
-  const [noteText, setNoteText] = useState('');
 
   // New Exercise Form States
   const [newExName, setNewExName] = useState('');

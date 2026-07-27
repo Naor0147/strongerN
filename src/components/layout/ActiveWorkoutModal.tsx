@@ -157,7 +157,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Workout menu state
   const [isWorkoutMenuVisible, setIsWorkoutMenuVisible] = useState(false);
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
-  const [isWorkoutNoteModalVisible, setIsWorkoutNoteModalVisible] = useState(false);
   const [isStartTimePickerVisible, setIsStartTimePickerVisible] = useState(false);
   const [editedStartTimeText, setEditedStartTimeText] = useState('');
   const [isDefaultTimerPickerVisible, setIsDefaultTimerPickerVisible] = useState(false);
@@ -434,9 +433,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [plateCalcTargetWeight, setPlateCalcTargetWeight] = useState('60');
   const [barWeight, setBarWeight] = useState<20 | 15>(20);
 
-  // Exercise notes states
-  const [isNotesModalVisible, setIsNotesModalVisible] = useState(false);
-  const [noteText, setNoteText] = useState('');
 
   const calculatedPlates = useMemo(() => {
     const target = parseFloat(plateCalcTargetWeight) || 0;
@@ -2120,23 +2116,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       </>
                     )}
 
-                    <Pressable
-                      style={styles.sheetItem}
-                      onPress={() => {
-                        if (activeExerciseMenuIndex !== null) {
-                          const exName = activeExercises[activeExerciseMenuIndex].name;
-                          const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-                          setNoteText(libEx?.notes || '');
-                          setIsExMenuVisible(false);
-                          setIsNotesModalVisible(true);
-                        }
-                      }}
-                      android_ripple={rippleTokens.surface}
-                      testID="view-edit-notes"
-                    >
-                      <Ionicons name="document-text-outline" size={20} color={colors.accent} />
-                      <Text style={styles.sheetItemText}>View/Edit Notes</Text>
-                    </Pressable>
 
                     <Pressable
                       style={styles.sheetItem}
@@ -2283,88 +2262,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Modal>
             )}
 
-            {/* Modal D: View / Edit Exercise Notes */}
-            {isNotesModalVisible && activeExerciseMenuIndex !== null && (
-              <Modal
-                visible={isNotesModalVisible}
-                animationType="slide"
-                transparent
-                onRequestClose={() => setIsNotesModalVisible(false)}
-              >
-                <Pressable
-                  style={styles.backdrop}
-                  onPress={() => setIsNotesModalVisible(false)}
-                >
-                  <Pressable
-                    style={styles.card}
-                    onPress={e => e.stopPropagation()}
-                  >
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>EXERCISE NOTES</Text>
-                      <IconButton
-                        name="close"
-                        size={22}
-                        color={colors.textSecondary}
-                        onPress={() => setIsNotesModalVisible(false)}
-                      />
-                    </View>
-
-                    <View style={styles.plateCalcBody}>
-                      <Text style={styles.noteModalHeader}>
-                        {activeExercises[activeExerciseMenuIndex].name}
-                      </Text>
-                      <TextInput
-                        style={[styles.plateCalcInput, { minHeight: 100, textAlignVertical: 'top' }]}
-                        placeholder="Enter workout cue, seat height, or custom setting notes..."
-                        placeholderTextColor={colors.textMuted}
-                        value={noteText}
-                        onChangeText={setNoteText}
-                        multiline
-                        keyboardAppearance="dark"
-                        maxLength={150}
-                        autoFocus
-                        testID="notes-input"
-                      />
-
-                      <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md, width: '100%' }}>
-                        <Pressable
-                          style={[styles.modalBtnCancel, { flex: 1 }]}
-                          onPress={() => setIsNotesModalVisible(false)}
-                          testID="cancel-notes-btn"
-                        >
-                          <Text style={styles.modalBtnCancelText}>CANCEL</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.modalBtnSave, { flex: 1 }]}
-                          onPress={() => {
-                            const trimmed = noteText.trim() || undefined;
-                            const idx = activeExerciseMenuIndex;
-                            if (activeExercises[idx]) {
-                              const exName = activeExercises[idx].name;
-                              setActiveExercises(prev => {
-                                const next = [...prev];
-                                if (next[idx]) {
-                                  next[idx] = { ...next[idx], note: trimmed };
-                                }
-                                return next;
-                              });
-                              const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-                              if (libEx && onUpdateExerciseNotes) {
-                                onUpdateExerciseNotes(libEx.id, trimmed);
-                              }
-                            }
-                            setIsNotesModalVisible(false);
-                          }}
-                          testID="save-notes-btn"
-                        >
-                          <Text style={styles.modalBtnSaveText}>SAVE</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </Pressable>
-                </Pressable>
-              </Modal>
-            )}
 
             {/* Modal: Exercise Insights */}
             {isExerciseInsightsVisible && activeExerciseMenuIndex !== null && activeExercises[activeExerciseMenuIndex]?.name && (
@@ -2413,18 +2310,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     </Text>
 
                     <View style={{ rowGap: spacing.sm }}>
-                      {/* Note option */}
-                      <Pressable
-                        style={styles.sheetItem}
-                        onPress={() => {
-                          setIsWorkoutMenuVisible(false);
-                          setIsWorkoutNoteModalVisible(true);
-                        }}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Ionicons name="document-text-outline" size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>Add Workout Note</Text>
-                      </Pressable>
 
                       {/* Change Start Time option */}
                       <Pressable
@@ -2473,72 +2358,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Modal>
             )}
 
-            {/* Workout Note Modal */}
-            {isWorkoutNoteModalVisible && (
-              <Modal
-                visible={isWorkoutNoteModalVisible}
-                animationType="slide"
-                transparent
-                onRequestClose={() => setIsWorkoutNoteModalVisible(false)}
-              >
-                <Pressable
-                  style={styles.backdrop}
-                  onPress={() => setIsWorkoutNoteModalVisible(false)}
-                >
-                  <Pressable
-                    style={styles.card}
-                    onPress={e => e.stopPropagation()}
-                  >
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>WORKOUT NOTE</Text>
-                      <IconButton
-                        name="close"
-                        size={22}
-                        color={colors.textSecondary}
-                        onPress={() => setIsWorkoutNoteModalVisible(false)}
-                      />
-                    </View>
-
-                    <View style={styles.plateCalcBody}>
-                      <Text style={styles.noteModalHeader}>
-                        {localWorkoutName}
-                      </Text>
-                      <TextInput
-                        style={[styles.plateCalcInput, { minHeight: 100, textAlignVertical: 'top' }]}
-                        placeholder="Add a comment or note about this workout session..."
-                        placeholderTextColor={colors.textMuted}
-                        value={workoutNote}
-                        onChangeText={setWorkoutNote}
-                        multiline
-                        keyboardAppearance="dark"
-                        maxLength={150}
-                        autoFocus
-                      />
-
-                      <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md, width: '100%' }}>
-                        <Pressable
-                          style={[styles.modalBtnCancel, { flex: 1 }]}
-                          onPress={() => setIsWorkoutNoteModalVisible(false)}
-                        >
-                          <Text style={styles.modalBtnCancelText}>CANCEL</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.modalBtnSave, { flex: 1 }]}
-                          onPress={() => {
-                            if (onUpdateComment) {
-                              onUpdateComment(workoutNote.trim());
-                            }
-                            setIsWorkoutNoteModalVisible(false);
-                          }}
-                        >
-                          <Text style={styles.modalBtnSaveText}>SAVE</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </Pressable>
-                </Pressable>
-              </Modal>
-            )}
 
             {/* Change Start Time Modal */}
             {isStartTimePickerVisible && (
