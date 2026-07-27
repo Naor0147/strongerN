@@ -1,6 +1,6 @@
 // components/ui/Toast.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Platform, Modal } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -79,16 +79,18 @@ export const Toast: React.FC = () => {
   const accentColor = getAccentColor();
 
   return (
-    <View style={[styles.wrapper, { paddingTop: Math.max(insets.top, 12) + spacing.xs }]} pointerEvents="box-none">
-      <Animated.View style={[styles.container, animatedStyle]}>
-        <Pressable onPress={hideToast} style={styles.content}>
-          <Ionicons name={getIcon()} size={20} color={accentColor} style={styles.icon} />
-          <Text style={styles.message} numberOfLines={2}>
-            {toast.message}
-          </Text>
-        </Pressable>
-      </Animated.View>
-    </View>
+    <Modal transparent visible={!!toast} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
+      <View style={[styles.wrapper, { paddingTop: Math.max(insets.top, 12) + spacing.xs }]} pointerEvents="box-none">
+        <Animated.View style={[styles.container, animatedStyle]}>
+          <Pressable onPress={hideToast} style={styles.content}>
+            <Ionicons name={getIcon()} size={20} color={accentColor} style={styles.icon} />
+            <Text style={styles.message} numberOfLines={2}>
+              {toast.message}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
 
