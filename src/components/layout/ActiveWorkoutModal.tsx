@@ -1534,6 +1534,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   }, []);
 
+  const updateExerciseNote = useCallback((exIdx: number, note?: string) => {
+    setActiveExercises(prev => {
+      const next = [...prev];
+      if (next[exIdx]) {
+        next[exIdx] = { ...next[exIdx], note };
+      }
+      return next;
+    });
+  }, [setActiveExercises]);
+
+  const onSaveLibraryNote = useCallback((exerciseName: string, note?: string) => {
+    const libEx = exerciseLibraryMap.get(exerciseName.toLowerCase());
+    if (libEx && onUpdateExerciseNotes) {
+      onUpdateExerciseNotes(libEx.id, note);
+    }
+  }, [exerciseLibraryMap, onUpdateExerciseNotes]);
+
   const handleOpenReplace = () => {
     setIsReplaceMode(true);
     setLibrarySearch('');
@@ -1874,8 +1891,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   value={workoutNote}
                   onChangeText={(val) => {
                     setWorkoutNote(val);
+                  }}
+                  onBlur={() => {
                     if (onUpdateComment) {
-                      onUpdateComment(val.trim());
+                      onUpdateComment(workoutNote.trim());
                     }
                   }}
                   multiline
@@ -1959,6 +1978,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       inputRefs={inputRefs}
                       isRpeMode={isRpeMode}
                       addSet={addSet}
+                      updateExerciseNote={updateExerciseNote}
+                      onSaveLibraryNote={onSaveLibraryNote}
                     />
                   );
                 })}

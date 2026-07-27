@@ -173,9 +173,6 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               value={localNote}
               onChangeText={(val) => {
                 setLocalNote(val);
-                if (updateExerciseNote) {
-                  updateExerciseNote(exIdx, val.trim() || undefined);
-                }
               }}
               onFocus={() => setIsEditingNote(true)}
               onBlur={() => {

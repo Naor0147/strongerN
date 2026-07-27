@@ -25,6 +25,8 @@ export interface ActiveExerciseCardProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
+  updateExerciseNote?: (exIdx: number, note: string | undefined) => void;
+  onSaveLibraryNote?: (exerciseName: string, note: string | undefined) => void;
 }
 
 export const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(({
@@ -47,6 +49,8 @@ export const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(
   inputRefs,
   isRpeMode,
   addSet,
+  updateExerciseNote,
+  onSaveLibraryNote,
 }) => {
   useTrackRender('ActiveExerciseCard', exercise.id);
   const handleDelete = useCallback(() => {
@@ -80,6 +84,8 @@ export const ActiveExerciseCard: React.FC<ActiveExerciseCardProps> = React.memo(
           inputRefs={inputRefs}
           isRpeMode={isRpeMode}
           addSet={addSet}
+          updateExerciseNote={updateExerciseNote}
+          onSaveLibraryNote={onSaveLibraryNote}
         />
       </SharedSwipeableRow>
     </View>
