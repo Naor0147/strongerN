@@ -18,6 +18,7 @@ import Animated, {
 import Svg, { Path, Text as SvgText, Polygon, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { colors, font, ripple } from '../../theme';
 import * as Haptics from 'expo-haptics';
+import i18n from '../../utils/i18n';
 
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const CFG = {
@@ -53,7 +54,7 @@ const ResetBtn = React.memo(({ onPress }: { onPress: () => void }) => {
       testID="rest-timer-reset"
       android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
     >
-      <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Reset</Text>
+      <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>{i18n.t('restTimer.reset')}</Text>
     </Pressable>
   );
 });
@@ -71,7 +72,7 @@ const SaveBtn = React.memo(({ onPress }: { onPress: () => void }) => {
       testID="rest-timer-save"
       android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
     >
-      <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Save</Text>
+      <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>{i18n.t('common.save')}</Text>
     </Pressable>
   );
 });

@@ -52,10 +52,10 @@ class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { 
         <View style={{ padding: spacing.xl, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
           <Text style={{ color: colors.textPrimary, fontFamily: font.bold, fontSize: font.sizes.base, marginTop: spacing.md }}>
-            Unable to load chart data
+            {i18n.t('exerciseInsights.unableToLoadChart')}
           </Text>
           <Text style={{ color: colors.textMuted, fontFamily: font.regular, fontSize: font.sizes.sm, textAlign: 'center', marginTop: spacing.xs }}>
-            An error occurred while rendering performance insights. Your workout is safe.
+            {i18n.t('exerciseInsights.chartErrorMsg')}
           </Text>
         </View>
       );
@@ -157,9 +157,9 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
   }, [exerciseLibraryEntry]);
 
   const tabs = [
-    { key: 'info', label: 'Info', icon: 'information-circle-outline' },
-    { key: 'data', label: 'Data', icon: 'analytics-outline' },
-    { key: 'history', label: 'History', icon: 'time-outline' },
+    { key: 'info', label: i18n.t('exerciseInsights.info'), icon: 'information-circle-outline' },
+    { key: 'data', label: i18n.t('exerciseInsights.data'), icon: 'analytics-outline' },
+    { key: 'history', label: i18n.t('exerciseInsights.history'), icon: 'time-outline' },
   ];
 
   const chartData = useMemo(() => {
@@ -300,7 +300,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                 {/* 1 — Targeted Muscle Groups & Anatomy */}
                 {currentExercise?.muscleGroup && (
                   <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>TARGETED MUSCLE GROUPS & ANATOMY</Text>
+                    <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.targetedMusclesHeader')}</Text>
                     <View style={styles.badgesRow}>
                       {/* Primary muscle — accent tint */}
                       <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
@@ -339,9 +339,9 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                 {exerciseLibraryEntry?.id && (
                   <Card style={styles.sectionCard}>
                     <View style={styles.notesHeader}>
-                      <Text style={styles.sectionTitle}>EXERCISE INSIGHTS NOTES</Text>
+                      <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.notesHeader')}</Text>
                       {savedJustNow && (
-                        <Text style={styles.savedBadgeText}>Saved</Text>
+                        <Text style={styles.savedBadgeText}>{i18n.t('common.saved', { defaultValue: 'Saved' })}</Text>
                       )}
                     </View>
                     <TextInput
@@ -349,7 +349,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       value={notes}
                       onChangeText={setNotes}
                       onBlur={handleAutoSaveNotes}
-                      placeholder="Add personal cues, seat settings, or notes for this exercise..."
+                      placeholder={i18n.t('exerciseInsights.notesPlaceholder')}
                       placeholderTextColor={colors.textMuted}
                       multiline
                       numberOfLines={3}
@@ -365,7 +365,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                     <View style={styles.tagsCardHeader}>
                       <View style={styles.tagsCardHeaderLeft}>
                         <Ionicons name="bookmark-outline" size={14} color={colors.accent} />
-                        <Text style={styles.sectionTitle}>VARIATIONS & TAGS</Text>
+                        <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.variationsHeader')}</Text>
                       </View>
                       {currentExercise.variations && currentExercise.variations.length > 0 && (
                         <View style={styles.tagCountBadge}>
@@ -400,7 +400,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       </View>
                     ) : (
                       <Text style={styles.emptyTagText}>
-                        No tags yet — add one below to filter workouts by variation.
+                        {i18n.t('exerciseInsights.noTagsYet')}
                       </Text>
                     )}
 
@@ -458,7 +458,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                 {/* 4 — Instructions */}
                 {exerciseLibraryEntry?.instructions && (
                   <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>INSTRUCTIONS</Text>
+                    <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.instructionsHeader')}</Text>
                     {(Array.isArray(exerciseLibraryEntry.instructions)
                       ? exerciseLibraryEntry.instructions
                       : [exerciseLibraryEntry.instructions]
@@ -497,7 +497,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                 {chartData.has1RMData && (
                   <View style={styles.chartWrapper}>
                     <DistributionChart
-                      title="Estimated 1RM Strength Distribution"
+                      title={i18n.t('exerciseInsights.est1RMDistribution')}
                       percentile={strengthPercentile}
                     />
                   </View>
@@ -505,7 +505,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
 
                 <View style={styles.chartWrapper}>
                   <LineChart
-                    title="Estimated 1RM over Time (kg)"
+                    title={i18n.t('exerciseInsights.est1RMOverTime')}
                     data={chartData.series1RM}
                     color={colors.accent}
                     height={150}
@@ -515,7 +515,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
 
                 <View style={styles.chartWrapper}>
                   <LineChart
-                    title="Sets Completed Per Week"
+                    title={i18n.t('exerciseInsights.setsPerWeek')}
                     data={chartData.weeklySetsSeries}
                     color={colors.accent}
                     height={150}
@@ -525,7 +525,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
 
                 <View style={styles.chartWrapper}>
                   <LineChart
-                    title="Average Reps Per Workout"
+                    title={i18n.t('exerciseInsights.avgRepsPerWorkout')}
                     data={chartData.repsSeries}
                     color={colors.highlight}
                     height={150}
@@ -593,7 +593,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                         <View style={styles.emptyHistoryContainer}>
                           <Ionicons name="time-outline" size={48} color={colors.textMuted} />
                           <Text style={styles.emptyHistoryText}>
-                            No training history found for this exercise.
+                            {i18n.t('exerciseInsights.noHistoryFound')}
                           </Text>
                         </View>
                       );
@@ -653,17 +653,17 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                             >
                               <View style={styles.metricsContainerCompact}>
                                 <View style={[styles.metricColumnLeft, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>BEST SET</Text>
+                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.bestSet')}</Text>
                                   <Text style={styles.metricValue}>
                                     {bestSet.weightKg}kg × {bestSet.reps}
                                   </Text>
                                 </View>
                                 <View style={[styles.metricColumnCenter, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>DATE</Text>
+                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.date')}</Text>
                                   <Text style={styles.dateTextLargePrimary}>{dateString}</Text>
                                 </View>
                                 <View style={[styles.metricColumnRight, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>EST. 1RM</Text>
+                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.est1RM')}</Text>
                                   <Text style={styles.metricValue}>
                                     {Math.round(sessionEst1RM)}kg
                                   </Text>
@@ -705,7 +705,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       <View style={styles.emptyHistoryContainer}>
                         <Ionicons name="time-outline" size={48} color={colors.textMuted} />
                         <Text style={styles.emptyHistoryText}>
-                          No training history found for this exercise.
+                          {i18n.t('exerciseInsights.noHistoryFound')}
                         </Text>
                       </View>
                     );

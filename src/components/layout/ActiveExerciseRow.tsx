@@ -160,7 +160,7 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
               </Pressable>
               <Sortable.Handle style={styles.dragHandle}>
-                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} accessibilityLabel="Drag to reorder exercise" />
+                <Ionicons name="reorder-three" size={22} color={colors.textSecondary} accessibilityLabel={i18n.t('activeWorkout.dragToReorder', { defaultValue: 'Drag to reorder exercise' })} />
               </Sortable.Handle>
             </View>
           </View>
@@ -202,10 +202,10 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
 
           {/* Sets Column Headers */}
           <View style={styles.tableHeader}>
-            <Text style={[styles.columnLabel, styles.colSet]}>SET</Text>
-            <Text style={[styles.columnLabel, styles.colWeight, { textAlign: 'center' }]}>KG</Text>
-            <Text style={[styles.columnLabel, styles.colReps, { textAlign: 'center' }]}>REPS & RPE</Text>
-            <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>DONE</Text>
+            <Text style={[styles.columnLabel, styles.colSet]}>{i18n.t('activeWorkout.setLabel')}</Text>
+            <Text style={[styles.columnLabel, styles.colWeight, { textAlign: 'center' }]}>{i18n.t('activeWorkout.kgLabel')}</Text>
+            <Text style={[styles.columnLabel, styles.colReps, { textAlign: 'center' }]}>{i18n.t('activeWorkout.repsRpe')}</Text>
+            <Text style={[styles.columnLabel, styles.colCheck, { textAlign: 'center' }]}>{i18n.t('activeWorkout.doneBtn')}</Text>
           </View>
 
           {/* Sets Row List */}
@@ -240,10 +240,10 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             onPress={() => addSet(exIdx)}
             onLongPress={() => addSet(exIdx, true)}
             android_ripple={rippleTokens.surface}
-            accessibilityLabel="Add set, long press for unilateral set"
+            accessibilityLabel={i18n.t('activeWorkout.addSetA11y', { defaultValue: 'Add set, long press for unilateral set' })}
           >
             <Ionicons name="add" size={16} color={colors.accent} />
-            <Text style={styles.addSetText}>ADD SET</Text>
+            <Text style={styles.addSetText}>{i18n.t('activeWorkout.addSet')}</Text>
           </Pressable>
         </View>
     </Animated.View>

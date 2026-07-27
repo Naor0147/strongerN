@@ -1371,12 +1371,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       onDiscard();
     } else {
       WebSafeAlert.alert(
-        'Discard Workout?',
-        'Are you sure you want to discard this workout? All tracked sets will be permanently lost.',
+        i18n.t('activeWorkout.discardWorkoutTitle'),
+        i18n.t('activeWorkout.discardMsg'),
         [
-          { text: 'Keep Tracking', style: 'cancel' },
+          { text: i18n.t('activeWorkout.keepTracking'), style: 'cancel' },
           {
-            text: 'Discard',
+            text: i18n.t('activeWorkout.discard'),
             style: 'destructive',
             onPress: () => {
               cleanupTimerAndNotifications();
@@ -1404,12 +1404,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const handleRemoveExercise = () => {
     if (activeExerciseMenuIndex !== null) {
       WebSafeAlert.alert(
-        'Remove Exercise',
-        `Are you sure you want to remove "${activeExercises[activeExerciseMenuIndex].name}" from your active session?`,
+        i18n.t('activeWorkout.removeExercise'),
+        i18n.t('activeWorkout.removeExerciseMsg', { name: activeExercises[activeExerciseMenuIndex].name }),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: i18n.t('common.cancel'), style: 'cancel' },
           {
-            text: 'Remove',
+            text: i18n.t('common.remove'),
             style: 'destructive',
             onPress: () => {
               const targetIdx = activeExerciseMenuIndex;
@@ -2018,7 +2018,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       testID="set-auto-timer"
                     >
                       <Ionicons name="time-outline" size={20} color={colors.accent} />
-                      <Text style={styles.sheetItemText}>Set Auto-Timer</Text>
+                      <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.setAutoTimer')}</Text>
                     </Pressable>
                     
                     {activeExercises[activeExerciseMenuIndex].superSetGroupId ? (
@@ -2034,7 +2034,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         android_ripple={rippleTokens.surface}
                       >
                         <Ionicons name="link-outline" size={20} color={colors.accent} />
-                        <Text style={styles.sheetItemText}>Unlink Super Set</Text>
+                        <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.unlinkSuperSet')}</Text>
                       </Pressable>
                     ) : (
                       <>
@@ -2054,7 +2054,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             android_ripple={rippleTokens.surface}
                           >
                             <Ionicons name="link-outline" size={20} color={colors.accent} />
-                            <Text style={styles.sheetItemText}>Link with Next (Super Set)</Text>
+                            <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.linkWithNext')}</Text>
                           </Pressable>
                         )}
                         {activeExerciseMenuIndex > 0 && (
@@ -2073,7 +2073,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             android_ripple={rippleTokens.surface}
                           >
                             <Ionicons name="link-outline" size={20} color={colors.accent} />
-                            <Text style={styles.sheetItemText}>Link with Previous (Super Set)</Text>
+                            <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.linkWithPrevious')}</Text>
                           </Pressable>
                         )}
                       </>
@@ -2092,7 +2092,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       testID="exercise-insights-menu-item"
                     >
                       <Ionicons name="analytics-outline" size={20} color={colors.accent} />
-                      <Text style={styles.sheetItemText}>Exercise Insights</Text>
+                      <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.exerciseInsights')}</Text>
                     </Pressable>
 
                     <Pressable
@@ -2101,7 +2101,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       android_ripple={rippleTokens.surface}
                     >
                       <Ionicons name="swap-horizontal-outline" size={20} color={colors.accent} />
-                      <Text style={styles.sheetItemText}>Replace Exercise</Text>
+                      <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.replaceExercise')}</Text>
                     </Pressable>
 
                     {/* Switch to Unilateral / Bilateral mode toggle option */}
@@ -2205,7 +2205,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         onReset={() => setAutoTimerDraft(defaultRestDuration)}
                         onSave={() => {
                           if (autoTimerDraft <= 0 || autoTimerDraft > 1000) {
-                            WebSafeAlert.alert('Invalid Input', 'Please select a valid rest duration.');
+                            WebSafeAlert.alert(i18n.t('restTimer.invalidInput'), i18n.t('restTimer.selectValidDuration'));
                             return;
                           }
                           setActiveExercises(prev => {
@@ -2269,7 +2269,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     </View>
 
                     <Text style={styles.sheetTitle}>
-                      WORKOUT OPTIONS
+                      {i18n.t('activeWorkout.workoutOptions')}
                     </Text>
 
                     <View style={{ rowGap: spacing.sm }}>
@@ -2285,7 +2285,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         android_ripple={rippleTokens.surface}
                       >
                         <Ionicons name="time-outline" size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>Change Start Time</Text>
+                        <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeStartTime')}</Text>
                       </Pressable>
 
                       {/* Change Default Timer option */}
@@ -2298,7 +2298,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         android_ripple={rippleTokens.surface}
                       >
                         <Ionicons name="alarm-outline" size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>Change Default Rest Timer</Text>
+                        <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeDefaultTimer')}</Text>
                       </Pressable>
 
                       <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
@@ -2313,7 +2313,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         android_ripple={rippleTokens.surface}
                       >
                         <Ionicons name="trash-outline" size={20} color={colors.error} />
-                        <Text style={[styles.sheetItemText, { color: colors.error }]}>Discard Workout</Text>
+                        <Text style={[styles.sheetItemText, { color: colors.error }]}>{i18n.t('activeWorkout.discardWorkoutTitle')}</Text>
                       </Pressable>
                     </View>
                   </RN.Animated.View>
@@ -2339,7 +2339,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     onPress={e => e.stopPropagation()}
                   >
                     <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>CHANGE START TIME</Text>
+                      <Text style={styles.cardTitle}>{i18n.t('activeWorkout.changeStartTimeHeader')}</Text>
                       <IconButton
                         name="close"
                         size={22}
@@ -2350,11 +2350,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
                     <View style={styles.plateCalcBody}>
                       <Text style={styles.noteModalHeader}>
-                        Enter time in 24-hour format (HH:MM)
+                        {i18n.t('activeWorkout.enterTimeFormat')}
                       </Text>
                       <TextInput
                         style={styles.plateCalcInput}
-                        placeholder="e.g. 14:30"
+                        placeholder={i18n.t('activeWorkout.timePlaceholder')}
                         placeholderTextColor={colors.textMuted}
                         value={editedStartTimeText}
                         onChangeText={setEditedStartTimeText}
@@ -2369,7 +2369,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           style={[styles.modalBtnCancel, { flex: 1 }]}
                           onPress={() => setIsStartTimePickerVisible(false)}
                         >
-                          <Text style={styles.modalBtnCancelText}>CANCEL</Text>
+                          <Text style={styles.modalBtnCancelText}>{i18n.t('common.cancelUpper', { defaultValue: 'CANCEL' })}</Text>
                         </Pressable>
                         <Pressable
                           style={[styles.modalBtnSave, { flex: 1 }]}
@@ -2391,14 +2391,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 }
                                 setIsStartTimePickerVisible(false);
                               } else {
-                                WebSafeAlert.alert('Error', 'Invalid hours (must be 00-23)');
+                                WebSafeAlert.alert(i18n.t('common.error'), i18n.t('activeWorkout.invalidHours'));
                               }
                             } else {
-                              WebSafeAlert.alert('Error', 'Invalid format. Use HH:MM');
+                              WebSafeAlert.alert(i18n.t('common.error'), i18n.t('activeWorkout.invalidTimeFormat'));
                             }
                           }}
                         >
-                          <Text style={styles.modalBtnSaveText}>SAVE</Text>
+                          <Text style={styles.modalBtnSaveText}>{i18n.t('common.saveUpper', { defaultValue: 'SAVE' })}</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -2435,7 +2435,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     </View>
 
                     <Text style={styles.sheetTitle}>
-                      DEFAULT REST TIMER
+                      {i18n.t('activeWorkout.defaultRestTimer')}
                     </Text>
                     
                     <Text style={{
@@ -2444,7 +2444,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       fontFamily: font.medium,
                       marginBottom: spacing.xs,
                     }}>
-                      Configure global default rest duration (seconds)
+                      {i18n.t('activeWorkout.configureDefaultRest')}
                     </Text>
 
                     <View style={styles.bottomSheetOptions}>
@@ -2489,14 +2489,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
                     {/* Custom input card */}
                     <Card padding={spacing.md} style={styles.customTimerContainer}>
-                      <Text style={styles.customTimerTitle}>Custom Default Rest (Seconds)</Text>
+                      <Text style={styles.customTimerTitle}>{i18n.t('activeWorkout.customDefaultRest')}</Text>
                       <View style={styles.customTimerRow}>
                         <TextInput
                           style={styles.customTimerInput}
                           keyboardType="number-pad"
                           value={customDefaultTimerValue}
                           onChangeText={(val) => setCustomDefaultTimerValue(val.replace(/[^0-9]/g, ''))}
-                          placeholder="E.g. 45"
+                          placeholder={i18n.t('activeWorkout.customTimerPlaceholder')}
                           placeholderTextColor={colors.textMuted}
                           maxLength={4}
                         />
@@ -2513,7 +2513,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             }
                           }}
                         >
-                          <Text style={styles.customTimerBtnText}>Save</Text>
+                          <Text style={styles.customTimerBtnText}>{i18n.t('common.save')}</Text>
                         </Pressable>
                       </View>
                     </Card>
@@ -2543,7 +2543,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         onClose={() => setIsLibraryVisible(false)}
         onAddCustomExercise={onAddCustomExercise}
         singleSelect={isReplaceMode}
-        title={isReplaceMode ? 'REPLACE EXERCISE' : 'ADD EXERCISES'}
+        title={isReplaceMode ? i18n.t('activeWorkout.replaceExercise') : i18n.t('extras.addExercises')}
       />
     )}
     </>

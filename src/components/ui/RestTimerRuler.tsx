@@ -18,6 +18,7 @@ import Animated, {
 import Svg, { Path, Text as SvgText, Polygon, Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { colors, font } from '../../theme';
 import * as Haptics from 'expo-haptics';
+import i18n from '../../utils/i18n';
 
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const CFG = {
@@ -67,7 +68,7 @@ const BottomRow = React.memo(({ roundedSecs, phase, isDisabled, onPress }: {
           disabled={isDisabled}
           android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
         >
-          <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>Stop</Text>
+          <Text style={[styles.actionBtnText, { color: colors.textPrimary }]}>{i18n.t('restTimer.stop')}</Text>
         </Pressable>
       )}
       <Text style={[styles.timeDisplay, { color: secsColor }]}>{fmt(roundedSecs)}</Text>

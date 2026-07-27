@@ -6,6 +6,7 @@ import { styles } from './activeWorkoutStyles';
 import { restTimerEmitter } from './restTimerEmitter';
 import { scheduleRestTimerNotification } from '../../utils/notifications';
 import RestTimerRuler from '../ui/RestTimerRuler';
+import i18n from '../../utils/i18n';
 
 export const RestTimerHeaderButton: React.FC<{
   isSubMenuVisible: boolean;
@@ -35,7 +36,7 @@ export const RestTimerHeaderButton: React.FC<{
         pressed && { transform: [{ scale: 0.96 }] }
       ]}
       android_ripple={rippleTokens.surface}
-      accessibilityLabel="Toggle rest timer"
+      accessibilityLabel={i18n.t('restTimer.toggleA11y', { defaultValue: 'Toggle rest timer' })}
     >
       <Ionicons 
         name={timerState.active ? "stopwatch" : "stopwatch-outline"} 
@@ -43,7 +44,7 @@ export const RestTimerHeaderButton: React.FC<{
         color={timerState.active ? colors.accent : colors.textPrimary} 
       />
       {timerState.active && (
-        <Text style={styles.headerRestTimerText}>{timerState.remaining}s</Text>
+        <Text style={styles.headerRestTimerText}>{timerState.remaining}{i18n.t('restTimer.secShort')}</Text>
       )}
     </Pressable>
   );

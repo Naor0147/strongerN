@@ -9,6 +9,7 @@ import { activeInputStore } from '../../utils/activeInputStore';
 import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
 import { SetInputCell } from '../ui/SetInputCell';
 import { AnimatedCheckmark } from './AnimatedCheckmark';
+import i18n from '../../utils/i18n';
 
 export interface ActiveSetRowItemProps {
   set: SetRecord;
@@ -104,7 +105,7 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 const nextIdx = (currIdx + 1) % categories.length;
                 updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
               }}
-              accessibilityLabel={`Cycle set category for set ${setIdx + 1}`}
+              accessibilityLabel={i18n.t('activeWorkout.cycleSetCategory', { defaultValue: 'Cycle set category for set {{num}}', num: setIdx + 1 })}
             >
               <View
                 style={[
@@ -275,7 +276,7 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
               const nextIdx = (currIdx + 1) % categories.length;
               updateSetField(exIdx, setIdx, 'category', categories[nextIdx]);
             }}
-            accessibilityLabel={`Cycle set category for set ${setIdx + 1}`}
+            accessibilityLabel={i18n.t('activeWorkout.cycleSetCategory', { defaultValue: 'Cycle set category for set {{num}}', num: setIdx + 1 })}
           >
             <View
               style={[
