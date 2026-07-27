@@ -73,6 +73,8 @@ import { safeLayoutAnim, WebSafeAlert, EMPTY_ARRAY, EMPTY_OBJECT, formatElapsed,
 import { restTimerEmitter, RestTimerEmitter } from './restTimerEmitter';
 import { AnimatedCheckmark } from './AnimatedCheckmark';
 import { RestTimerHeaderButton, RestTimerRulerContainer } from './RestTimerHeaderControls';
+import { ActiveWorkoutKeyboardWrapper } from './ActiveWorkoutKeyboardWrapper';
+
 
 
 
@@ -100,70 +102,7 @@ const SwipeableRow = SharedSwipeableRow;
 
 
 
-const ActiveWorkoutKeyboardWrapper = React.memo(({
-  activeExercises,
-  updateSetField,
-  isRpeMode,
-  handleNextField,
-  handleCloseKeyboard,
-  tempInputValueRef,
-}: {
-  activeExercises: ActiveExercise[];
-  updateSetField: any;
-  isRpeMode: boolean;
-  handleNextField: any;
-  handleCloseKeyboard: any;
-  tempInputValueRef: React.MutableRefObject<string>;
-}) => {
-  const [activeInput, setActiveInput] = useState<any>(null);
 
-  useEffect(() => {
-    return activeInputStore.subscribe(setActiveInput);
-  }, []);
-
-  // Stable onChange: only updates ref + store, never causes wrapper re-render
-  const handleChange = useCallback((newValue: string) => {
-    tempInputValueRef.current = newValue;
-    keyboardValueStore.setValue(newValue);
-  }, [tempInputValueRef]);
-
-  // Stable RPE handler via ref to avoid inline recreation
-  const activeInputRef = useRef<any>(null);
-  activeInputRef.current = activeInput;
-
-  const handleRpeChange = useCallback((newRpe: string) => {
-    const ai = activeInputRef.current;
-    if (ai) {
-      updateSetField(ai.exIdx, ai.setIdx, 'rpe', newRpe);
-    }
-  }, [updateSetField]);
-
-  if (!activeInput) return null;
-
-  const currentEx = activeExercises[activeInput.exIdx];
-  const title = currentEx ? currentEx.name : '';
-  const rpeValue = currentEx?.sets[activeInput.setIdx]?.rpe || '';
-  const fieldName = activeInput.fieldName;
-  const maxLength = fieldName.toLowerCase().includes('reps') ? 4 : 6;
-  const inputKey = `${activeInput.exIdx}-${activeInput.setIdx}-${activeInput.fieldName}-${activeInput.focusTime || 0}`;
-
-  return (
-    <CustomWorkoutKeyboard
-      visible={true}
-      inputKey={inputKey}
-      value={tempInputValueRef.current}
-      onChange={handleChange}
-      rpeValue={rpeValue}
-      onChangeRpe={handleRpeChange}
-      fieldName={fieldName}
-      maxLength={maxLength}
-      title={title}
-      isRpeMode={isRpeMode}
-      onNext={handleNextField}
-      onClose={handleCloseKeyboard}
-    />
-  );
-});
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   visible,
