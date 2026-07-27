@@ -15,6 +15,8 @@ import { colors, font, spacing, radius, ripple as rippleTokens, animation, globa
 import i18n from '../../utils/i18n';
 import { I18nManager } from 'react-native';
 
+import * as Haptics from 'expo-haptics';
+
 interface TabConfig {
   route:      string;
   icon:       keyof typeof Ionicons.glyphMap;
@@ -106,9 +108,7 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
         });
 
         if (state.index !== state.routes.indexOf(route) && !event.defaultPrevented) {
-          import('expo-haptics').then(Haptics => {
-            Haptics.selectionAsync().catch(() => {});
-          });
+          Haptics.selectionAsync().catch(() => {});
           navigation.navigate(route.name);
         }
       };
