@@ -389,11 +389,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     })
   ).current;
 
-  // Custom exercise creation inside library picker
-  const [isCreatingCustom, setIsCreatingCustom] = useState(false);
-  const [customExerciseName, setCustomExerciseName] = useState('');
-  const [customMuscleGroup, setCustomMuscleGroup] = useState('Chest');
-  const [customEquipment, setCustomEquipment] = useState('Barbell');
 
   // Drag-and-drop reorder state for exercises
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -1700,36 +1695,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Legacy exercise drag helpers removed
 
-  const handleSaveCustomExercise = () => {
-    if (!customExerciseName.trim()) {
-      WebSafeAlert.alert('Error', 'Please enter an exercise name.');
-      return;
-    }
-    if (onAddCustomExercise) {
-      const newEx = onAddCustomExercise(
-        customExerciseName.trim(),
-        customMuscleGroup,
-        customEquipment
-      );
-      if (newEx) {
-        const newActive = {
-          id: `ex-custom-${Date.now()}-${Math.random()}`,
-          name: newEx.name,
-          sets: [
-            { id: `set-${Date.now()}-0`, weight: '60', reps: '10', completed: false },
-            { id: `set-${Date.now()}-1`, weight: '60', reps: '10', completed: false },
-            { id: `set-${Date.now()}-2`, weight: '60', reps: '10', completed: false },
-          ]
-        };
-        safeLayoutAnim();
-        setActiveExercises(prev => [...prev, newActive]);
-        setIsLibraryVisible(false);
-        setIsCreatingCustom(false);
-      }
-    } else {
-      WebSafeAlert.alert('Info', 'Database integration is missing in this view.');
-    }
-  };
 
   // Search filtered library exercises
   const filteredLibrary = useMemo(() => {
