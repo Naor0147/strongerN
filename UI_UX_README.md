@@ -27,7 +27,7 @@ A concise reference for the **AMOLED-first** high-fidelity design system in `str
 | **`success`** | `#22D97A` | Emerald Green. Completion/saved states. |
 | **`error`** | `#F0506E` | Neon Red. Reset/destructive actions. |
 
-**Muscle Colors**: Focus groups use `colors.accent` (`#4F8EF7`), inactive default is `#3A4454`.
+**Muscle Colors**: Focus groups use `colors.accent` (`#4F8EF7`), inactive default is `#3A4454`. SVG map tokens in `colors.muscle`: `stroke` (`#484A68`), `inactive` (`#151922`, deliberate dark slate design), `selected` (`#F0506E`, deliberate focus red design).
 
 ---
 

@@ -100,6 +100,9 @@ export const colors = {
     hamstrings: '#4F8EF7', // Electric Blue
     glutes:     '#4F8EF7', // Electric Blue
     default:    '#3A4454', // Sleek dark slate
+    stroke:     '#484A68',
+    inactive:   '#151922',
+    selected:   '#F0506E',
   },
 };
 
@@ -489,6 +492,7 @@ export const applyTheme = (themeName: AppThemeName, customAccent?: string, overr
 
   // Sync muscle group colors to match theme accent
   for (const key of Object.keys(colors.muscle)) {
+    if (key === 'stroke' || key === 'inactive' || key === 'selected') continue;
     if (key !== 'default') {
       (colors.muscle as any)[key] = colors.accent;
     }
