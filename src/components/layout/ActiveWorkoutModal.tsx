@@ -58,6 +58,10 @@ import Card from '../ui/Card';
 import { SwipeableRow as SharedSwipeableRow } from './SwipeableRow';
 import Sortable from 'react-native-sortables';
 import { useExerciseRowGestures } from '../ui/gestureCoexistence';
+import { useActiveExercisesState } from '../../hooks/useActiveExercisesState';
+import { useActiveWorkoutTimer } from '../../hooks/useActiveWorkoutTimer';
+import { useRestTimerState } from '../../hooks/useRestTimerState';
+import { useWorkoutModalControls } from '../../hooks/useWorkoutModalControls';
 import { ElapsedTimeText } from '../ui/ElapsedTimeText';
 import { saveCrashLogSync } from '../../utils/crashLogger';
 import { keyboardValueStore } from '../../utils/keyboardValueStore';
@@ -152,28 +156,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const accumulatedOffsetSeconds = useRef((previousDurationMin || 0) * 60);
   const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
   const wasInitializedRef = useRef(false);
-  // Workout menu state
-  const [isWorkoutMenuVisible, setIsWorkoutMenuVisible] = useState(false);
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
-  const [isStartTimePickerVisible, setIsStartTimePickerVisible] = useState(false);
-  const [editedStartTimeText, setEditedStartTimeText] = useState('');
-  const [isDefaultTimerPickerVisible, setIsDefaultTimerPickerVisible] = useState(false);
-  const [localDefaultRest, setLocalDefaultRest] = useState(defaultRestDuration);
-  const [customDefaultTimerValue, setCustomDefaultTimerValue] = useState('');
-  const [activeExercises, _setActiveExercises] = useState<ActiveExercise[]>([]);
+  const {
+    isWorkoutMenuVisible,
+    setIsWorkoutMenuVisible,
+    isStartTimePickerVisible,
+    setIsStartTimePickerVisible,
+    editedStartTimeText,
+    setEditedStartTimeText,
+    isDefaultTimerPickerVisible,
+    setIsDefaultTimerPickerVisible,
+    localDefaultRest,
+    setLocalDefaultRest,
+    customDefaultTimerValue,
+    setCustomDefaultTimerValue,
+  } = useWorkoutModalControls({ defaultRestDuration });
   const activeExercisesRef = useRef<ActiveExercise[]>([]);
   const hasSyncedPropsRef = useRef(false);
   const flushExercisesToParentRef = useRef<(exs: ActiveExercise[]) => void>(() => {});
-
-  const setActiveExercises = useCallback((action: React.SetStateAction<ActiveExercise[]>) => {
-    const current = activeExercisesRef.current;
-    const next = typeof action === 'function' ? (action as (p: ActiveExercise[]) => ActiveExercise[])(current) : action;
-    activeExercisesRef.current = next;
-    _setActiveExercises(next);
-    if (hasSyncedPropsRef.current && flushExercisesToParentRef.current) {
-      flushExercisesToParentRef.current(next);
-    }
-  }, []);
 
   const [localWorkoutName, setLocalWorkoutName] = useState(workoutName);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -212,18 +212,106 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const inputRefs = useRef<{ [key: string]: any }>({});
 
-  // Auto rest timer countdown states
-  const [isTimerSubMenuVisible, setIsTimerSubMenuVisible] = useState(false);
+  const {
+    isTimerPickerVisible,
+    setIsTimerPickerVisible,
+    isTimerSubMenuVisible,
+    setIsTimerSubMenuVisible,
+    autoTimerDraft,
+    setAutoTimerDraft,
+  } = useRestTimerState({ defaultRestDuration });
 
   // Exercise library selector modal states
   const [isLibraryVisible, setIsLibraryVisible] = useState(false);
   const [librarySearch, setLibrarySearch] = useState('');
   const [activeExerciseMenuIndex, setActiveExerciseMenuIndex] = useState<number | null>(null);
   const [isExMenuVisible, setIsExMenuVisible] = useState(false);
-  const [isTimerPickerVisible, setIsTimerPickerVisible] = useState(false);
-  const [autoTimerDraft, setAutoTimerDraft] = useState<number>(defaultRestDuration);
   const [isExerciseInsightsVisible, setIsExerciseInsightsVisible] = useState(false);
   const [isReplaceMode, setIsReplaceMode] = useState(false);
+
+  const {
+    activeExercises,
+    setActiveExercises,
+    updateSetField,
+    toggleSetComplete,
+    addSet,
+    deleteSet,
+    handleDeleteExercise,
+    updateExerciseNote,
+    onSaveLibraryNote,
+    handleSelectVariation,
+    handleConfirmExercisesFromPicker,
+  } = useActiveExercisesState({
+    initialExercises: [],
+    sessions,
+    exerciseLibraryMap: useMemo(() => {
+      const map = new Map<string, any>();
+      if (exerciseLibrary) {
+        for (let i = 0; i < exerciseLibrary.length; i++) {
+          const item = exerciseLibrary[i];
+          if (item && item.name) {
+            map.set(item.name.toLowerCase(), item);
+          }
+        }
+      }
+      return map;
+    }, [exerciseLibrary]),
+    isProgressiveOverloadEnabled,
+    isAutoTimerEnabled,
+    isAutoFinishSetEnabled,
+    defaultRestDuration,
+    activeInputRef,
+    tempInputValueRef,
+    activeExercisesRef,
+    inputRefs,
+    setIsKeyboardVisible,
+    activeExerciseMenuIndex,
+    setActiveExerciseMenuIndex,
+    isReplaceMode,
+    onUpdateExerciseNotes,
+  });
+
+  const handleCloseKeyboard = useCallback(() => {
+    try {
+      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+        performance.mark('close-kb-start');
+      }
+    } catch (_) {}
+    if (activeInputRef.current) {
+      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
+    }
+    activeInputRef.current = null;
+    activeInputStore.setActiveInput(null);
+    setIsKeyboardVisible(false);
+  }, [updateSetField]);
+
+  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
+    try {
+      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+        performance.mark('focus-start');
+      }
+    } catch (_) {}
+
+    if (activeInputRef.current) {
+      const prevEx = activeInputRef.current.exIdx;
+      const prevSet = activeInputRef.current.setIdx;
+      const prevField = activeInputRef.current.fieldName;
+      const currentStored = activeExercisesRef.current[prevEx]?.sets[prevSet]?.[prevField] ?? '';
+      if (String(currentStored) !== tempInputValueRef.current) {
+        updateSetField(prevEx, prevSet, prevField, tempInputValueRef.current);
+      }
+    }
+
+    const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] ?? '';
+    const valStr = String(currentVal);
+    tempInputValueRef.current = valStr;
+    
+    const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
+    activeInputRef.current = newInput;
+    activeInputStore.setActiveInput(newInput);
+    keyboardValueStore.setValue(valStr);
+    setIsKeyboardVisible(prev => prev ? prev : true);
+  }, [updateSetField]);
 
   const mountedRef = useRef(true);
 
@@ -755,407 +843,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [flushExercisesToParent]);
 
-  // Keep refs of values needed by background notifications
-  const localWorkoutNameRef = useRef(localWorkoutName);
-  useEffect(() => {
-    localWorkoutNameRef.current = localWorkoutName;
-  }, [localWorkoutName]);
-
-  const visibleRef = useRef(visible);
-  useEffect(() => {
-    visibleRef.current = visible;
-  }, [visible]);
-
-  useEffect(() => {
-    let restTimerUnsubscribe: (() => void) | null = null;
-
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      try {
-        if (nextAppState === 'active') {
-          if (restTimerUnsubscribe) {
-            try { restTimerUnsubscribe(); } catch (e) {}
-            restTimerUnsubscribe = null;
-          }
-          await stopWorkoutForeground().catch((err) => console.warn('[ForegroundNotif] stop error:', err));
-          await dismissWorkoutBackgroundNotification().catch((err) => console.warn('[Notif] dismiss error:', err));
-        } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-          if (activeInputRef.current) {
-            try {
-              updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
-            } catch (e) {}
-          }
-          if (hasSyncedPropsRef.current) {
-            try {
-              flushExercisesToParent(activeExercisesRef.current);
-            } catch (e) {}
-          }
-          if (visibleRef.current) {
-            const workoutNameStr = localWorkoutNameRef.current || 'Workout';
-            await startWorkoutForeground(workoutNameStr).catch((err) => console.warn('[ForegroundNotif] start error:', err));
-
-            const initialActive = restTimerEmitter.isActive();
-            const initialRemaining = restTimerEmitter.getRemaining();
-
-            const buildWorkoutBody = (timerActive: boolean, timerRemaining: number, timerJustFinished: boolean) => {
-              const currentExerciseName = (activeExercisesRef.current && activeExercisesRef.current.length > 0 && activeExercisesRef.current[0]?.name)
-                ? activeExercisesRef.current[0].name
-                : 'Workout in Progress';
-              const elapsedStr = formatElapsed(resumeStartTime.current, accumulatedOffsetSeconds.current);
-              if (timerJustFinished) {
-                return `${currentExerciseName} • ${elapsedStr} • Rest complete — next set ready`;
-              }
-              return `${currentExerciseName} • ${elapsedStr}${timerActive ? ` • Rest: ${timerRemaining}s` : ''}`;
-            };
-
-            const initialBody = buildWorkoutBody(initialActive, initialRemaining, false);
-            await showWorkoutBackgroundNotification({
-              title: workoutNameStr,
-              body: initialBody,
-            }).catch(() => {});
-
-            if (restTimerUnsubscribe) {
-              try { restTimerUnsubscribe(); } catch (e) {}
-            }
-
-            let prevActive = initialActive;
-            let prevRemaining = initialRemaining;
-
-            restTimerUnsubscribe = restTimerEmitter.subscribe(async (timerState) => {
-              try {
-                const activeFlips = timerState.active !== prevActive;
-                const remainingHitsZero = timerState.remaining === 0 && prevRemaining > 0;
-
-                if (timerState.active && timerState.remaining > 0) {
-                  await updateTimerCountdown(timerState.remaining, workoutNameStr).catch(() => {});
-                }
-
-                if (activeFlips || remainingHitsZero) {
-                  const timerJustFinished = !timerState.active && prevActive;
-                  if (timerJustFinished) {
-                    await showTimerComplete(workoutNameStr).catch(() => {});
-                  }
-
-                  const body = buildWorkoutBody(timerState.active, timerState.remaining, timerJustFinished);
-                  await showWorkoutBackgroundNotification({
-                    title: workoutNameStr,
-                    body,
-                  }).catch(() => {});
-                }
-
-                prevActive = timerState.active;
-                prevRemaining = timerState.remaining;
-              } catch (e) {
-                console.warn('[ActiveWorkout] Error in restTimerEmitter background subscriber:', e);
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.error('[AppState Error in ActiveWorkoutModal]:', e);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-      if (restTimerUnsubscribe) {
-        try { restTimerUnsubscribe(); } catch (e) {}
-      }
-      stopWorkoutForeground().catch(() => {});
-      dismissWorkoutBackgroundNotification().catch(() => {});
-    };
-  }, []);
-
-  // Set weight/reps/rpe/category updater
-  const updateSetField = useCallback((exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'rpe' | 'category' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps', value: string) => {
-    const currentVal = activeExercisesRef.current[exIdx]?.sets[setIdx]?.[field] ?? '';
-    if (String(currentVal) === value && field !== 'category') return;
-
-    setActiveExercises(prev => {
-      if (!prev[exIdx]) return prev;
-      const targetEx = prev[exIdx];
-      if (!targetEx.sets[setIdx]) return prev;
-
-      const targetSet = targetEx.sets[setIdx];
-      const updatedSet = { ...targetSet, [field]: value };
-      if (field === 'weight') (updatedSet as any).weightSuggested = false;
-      else if (field === 'reps') (updatedSet as any).repsSuggested = false;
-      else if (field === 'leftWeight') (updatedSet as any).leftWeightSuggested = false;
-      else if (field === 'leftReps') (updatedSet as any).leftRepsSuggested = false;
-      else if (field === 'rightWeight') (updatedSet as any).rightWeightSuggested = false;
-      else if (field === 'rightReps') (updatedSet as any).rightRepsSuggested = false;
-
-      const nextSets = [...targetEx.sets];
-      nextSets[setIdx] = updatedSet;
-
-      if (field === 'category') {
-        const setsWithCategory = nextSets.map((s, sIdx) => {
-          const category = s.category || 'S';
-          let positionInCategory = 0;
-          for (let i = 0; i < sIdx; i++) {
-            if ((nextSets[i].category || 'S') === category) {
-              positionInCategory++;
-            }
-          }
-          let suggested: SetSuggestion = {
-            weight: '60',
-            reps: '10',
-            leftWeight: '60',
-            leftReps: '10',
-            rightWeight: '60',
-            rightReps: '10',
-          };
-          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-            suggested = getBestPerformanceSuggestionForSet(targetEx.name, category, positionInCategory, sessions, s.isUnilateral || false);
-          }
-          return {
-            ...s,
-            suggestedWeight: suggested.weight,
-            suggestedReps: suggested.reps,
-            suggestedLeftWeight: s.isUnilateral ? suggested.leftWeight : undefined,
-            suggestedLeftReps: s.isUnilateral ? suggested.leftReps : undefined,
-            suggestedRightWeight: s.isUnilateral ? suggested.rightWeight : undefined,
-            suggestedRightReps: s.isUnilateral ? suggested.rightReps : undefined,
-          };
-        });
-
-        const nextArr = [...prev];
-        nextArr[exIdx] = { ...targetEx, sets: setsWithCategory };
-        return nextArr;
-      }
-
-      const nextArr = [...prev];
-      nextArr[exIdx] = { ...targetEx, sets: nextSets };
-      return nextArr;
-    });
-  }, [isProgressiveOverloadEnabled, sessions]);
-
-  // Set completeness toggler
-  const toggleSetComplete = useCallback((exIdx: number, setIdx: number) => {
-    const targetSet = activeExercisesRef.current[exIdx]?.sets[setIdx];
-    if (!targetSet) return;
-    const willBeCompleted = !targetSet.completed;
-
-    if (activeInputRef.current) {
-      const { exIdx: curEx, setIdx: curSet, fieldName: curField } = activeInputRef.current;
-      updateSetField(curEx, curSet, curField, tempInputValueRef.current);
-    }
-
-    if (willBeCompleted) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      playSetCheckedSound();
-      playSatisfyingClickFinishSet();
-      if (isAutoTimerEnabled) {
-        const customRest = activeExercisesRef.current[exIdx]?.autoTimer;
-        const duration = typeof customRest === 'number' ? customRest : defaultRestDuration;
-        restTimerEmitter.start(duration);
-      }
-    } else {
-      playUncheckSetSound();
-    }
-
-    safeLayoutAnim();
-    setActiveExercises(prev => {
-      if (!prev[exIdx]) return prev;
-      const targetEx = prev[exIdx];
-      if (!targetEx.sets[setIdx]) return prev;
-      const targetSet = targetEx.sets[setIdx];
-
-      let updatedSet = { ...targetSet, completed: willBeCompleted };
-      if (activeInputRef.current && activeInputRef.current.exIdx === exIdx && activeInputRef.current.setIdx === setIdx) {
-        const fName = activeInputRef.current.fieldName as keyof SetRecord;
-        if (tempInputValueRef.current !== undefined) {
-          (updatedSet as any)[fName] = tempInputValueRef.current;
-        }
-      }
-
-      // Note: suggestedWeight/suggestedReps are visual placeholders only.
-      // We intentionally do NOT auto-fill them into the set data on check,
-      // so that history reflects what the user actually typed (or 0 if nothing).
+  useActiveWorkoutTimer({
+    visible,
+    localWorkoutName,
+    activeExercisesRef,
+    resumeStartTime,
+    accumulatedOffsetSeconds,
+    activeInputRef,
+    tempInputValueRef,
+    updateSetField,
+    flushExercisesToParent,
+    hasSyncedPropsRef,
+  });
 
 
-      const nextSets = [...targetEx.sets];
-      nextSets[setIdx] = updatedSet;
-      const nextArr = [...prev];
-      nextArr[exIdx] = { ...targetEx, sets: nextSets };
-      return nextArr;
-    });
-  }, [isAutoTimerEnabled, defaultRestDuration, updateSetField]);
-
-  // Stable keyboard close/dismiss handler
-  const handleCloseKeyboard = useCallback(() => {
-    try {
-      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-        performance.mark('close-kb-start');
-      }
-    } catch (_) {}
-    if (activeInputRef.current) {
-      updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
-    }
-    activeInputRef.current = null;
-    activeInputStore.setActiveInput(null);
-    setIsKeyboardVisible(false);
-  }, [updateSetField]);
-
-  // Stable input focus handler (must NOT be inside .map())
-  const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
-    try {
-      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-        performance.mark('focus-start');
-      }
-    } catch (_) {}
-
-    // Commit previous field value first (only if modified)
-    if (activeInputRef.current) {
-      const prevEx = activeInputRef.current.exIdx;
-      const prevSet = activeInputRef.current.setIdx;
-      const prevField = activeInputRef.current.fieldName;
-      const currentStored = activeExercisesRef.current[prevEx]?.sets[prevSet]?.[prevField] ?? '';
-      if (String(currentStored) !== tempInputValueRef.current) {
-        updateSetField(prevEx, prevSet, prevField, tempInputValueRef.current);
-      }
-    }
-
-    // Set the new input value and focus
-    const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] ?? '';
-    const valStr = String(currentVal);
-    tempInputValueRef.current = valStr;
-    
-    const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
-    activeInputRef.current = newInput;
-    activeInputStore.setActiveInput(newInput);
-    keyboardValueStore.setValue(valStr);
-    setIsKeyboardVisible(prev => prev ? prev : true);
-  }, [updateSetField]);
-
-  useLayoutEffect(() => {
-    try {
-      if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-        if (isKeyboardVisible) {
-          if (performance.getEntriesByName('focus-start').length > 0) {
-            performance.mark('kb-open-end');
-            const m = performance.measure('kb-open', 'focus-start', 'kb-open-end');
-            if (m) console.log(`[BENCHMARK] Keyboard open took: ${m.duration.toFixed(2)}ms`);
-            performance.clearMarks('focus-start');
-            performance.clearMarks('kb-open-end');
-          }
-        } else {
-          if (performance.getEntriesByName('close-kb-start').length > 0) {
-            performance.mark('kb-close-end');
-            const m = performance.measure('kb-close', 'close-kb-start', 'kb-close-end');
-            if (m) console.log(`[BENCHMARK] Keyboard close took: ${m.duration.toFixed(2)}ms`);
-            performance.clearMarks('close-kb-start');
-            performance.clearMarks('kb-close-end');
-          }
-        }
-      }
-    } catch (_) {}
-  }, [isKeyboardVisible]);
-
-  useEffect(() => {
-    if (visible) {
-      setLocalWorkoutName(workoutName);
-    } else {
-      if (activeInputRef.current) {
-        updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
-      }
-      activeInputRef.current = null;
-      activeInputStore.setActiveInput(null);
-      setIsKeyboardVisible(false);
-      if (hasSyncedPropsRef.current) {
-        flushExercisesToParent(activeExercisesRef.current);
-      }
-    }
-  }, [visible, workoutName, updateSetField, flushExercisesToParent]);
-
-  // Add a set
-  const addSet = useCallback((exIdx: number, isUnilateral?: boolean) => {
-    safeLayoutAnim();
-    setActiveExercises(prev => {
-      if (!prev[exIdx]) return prev;
-      const targetEx = prev[exIdx];
-      const currentSets = targetEx.sets;
-      const lastSet = currentSets[currentSets.length - 1];
-      const category = lastSet?.category ?? 'S';
-      const positionInCategory = currentSets.filter(s => (s.category || 'S') === category).length;
-      const unilateral = isUnilateral !== undefined ? isUnilateral : (lastSet ? !!lastSet.isUnilateral : false);
-
-      const histSuggested = getPreviousSessionSetSuggestion(targetEx.name, category, positionInCategory, sessions, unilateral, undefined, undefined, sessionsByExerciseMap);
-      let suggested: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
-
-      if (histSuggested.weight || histSuggested.reps || histSuggested.leftWeight) {
-        suggested = histSuggested;
-      } else if (lastSet) {
-        const fallbackW = lastSet.weight || (lastSet as any).suggestedWeight || '';
-        const fallbackR = lastSet.reps || (lastSet as any).suggestedReps || '';
-        suggested = {
-          weight: fallbackW,
-          reps: fallbackR,
-          leftWeight: lastSet.leftWeight || (lastSet as any).suggestedLeftWeight || fallbackW,
-          leftReps: lastSet.leftReps || (lastSet as any).suggestedLeftReps || fallbackR,
-          rightWeight: lastSet.rightWeight || (lastSet as any).suggestedRightWeight || fallbackW,
-          rightReps: lastSet.rightReps || (lastSet as any).suggestedRightReps || fallbackR,
-        };
-      }
-
-      const newSet: SetRecord = {
-        id:        `set-${exIdx}-${Date.now()}-${Math.random()}`,
-        weight:    '',
-        reps:      '',
-        completed: false,
-        rpe:       '',
-        category:  category,
-        isUnilateral: unilateral,
-        leftWeight:   unilateral ? '' : undefined,
-        leftReps:     unilateral ? '' : undefined,
-        rightWeight:  unilateral ? '' : undefined,
-        rightReps:    unilateral ? '' : undefined,
-        suggestedWeight: suggested.weight,
-        suggestedReps: suggested.reps,
-        suggestedLeftWeight: unilateral ? suggested.leftWeight : undefined,
-        suggestedLeftReps: unilateral ? suggested.leftReps : undefined,
-        suggestedRightWeight: unilateral ? suggested.rightWeight : undefined,
-        suggestedRightReps: unilateral ? suggested.rightReps : undefined,
-      } as any;
-
-      const nextArr = [...prev];
-      nextArr[exIdx] = {
-        ...targetEx,
-        sets: [...currentSets, newSet]
-      };
-      return nextArr;
-    });
-  }, [isProgressiveOverloadEnabled, sessions]);
-
-  // Delete a set
-  const deleteSet = useCallback((exIdx: number, setIdx: number) => {
-    try {
-      setActiveExercises(prev => {
-        if (!prev[exIdx]) return prev;
-        const targetEx = prev[exIdx];
-        const nextSets = targetEx.sets.filter((_, sIdx) => sIdx !== setIdx);
-        const nextArr = [...prev];
-        nextArr[exIdx] = { ...targetEx, sets: nextSets };
-        return nextArr;
-      });
-      // Shift or clear active input if it matches the deleted set/exercise
-      const curr = activeInputRef.current;
-      if (curr && curr.exIdx === exIdx) {
-        if (curr.setIdx === setIdx) {
-          activeInputRef.current = null;
-          activeInputStore.setActiveInput(null);
-          setIsKeyboardVisible(false);
-        } else if (curr.setIdx > setIdx) {
-          const nextVal = { ...curr, setIdx: curr.setIdx - 1 };
-          activeInputRef.current = nextVal;
-          activeInputStore.setActiveInput(nextVal);
-        }
-      }
-    } catch (err: any) {
-      const msg = `[ActiveWorkout] deleteSet(exIdx=${exIdx}, setIdx=${setIdx}) crashed: ${err?.message ?? err}`;
-      saveCrashLogSync(msg, err?.stack ?? '', false);
-      console.error(msg, err);
-    }
-  }, []);
 
   // Handle custom keyboard "Next" button click
   const handleNextField = useCallback(() => {
@@ -1436,109 +1137,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   };
 
-  const handleSelectVariation = useCallback((exIdx: number, newVariation: string | undefined) => {
-    setActiveExercises((prev: ActiveExercise[]) => {
-      if (!prev[exIdx] || !prev[exIdx].name || typeof prev[exIdx].name !== 'string') return prev;
-      const targetEx = prev[exIdx];
-      const libEx = exerciseLibraryMap.get(targetEx.name.toLowerCase());
-      const isUnilateral = libEx?.isUnilateral || false;
 
-      const updatedSets = targetEx.sets.map((s, sIdx) => {
-        const category = s.category || 'S';
-        let positionInCategory = 0;
-        for (let i = 0; i < sIdx; i++) {
-          if ((targetEx.sets[i].category || 'S') === category) {
-            positionInCategory++;
-          }
-        }
-
-        const defaultW = (libEx?.bestWeight ?? 0).toString();
-        const defaultR = (libEx?.bestReps ?? 0).toString();
-        let suggested: SetSuggestion = {
-          weight: defaultW,
-          reps: defaultR,
-          leftWeight: defaultW,
-          leftReps: defaultR,
-          rightWeight: defaultW,
-          rightReps: defaultR,
-        };
-
-        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          try {
-            const perfSuggested = getBestPerformanceSuggestionForSet(
-              targetEx.name,
-              category,
-              positionInCategory,
-              sessions,
-              isUnilateral,
-              newVariation,
-              libEx
-            );
-            if (perfSuggested.weight || perfSuggested.reps) {
-              suggested = perfSuggested;
-            }
-          } catch (err) {
-            console.warn('[ActiveWorkout] Error getting performance suggestion for variation:', err);
-          }
-        }
-
-        return {
-          ...s,
-          suggestedWeight: suggested.weight,
-          suggestedReps: suggested.reps,
-          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
-        };
-      });
-
-      const nextArr = [...prev];
-      nextArr[exIdx] = {
-        ...targetEx,
-        variation: newVariation,
-        sets: updatedSets,
-      };
-      return nextArr;
-    });
-  }, [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions]);
-
-  const handleDeleteExercise = useCallback((exIdx: number) => {
-    setActiveExercises(prev => {
-      const filtered = prev.filter((_, idx) => idx !== exIdx);
-      return sanitizeSuperSets(filtered);
-    });
-    // Shift or clear active input if it matches the deleted exercise
-    const curr = activeInputRef.current;
-    if (curr) {
-      if (curr.exIdx === exIdx) {
-        activeInputRef.current = null;
-        activeInputStore.setActiveInput(null);
-        setIsKeyboardVisible(false);
-      } else if (curr.exIdx > exIdx) {
-        const nextVal = { ...curr, exIdx: curr.exIdx - 1 };
-        activeInputRef.current = nextVal;
-        activeInputStore.setActiveInput(nextVal);
-      }
-    }
-  }, []);
-
-  const updateExerciseNote = useCallback((exIdx: number, note?: string) => {
-    setActiveExercises(prev => {
-      const next = [...prev];
-      if (next[exIdx]) {
-        next[exIdx] = { ...next[exIdx], note };
-      }
-      return next;
-    });
-  }, [setActiveExercises]);
-
-  const onSaveLibraryNote = useCallback((exerciseName: string, note?: string) => {
-    const libEx = exerciseLibraryMap.get(exerciseName.toLowerCase());
-    if (libEx && onUpdateExerciseNotes) {
-      onUpdateExerciseNotes(libEx.id, note);
-    }
-  }, [exerciseLibraryMap, onUpdateExerciseNotes]);
 
   const handleOpenReplace = () => {
     setIsReplaceMode(true);
@@ -1552,141 +1151,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setLibrarySearch('');
     setIsLibraryVisible(true);
   };
-
-  // Called by AddExerciseScreen when user confirms multi-select
-  const handleConfirmExercisesFromPicker = useCallback((names: string[]) => {
-    if (isReplaceMode && activeExerciseMenuIndex !== null && names.length > 0) {
-      // Replace mode: replace the targeted exercise
-      const exName = names[0];
-      const targetEx = activeExercises[activeExerciseMenuIndex];
-      const isUnilateral = targetEx?.sets[0]?.isUnilateral || false;
-
-      const updatedSets = targetEx.sets.map((s, sIdx) => {
-        const category = s.category || 'S';
-        let positionInCategory = 0;
-        for (let i = 0; i < sIdx; i++) {
-          if ((targetEx.sets[i].category || 'S') === category) {
-            positionInCategory++;
-          }
-        }
-        const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-        const defaultW = (libEx?.bestWeight ?? 0).toString();
-        const defaultR = (libEx?.bestReps ?? 0).toString();
-        let suggested: SetSuggestion = {
-          weight: defaultW,
-          reps: defaultR,
-          leftWeight: defaultW,
-          leftReps: defaultR,
-          rightWeight: defaultW,
-          rightReps: defaultR,
-        };
-        if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-          const perfSuggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
-          if (perfSuggested.weight || perfSuggested.reps) {
-            suggested = perfSuggested;
-          }
-        }
-        return {
-          id: `set-${activeExerciseMenuIndex}-${sIdx}-${Date.now()}`,
-          weight: '',
-          reps: '',
-          completed: false,
-          rpe: '',
-          category: (s.category || 'S') as 'W' | 'S' | 'D' | 'F',
-          isUnilateral: isUnilateral,
-          leftWeight: isUnilateral ? '' : undefined,
-          leftReps: isUnilateral ? '' : undefined,
-          rightWeight: isUnilateral ? '' : undefined,
-          rightReps: isUnilateral ? '' : undefined,
-          suggestedWeight: suggested.weight,
-          suggestedReps: suggested.reps,
-          suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-          suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-          suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-          suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
-        };
-      });
-
-      setActiveExercises(prev => prev.map((ex, idx) => {
-        if (idx === activeExerciseMenuIndex) {
-          return {
-            id: ex.id,
-            name: exName,
-            sets: updatedSets,
-            superSetGroupId: ex.superSetGroupId,
-          };
-        }
-        return ex;
-      }));
-      setActiveExerciseMenuIndex(null);
-    } else {
-      // Add mode: append all selected exercises
-      const newOnes: ActiveExercise[] = names.map((exName, idx) => {
-        const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-        const isUnilateral = libEx?.isUnilateral || false;
-        
-        let setsCount = 3;
-        if (sessions && sessions.length > 0) {
-          const previousSession = sessions.find((s: any) =>
-            s.exercises && s.exercises.some((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase())
-          );
-          const found = previousSession?.exercises.find((e: any) => e.name && e.name.toLowerCase() === exName.toLowerCase());
-          if (found) {
-            setsCount = found.setsDetails?.length || found.sets || 3;
-          }
-        }
-
-        const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
-          const category = 'S';
-          const positionInCategory = sIdx;
-          const defaultW = (libEx?.bestWeight ?? 0).toString();
-          const defaultR = (libEx?.bestReps ?? 0).toString();
-          let suggested: SetSuggestion = {
-            weight: defaultW,
-            reps: defaultR,
-            leftWeight: defaultW,
-            leftReps: defaultR,
-            rightWeight: defaultW,
-            rightReps: defaultR,
-          };
-          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-            const perfSuggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
-            if (perfSuggested.weight || perfSuggested.reps) {
-              suggested = perfSuggested;
-            }
-          }
-          return {
-            id: `set-new-${idx}-${sIdx}-${Date.now()}`,
-            weight: '',
-            reps: '',
-            completed: false,
-            rpe: '',
-            category: 'S' as const,
-            isUnilateral: isUnilateral,
-            leftWeight: isUnilateral ? '' : undefined,
-            leftReps: isUnilateral ? '' : undefined,
-            rightWeight: isUnilateral ? '' : undefined,
-            rightReps: isUnilateral ? '' : undefined,
-            suggestedWeight: suggested.weight,
-            suggestedReps: suggested.reps,
-            suggestedLeftWeight: isUnilateral ? suggested.leftWeight : undefined,
-            suggestedLeftReps: isUnilateral ? suggested.leftReps : undefined,
-            suggestedRightWeight: isUnilateral ? suggested.rightWeight : undefined,
-            suggestedRightReps: isUnilateral ? suggested.rightReps : undefined,
-          };
-        });
-
-        return {
-          id: `ex-new-${idx}-${Date.now()}-${Math.random()}`,
-          name: exName,
-          sets: sets,
-        };
-      });
-      safeLayoutAnim();
-      setActiveExercises(prev => [...prev, ...newOnes]);
-    }
-    setIsLibraryVisible(false);
-  }, [isReplaceMode, activeExerciseMenuIndex, isProgressiveOverloadEnabled, sessions, exerciseLibrary, activeExercises]);
 
   // Legacy single-select compat (used internally)
   const handleSelectLibraryExercise = (exName: string) => {

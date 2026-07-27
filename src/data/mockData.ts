@@ -93,6 +93,8 @@ export interface Exercise {
   searchAliases?: string[];
   instructions?: string;
   variations?: string[];
+  bestWeight?: number;
+  bestReps?: number;
 }
 
 export interface MeasureHistoryEntry {
