@@ -113,6 +113,10 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
     };
   });
 
+  const isNoteActive = exercise.showNote !== undefined
+    ? exercise.showNote
+    : !!((exercise.note && exercise.note.trim().length > 0) || (libEx?.notes && libEx.notes.trim().length > 0));
+
   return (
     <Animated.View style={animatedStyle}>
       <View style={[
@@ -166,39 +170,41 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
           </View>
 
           {/* Inline Exercise Note Editor */}
-          <View style={styles.notesContainer}>
-            <Ionicons name="document-text-outline" size={14} color={colors.accent} />
-            <TextInput
-              style={[styles.notesText, { color: colors.textPrimary, paddingVertical: 0 }]}
-              placeholder={i18n.t('activeWorkout.addExerciseNotePlaceholder')}
-              placeholderTextColor={colors.textMuted}
-              value={localNote}
-              onChangeText={(val) => {
-                setLocalNote(val);
-              }}
-              onFocus={() => setIsEditingNote(true)}
-              onBlur={() => {
-                setIsEditingNote(false);
-                if (updateExerciseNote) {
-                  updateExerciseNote(exIdx, localNote.trim() || undefined);
-                }
-              }}
-              multiline
-              keyboardAppearance="dark"
-              maxLength={150}
-              testID={`exercise-notes-input-${exIdx}`}
-            />
-            {localNote && onSaveLibraryNote && (
-              <Pressable
-                onPress={() => onSaveLibraryNote(exercise.name, localNote.trim() || undefined)}
-                style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel={i18n.t('activeWorkout.saveLibraryNoteA11y')}
-              >
-                <Ionicons name="bookmark-outline" size={14} color={colors.textMuted} />
-              </Pressable>
-            )}
-          </View>
+          {isNoteActive && (
+            <View style={styles.notesContainer}>
+              <Ionicons name="document-text-outline" size={14} color={colors.accent} />
+              <TextInput
+                style={[styles.notesText, { color: colors.textPrimary, paddingVertical: 0 }]}
+                placeholder={i18n.t('activeWorkout.addExerciseNotePlaceholder')}
+                placeholderTextColor={colors.textMuted}
+                value={localNote}
+                onChangeText={(val) => {
+                  setLocalNote(val);
+                }}
+                onFocus={() => setIsEditingNote(true)}
+                onBlur={() => {
+                  setIsEditingNote(false);
+                  if (updateExerciseNote) {
+                    updateExerciseNote(exIdx, localNote.trim() || undefined);
+                  }
+                }}
+                multiline
+                keyboardAppearance="dark"
+                maxLength={150}
+                testID={`exercise-notes-input-${exIdx}`}
+              />
+              {localNote && onSaveLibraryNote && (
+                <Pressable
+                  onPress={() => onSaveLibraryNote(exercise.name, localNote.trim() || undefined)}
+                  style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={i18n.t('activeWorkout.saveLibraryNoteA11y')}
+                >
+                  <Ionicons name="bookmark-outline" size={14} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {/* Sets Column Headers */}
           <View style={styles.tableHeader}>

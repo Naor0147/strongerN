@@ -157,6 +157,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const initialStateRef = useRef<{ exercises: string; note: string }>({ exercises: '', note: '' });
   const wasInitializedRef = useRef(false);
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
+  const [isWorkoutNoteActive, setIsWorkoutNoteActive] = useState<boolean>(() => !!(editingComment && editingComment.trim().length > 0));
   const {
     isWorkoutMenuVisible,
     setIsWorkoutMenuVisible,
@@ -637,6 +638,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         resumeStartTime.current = isEditing ? new Date() : safeStart;
         accumulatedOffsetSeconds.current = (previousDurationMin || 0) * 60;
         setWorkoutNote(editingComment || '');
+        setIsWorkoutNoteActive(!!(editingComment && editingComment.trim().length > 0));
         setLocalWorkoutName(workoutName);        const initial = (exercises || [])
           .filter((ex: ExerciseSet) => Boolean(ex && ex.name && typeof ex.name === 'string'))
           .map((ex: ExerciseSet, exIdx): ActiveExercise => {
@@ -1305,27 +1307,29 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </View>
 
               {/* Inline Workout Note Input */}
-              <View style={styles.workoutNoteInlineContainer}>
-                <Ionicons name="document-text-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                <TextInput
-                  style={styles.workoutNoteInlineInput}
-                  placeholder={i18n.t('activeWorkout.addWorkoutNotePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  value={workoutNote}
-                  onChangeText={(val) => {
-                    setWorkoutNote(val);
-                  }}
-                  onBlur={() => {
-                    if (onUpdateComment) {
-                      onUpdateComment(workoutNote.trim());
-                    }
-                  }}
-                  multiline
-                  keyboardAppearance="dark"
-                  maxLength={250}
-                  testID="workout-note-input"
-                />
-              </View>
+              {isWorkoutNoteActive && (
+                <View style={styles.workoutNoteInlineContainer}>
+                  <Ionicons name="document-text-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                  <TextInput
+                    style={styles.workoutNoteInlineInput}
+                    placeholder={i18n.t('activeWorkout.addWorkoutNotePlaceholder')}
+                    placeholderTextColor={colors.textMuted}
+                    value={workoutNote}
+                    onChangeText={(val) => {
+                      setWorkoutNote(val);
+                    }}
+                    onBlur={() => {
+                      if (onUpdateComment) {
+                        onUpdateComment(workoutNote.trim());
+                      }
+                    }}
+                    multiline
+                    keyboardAppearance="dark"
+                    maxLength={250}
+                    testID="workout-note-input"
+                  />
+                </View>
+              )}
 
               {activeExercises.length === 0 ? (
                 <View style={styles.emptyContainer}>
@@ -1484,6 +1488,39 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       <Ionicons name="time-outline" size={20} color={colors.accent} />
                       <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.setAutoTimer')}</Text>
                     </Pressable>
+
+                    {/* Toggle Exercise Note option */}
+                    {activeExerciseMenuIndex !== null && (() => {
+                      const targetEx = activeExercises[activeExerciseMenuIndex];
+                      if (!targetEx) return null;
+                      const libExNotes = exerciseLibraryMap.get(targetEx.name.toLowerCase())?.notes;
+                      const isExNoteActive = targetEx.showNote !== undefined
+                        ? targetEx.showNote
+                        : !!((targetEx.note && targetEx.note.trim().length > 0) || (libExNotes && libExNotes.trim().length > 0));
+                      return (
+                        <Pressable
+                          style={styles.sheetItem}
+                          onPress={() => {
+                            const newShowNote = !isExNoteActive;
+                            setActiveExercises(prev => prev.map((ex, idx) => {
+                              if (idx !== activeExerciseMenuIndex) return ex;
+                              return {
+                                ...ex,
+                                showNote: newShowNote,
+                              };
+                            }));
+                            setIsExMenuVisible(false);
+                          }}
+                          android_ripple={rippleTokens.surface}
+                          testID="toggle-exercise-note-btn"
+                        >
+                          <Ionicons name={isExNoteActive ? "document-text" : "document-text-outline"} size={20} color={colors.accent} />
+                          <Text style={styles.sheetItemText}>
+                            {isExNoteActive ? i18n.t('activeWorkout.hideExerciseNote') : i18n.t('activeWorkout.showExerciseNote')}
+                          </Text>
+                        </Pressable>
+                      );
+                    })()}
                     
                     {activeExercises[activeExerciseMenuIndex].superSetGroupId ? (
                       <Pressable
@@ -1750,6 +1787,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       >
                         <Ionicons name="time-outline" size={20} color={colors.textPrimary} />
                         <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeStartTime')}</Text>
+                      </Pressable>
+
+                      {/* Toggle Workout Note option */}
+                      <Pressable
+                        style={styles.sheetItem}
+                        onPress={() => {
+                          setIsWorkoutMenuVisible(false);
+                          setIsWorkoutNoteActive(prev => !prev);
+                        }}
+                        android_ripple={rippleTokens.surface}
+                        testID="toggle-workout-note-btn"
+                      >
+                        <Ionicons name={isWorkoutNoteActive ? "document-text" : "document-text-outline"} size={20} color={colors.textPrimary} />
+                        <Text style={styles.sheetItemText}>
+                          {isWorkoutNoteActive ? i18n.t('activeWorkout.hideWorkoutNote') : i18n.t('activeWorkout.showWorkoutNote')}
+                        </Text>
                       </Pressable>
 
                       {/* Change Default Timer option */}

@@ -37,6 +37,7 @@ export interface ActiveExercise {
   autoTimer?: number;
   variation?: string;
   note?: string;
+  showNote?: boolean;
 }
 
 export interface ActiveWorkoutModalProps {
