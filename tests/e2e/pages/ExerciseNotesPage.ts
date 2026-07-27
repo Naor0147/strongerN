@@ -1,36 +1,16 @@
-import { Page, expect } from '@playwright/test';
+import { Page } from '@playwright/test';
 
 export class ExerciseNotesPage {
-  private modalTitleSelector = 'text=EXERCISE NOTES';
-  private inputSelector = '[data-testid="notes-input"]';
-  private cancelBtnSelector = '[data-testid="cancel-notes-btn"]';
-  private saveBtnSelector = '[data-testid="save-notes-btn"]';
-
   constructor(private page: Page) {}
 
-  async expectOpen() {
-    await expect(this.page.locator(this.modalTitleSelector)).toBeVisible({ timeout: 2000 });
-  }
-
-  async expectClosed() {
-    await expect(this.page.locator(this.modalTitleSelector)).toBeHidden({ timeout: 2000 });
-  }
-
-  async typeNotes(text: string) {
-    const input = this.page.locator(this.inputSelector);
+  async typeNotes(text: string, exerciseIndex = 0) {
+    const input = this.page.locator(`[data-testid="exercise-notes-input-${exerciseIndex}"]`);
     await input.fill(text);
+    await input.blur();
   }
 
-  async getNotesValue(): Promise<string> {
-    const input = this.page.locator(this.inputSelector);
+  async getNotesValue(exerciseIndex = 0): Promise<string> {
+    const input = this.page.locator(`[data-testid="exercise-notes-input-${exerciseIndex}"]`);
     return await input.inputValue();
-  }
-
-  async tapSave() {
-    await this.page.click(this.saveBtnSelector);
-  }
-
-  async tapCancel() {
-    await this.page.click(this.cancelBtnSelector);
   }
 }

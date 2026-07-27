@@ -22,51 +22,24 @@ test.describe('Exercise Notes Regression Tests', () => {
   });
 
   test('can add and edit notes for an exercise', async ({ page }) => {
-    // 1. Open exercise options menu for the first exercise
-    await exMenuPage.open(0);
-
-    // 2. Open Exercise Notes
-    await exMenuPage.tapViewEditNotes();
-
-    // 3. Verify it is open
-    await notesPage.expectOpen();
-
-    // 4. Fill in notes
+    // 1. Fill in notes inline
     const testNotes = 'Seat height 5, cue: chest up';
     await notesPage.typeNotes(testNotes);
 
-    // 5. Save the notes
-    await notesPage.tapSave();
-
-    // 6. Verify modal is closed
-    await notesPage.expectClosed();
-
-    // 7. Verify the note is now displayed on the screen
-    const displayedNotes = page.locator('[data-testid="exercise-notes-text"]');
+    // 2. Verify the note is displayed in the input field
+    const displayedNotes = page.locator('[data-testid^="exercise-notes-input-"]').first();
     await expect(displayedNotes).toBeVisible();
-    await expect(displayedNotes).toHaveText(testNotes);
+    await expect(displayedNotes).toHaveValue(testNotes);
 
-    // 8. Re-open the notes modal to ensure the notes are persisted in the input field
-    await exMenuPage.open(0);
-    await exMenuPage.tapViewEditNotes();
-    await notesPage.expectOpen();
+    // 3. Verify value retrieved from notesPage matches
     const retrievedNotes = await notesPage.getNotesValue();
     expect(retrievedNotes).toBe(testNotes);
-
-    // 9. Cancel and ensure it remains correct
-    await notesPage.tapCancel();
-    await notesPage.expectClosed();
   });
 
   test('exercise insights notes are separate from regular exercise notes and save automatically', async ({ page }) => {
-    // 1. Add regular exercise notes first
-    await exMenuPage.open(0);
-    await exMenuPage.tapViewEditNotes();
-    await notesPage.expectOpen();
+    // 1. Add regular exercise notes inline first
     const regularNotes = 'Regular notes: height 3';
     await notesPage.typeNotes(regularNotes);
-    await notesPage.tapSave();
-    await notesPage.expectClosed();
 
     // 2. Open Exercise Insights
     await exMenuPage.open(0);
@@ -85,10 +58,10 @@ test.describe('Exercise Notes Regression Tests', () => {
     await insightsPage.tapBack();
     await insightsPage.expectClosed();
 
-    // 6. Verify regular notes are still displayed and unchanged
-    const displayedNotes = page.locator('[data-testid="exercise-notes-text"]');
+    // 6. Verify regular notes are still displayed and unchanged in inline input
+    const displayedNotes = page.locator('[data-testid^="exercise-notes-input-"]').first();
     await expect(displayedNotes).toBeVisible();
-    await expect(displayedNotes).toHaveText(regularNotes);
+    await expect(displayedNotes).toHaveValue(regularNotes);
 
     // 7. Verify insights notes are persisted by opening insights again
     await exMenuPage.open(0);

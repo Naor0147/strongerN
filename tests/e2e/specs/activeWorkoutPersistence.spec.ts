@@ -59,20 +59,14 @@ test.describe('Active Workout Data Integrity & Persistence Tests', () => {
     await appPage.startTemplateWorkout();
     await workoutPage.expectOpen();
 
-    // 2. Add exercise notes to the first exercise
-    await exMenuPage.open(0);
-    await exMenuPage.tapViewEditNotes();
-    await notesPage.expectOpen();
-
+    // 2. Add exercise notes inline to the first exercise
     const noteText = 'Keep elbows tucked at 45 degrees for shoulder safety';
     await notesPage.typeNotes(noteText);
-    await notesPage.tapSave();
-    await notesPage.expectClosed();
 
-    // 3. Verify notes displayed
-    const displayedNotes = page.locator('[data-testid="exercise-notes-text"]');
+    // 3. Verify notes displayed in inline input
+    const displayedNotes = page.locator('[data-testid^="exercise-notes-input-"]').first();
     await expect(displayedNotes).toBeVisible();
-    await expect(displayedNotes).toHaveText(noteText);
+    await expect(displayedNotes).toHaveValue(noteText);
 
     // 4. Wait for auto-save and reload page
     await page.waitForTimeout(1200);
@@ -80,9 +74,9 @@ test.describe('Active Workout Data Integrity & Persistence Tests', () => {
 
     // 5. Verify active workout and exercise notes are fully preserved after reload
     await workoutPage.expectOpen();
-    const restoredNotes = page.locator('[data-testid="exercise-notes-text"]');
+    const restoredNotes = page.locator('[data-testid^="exercise-notes-input-"]').first();
     await expect(restoredNotes).toBeVisible();
-    await expect(restoredNotes).toHaveText(noteText);
+    await expect(restoredNotes).toHaveValue(noteText);
   });
 
   test('minimized workout bar state persists across refresh and allows resumption', async ({ page }) => {

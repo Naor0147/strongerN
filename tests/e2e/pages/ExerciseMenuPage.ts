@@ -12,10 +12,6 @@ export class ExerciseMenuPage {
     await this.page.click('[data-testid="set-auto-timer"]');
   }
 
-  async tapViewEditNotes() {
-    await this.page.click('[data-testid="view-edit-notes"]');
-  }
-
   async tapExerciseInsights() {
     await this.page.click('[data-testid="exercise-insights-menu-item"]');
   }
