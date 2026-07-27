@@ -378,7 +378,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     fadeAnim.value = 0;
     scaleAnim.value = 0.96;
     const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
-    fadeAnim.value = withTiming(1, { duration: 280, easing: easingFn });
+    fadeAnim.value = withTiming(1, { duration: 250, easing: easingFn });
     scaleAnim.value = withSpring(1, getSpringConfig(140, 16));
   }, []);
 

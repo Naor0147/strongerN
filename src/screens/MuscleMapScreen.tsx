@@ -938,7 +938,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     mapEntryOpacity.value = 0;
     mapEntryScale.value = 0.92;
     const easingFn = Easing && typeof Easing.out === 'function' ? Easing.out(Easing.cubic) : undefined;
-    mapEntryOpacity.value = withTiming(1, { duration: 320, easing: easingFn });
+    mapEntryOpacity.value = withTiming(1, { duration: 250, easing: easingFn });
     mapEntryScale.value = withSpring(1, getSpringConfig(120, 18));
   }, [view]);
 
