@@ -114,30 +114,6 @@ export const WorkoutHeaderSkeleton: React.FC = () => {
   );
 };
 
-export const MeasureSkeleton: React.FC = () => {
-  return (
-    <ShimmerContainer style={skeletonStyles.container}>
-      <View style={skeletonStyles.headerRow}>
-        <SkeletonBlock width={140} height={28} borderRadius={radius.sm} />
-        <SkeletonBlock width={36} height={36} borderRadius={18} />
-      </View>
-      <SkeletonBlock width="100%" height={160} borderRadius={radius.lg} />
-      <SkeletonBlock width="100%" height={220} borderRadius={radius.lg} />
-    </ShimmerContainer>
-  );
-};
-
-export const MuscleMapSkeleton: React.FC = () => {
-  return (
-    <ShimmerContainer style={skeletonStyles.container}>
-      <View style={skeletonStyles.headerRow}>
-        <SkeletonBlock width={140} height={28} borderRadius={radius.sm} />
-        <SkeletonBlock width={36} height={36} borderRadius={18} />
-      </View>
-      <SkeletonBlock width="100%" height={320} borderRadius={radius.lg} />
-    </ShimmerContainer>
-  );
-};
 
 const skeletonStyles = StyleSheet.create({
   container: {

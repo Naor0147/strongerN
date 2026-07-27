@@ -77,7 +77,6 @@ import { ActiveWorkoutKeyboardWrapper } from './ActiveWorkoutKeyboardWrapper';
 import { ActiveSetRowItem, ActiveSetRowItemProps } from './ActiveSetRowItem';
 import { ActiveExerciseRow, ActiveExerciseRowProps } from './ActiveExerciseRow';
 import { ActiveExerciseCard, ActiveExerciseCardProps } from './ActiveExerciseCard';
-import { useRestTimerController } from '../../hooks/useRestTimerController';
 
 
 
@@ -145,7 +144,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateDefaultRestDuration,
   onUpdateExercise,
 }) => {
-  const { startTimer, stopTimer, adjustTimer } = useRestTimerController({ defaultRestDuration });
   useTrackRender('ActiveWorkoutModal');
   const insets = useSafeAreaInsets();
   // Track the actual resume/edit start time (when THIS session started, not the original workout)
