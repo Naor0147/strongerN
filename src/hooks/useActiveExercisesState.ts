@@ -280,11 +280,15 @@ export function useActiveExercisesState({
   );
 
   // Update exercise note
-  const updateExerciseNote = useCallback((exIdx: number, note?: string) => {
+  const updateExerciseNote = useCallback((exIdx: number, note?: string, isNoteLocked?: boolean) => {
     setActiveExercises((prev) => {
       const next = [...prev];
       if (next[exIdx]) {
-        next[exIdx] = { ...next[exIdx], note };
+        next[exIdx] = {
+          ...next[exIdx],
+          note,
+          isNoteLocked: isNoteLocked !== undefined ? isNoteLocked : next[exIdx].isNoteLocked,
+        };
       }
       return next;
     });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, cancelAnimation, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,7 @@ export interface ActiveExerciseRowProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
-  updateExerciseNote?: (exIdx: number, note: string | undefined) => void;
+  updateExerciseNote?: (exIdx: number, note: string | undefined, isNoteLocked?: boolean) => void;
   onSaveLibraryNote?: (exerciseName: string, note: string | undefined) => void;
 }
 
@@ -63,10 +63,26 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   const initialNote = exercise.note !== undefined ? exercise.note : (libEx?.notes || '');
   const [localNote, setLocalNote] = useState(initialNote);
   const [isEditingNote, setIsEditingNote] = useState(false);
+  const [isNoteLocked, setIsNoteLocked] = useState<boolean>(!!exercise.isNoteLocked);
 
   useEffect(() => {
     setLocalNote(exercise.note !== undefined ? exercise.note : (libEx?.notes || ''));
   }, [exercise.note, libEx?.notes]);
+
+  useEffect(() => {
+    setIsNoteLocked(!!exercise.isNoteLocked);
+  }, [exercise.isNoteLocked]);
+
+  const toggleNoteLock = useCallback(() => {
+    const nextLocked = !isNoteLocked;
+    setIsNoteLocked(nextLocked);
+    if (updateExerciseNote) {
+      updateExerciseNote(exIdx, localNote.trim() || undefined, nextLocked);
+    }
+    if (nextLocked && onSaveLibraryNote) {
+      onSaveLibraryNote(exercise.name, localNote.trim() || undefined);
+    }
+  }, [isNoteLocked, updateExerciseNote, exIdx, localNote, onSaveLibraryNote, exercise.name]);
 
   const hasEnteredRef = useRef(false);
   useEffect(() => {
@@ -171,21 +187,37 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
 
           {/* Inline Exercise Note Editor */}
           {isNoteActive && (
-            <View style={styles.notesContainer}>
-              <Ionicons name="document-text-outline" size={14} color={colors.accent} />
+            <View style={[
+              styles.notesContainer,
+              isNoteLocked && {
+                borderColor: colors.accent,
+                backgroundColor: colors.accentGlow,
+              }
+            ]}>
+              <Ionicons
+                name="document-text-outline"
+                size={14}
+                color={isNoteLocked ? colors.accent : colors.accent}
+              />
               <TextInput
-                style={[styles.notesText, { color: colors.textPrimary, paddingVertical: 0 }]}
+                style={[
+                  styles.notesText,
+                  { color: isNoteLocked ? colors.accent : colors.textPrimary, paddingVertical: 0 }
+                ]}
                 placeholder={i18n.t('activeWorkout.addExerciseNotePlaceholder')}
                 placeholderTextColor={colors.textMuted}
                 value={localNote}
+                editable={!isNoteLocked}
                 onChangeText={(val) => {
-                  setLocalNote(val);
+                  if (!isNoteLocked) {
+                    setLocalNote(val);
+                  }
                 }}
                 onFocus={() => setIsEditingNote(true)}
                 onBlur={() => {
                   setIsEditingNote(false);
                   if (updateExerciseNote) {
-                    updateExerciseNote(exIdx, localNote.trim() || undefined);
+                    updateExerciseNote(exIdx, localNote.trim() || undefined, isNoteLocked);
                   }
                 }}
                 multiline
@@ -193,16 +225,19 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
                 maxLength={150}
                 testID={`exercise-notes-input-${exIdx}`}
               />
-              {localNote && onSaveLibraryNote && (
-                <Pressable
-                  onPress={() => onSaveLibraryNote(exercise.name, localNote.trim() || undefined)}
-                  style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={i18n.t('activeWorkout.saveLibraryNoteA11y')}
-                >
-                  <Ionicons name="bookmark-outline" size={14} color={colors.textMuted} />
-                </Pressable>
-              )}
+              <Pressable
+                onPress={toggleNoteLock}
+                style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={i18n.t('activeWorkout.saveLibraryNoteA11y')}
+                testID={`toggle-lock-note-btn-${exIdx}`}
+              >
+                <Ionicons
+                  name={isNoteLocked ? "bookmark" : "bookmark-outline"}
+                  size={14}
+                  color={isNoteLocked ? colors.accent : colors.textMuted}
+                />
+              </Pressable>
             </View>
           )}
 

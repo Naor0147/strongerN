@@ -158,6 +158,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const wasInitializedRef = useRef(false);
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
   const [isWorkoutNoteActive, setIsWorkoutNoteActive] = useState<boolean>(() => !!(editingComment && editingComment.trim().length > 0));
+  const [isWorkoutNoteLocked, setIsWorkoutNoteLocked] = useState<boolean>(false);
   const {
     isWorkoutMenuVisible,
     setIsWorkoutMenuVisible,
@@ -1308,15 +1309,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
               {/* Inline Workout Note Input */}
               {isWorkoutNoteActive && (
-                <View style={styles.workoutNoteInlineContainer}>
+                <View style={[
+                  styles.workoutNoteInlineContainer,
+                  isWorkoutNoteLocked && {
+                    borderColor: colors.accent,
+                    backgroundColor: colors.accentGlow,
+                  }
+                ]}>
                   <Ionicons name="document-text-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
                   <TextInput
-                    style={styles.workoutNoteInlineInput}
+                    style={[
+                      styles.workoutNoteInlineInput,
+                      isWorkoutNoteLocked && { color: colors.accent }
+                    ]}
                     placeholder={i18n.t('activeWorkout.addWorkoutNotePlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     value={workoutNote}
+                    editable={!isWorkoutNoteLocked}
                     onChangeText={(val) => {
-                      setWorkoutNote(val);
+                      if (!isWorkoutNoteLocked) {
+                        setWorkoutNote(val);
+                      }
                     }}
                     onBlur={() => {
                       if (onUpdateComment) {
@@ -1328,6 +1341,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     maxLength={250}
                     testID="workout-note-input"
                   />
+                  <Pressable
+                    onPress={() => setIsWorkoutNoteLocked(prev => !prev)}
+                    style={({ pressed }) => [{ paddingHorizontal: 4, opacity: pressed ? 0.7 : 1 }]}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    testID="toggle-lock-workout-note-btn"
+                  >
+                    <Ionicons
+                      name={isWorkoutNoteLocked ? "bookmark" : "bookmark-outline"}
+                      size={16}
+                      color={isWorkoutNoteLocked ? colors.accent : colors.textMuted}
+                    />
+                  </Pressable>
                 </View>
               )}
 

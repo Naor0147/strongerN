@@ -25,7 +25,7 @@ export interface ActiveExerciseCardProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
-  updateExerciseNote?: (exIdx: number, note: string | undefined) => void;
+  updateExerciseNote?: (exIdx: number, note: string | undefined, isNoteLocked?: boolean) => void;
   onSaveLibraryNote?: (exerciseName: string, note: string | undefined) => void;
 }
 

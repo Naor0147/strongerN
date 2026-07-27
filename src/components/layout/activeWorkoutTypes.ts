@@ -38,6 +38,7 @@ export interface ActiveExercise {
   variation?: string;
   note?: string;
   showNote?: boolean;
+  isNoteLocked?: boolean;
 }
 
 export interface ActiveWorkoutModalProps {
