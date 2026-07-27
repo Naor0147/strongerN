@@ -53,7 +53,7 @@ export const SkeletonBlock: React.FC<SkeletonBlockProps> = ({
           width,
           height,
           borderRadius,
-          backgroundColor: '#1E2532',
+          backgroundColor: colors.surface2,
         },
         style,
       ]}
@@ -79,7 +79,7 @@ export const ProfileSkeleton: React.FC = () => {
         </View>
       </View>
 
-      {/* Up Next Workout Single Large Card Skeleton (Matches loaded layout) */}
+      {/* Up Next Workout Single Large Card Skeleton */}
       <SkeletonBlock width="100%" height={145} borderRadius={radius.lg} />
 
       {/* Dashboard / Chart Section Skeleton */}
@@ -110,6 +110,31 @@ export const WorkoutHeaderSkeleton: React.FC = () => {
       <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
       <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
       <SkeletonBlock width="100%" height={125} borderRadius={radius.lg} />
+    </ShimmerContainer>
+  );
+};
+
+export const MeasureSkeleton: React.FC = () => {
+  return (
+    <ShimmerContainer style={skeletonStyles.container}>
+      <View style={skeletonStyles.headerRow}>
+        <SkeletonBlock width={140} height={28} borderRadius={radius.sm} />
+        <SkeletonBlock width={36} height={36} borderRadius={18} />
+      </View>
+      <SkeletonBlock width="100%" height={160} borderRadius={radius.lg} />
+      <SkeletonBlock width="100%" height={220} borderRadius={radius.lg} />
+    </ShimmerContainer>
+  );
+};
+
+export const MuscleMapSkeleton: React.FC = () => {
+  return (
+    <ShimmerContainer style={skeletonStyles.container}>
+      <View style={skeletonStyles.headerRow}>
+        <SkeletonBlock width={140} height={28} borderRadius={radius.sm} />
+        <SkeletonBlock width={36} height={36} borderRadius={18} />
+      </View>
+      <SkeletonBlock width="100%" height={320} borderRadius={radius.lg} />
     </ShimmerContainer>
   );
 };

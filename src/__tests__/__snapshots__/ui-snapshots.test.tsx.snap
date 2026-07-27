@@ -68,7 +68,7 @@ exports[`UI Primitives Snapshot Tests Badge Component renders default badge corr
           "letterSpacing": 0.4,
         },
         {
-          "color": "#FFFFFF",
+          "color": "#EEF1F6",
         },
       ]
     }

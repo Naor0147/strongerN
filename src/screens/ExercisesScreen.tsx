@@ -30,6 +30,7 @@ import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 import { normalizeTag, isValidTag, addVariationToExercise, removeVariationFromExercise } from '../utils/variationUtils';
 import ExerciseInsightsModal from './ExerciseInsightsModal';
+import { showToast } from '../utils/toast';
 
 const ITEM_HEIGHT   = 72;
 const HEADER_HEIGHT = 48;
@@ -545,7 +546,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
       setNewExUnilateral(false);
       setNewExShowAdvanced(false);
       setIsAddModalVisible(false);
-      Alert.alert(i18n.t('common.success'), i18n.t('exercises.customExerciseAdded', { name: newExName.trim() }));
+      showToast(i18n.t('exercises.customExerciseAdded', { name: newExName.trim() }), 'success');
     }
   }, [newExName, newExMuscle, newExEquipment, newExUnilateral, onAddExercise]);
 
@@ -1084,9 +1085,8 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
                   style={styles.menuItem}
                   onPress={() => {
                     setIsContextMenuVisible(false);
-                    setNoteEditExercise(contextMenuExercise);
-                    setNoteText(contextMenuExercise.notes || '');
-                    setIsNoteModalVisible(true);
+                    setSelectedExercise(contextMenuExercise);
+                    setIsInsightsModalVisible(true);
                   }}
                 >
                   <Ionicons name="create-outline" size={20} color={colors.accent} />
@@ -1162,67 +1162,6 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
         </Modal>
       )}
 
-      {/* Modal: Add/Edit Custom Note */}
-      {noteEditExercise && (
-        <Modal
-          visible={isNoteModalVisible}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setIsNoteModalVisible(false)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {noteEditExercise.notes ? i18n.t('exercises.editNoteTitle') : i18n.t('exercises.addNoteTitle')}
-                </Text>
-                <IconButton
-                  name="close"
-                  size={22}
-                  color={colors.textSecondary}
-                  onPress={() => setIsNoteModalVisible(false)}
-                />
-              </View>
-
-              <ScrollView contentContainerStyle={styles.modalScroll}>
-                <Text style={styles.noteModalHeader}>{noteEditExercise.name}</Text>
-                <TextInput
-                  style={[styles.textInput, { minHeight: 100, textAlignVertical: 'top' }]}
-                  placeholder={i18n.t('exercises.notePlaceholder')}
-                  placeholderTextColor={colors.textMuted}
-                  value={noteText}
-                  onChangeText={setNoteText}
-                  multiline
-                  keyboardAppearance="dark"
-                  maxLength={150}
-                  autoFocus
-                />
-
-                <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md }}>
-                  <Pressable
-                    style={[styles.btnSecondary, { flex: 1 }]}
-                    onPress={() => setIsNoteModalVisible(false)}
-                  >
-                    <Text style={styles.btnSecondaryText}>{i18n.t('common.cancel')}</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.btnPrimary, { flex: 1 }]}
-                    onPress={() => {
-                      if (onUpdateExerciseNotes) {
-                        onUpdateExerciseNotes(noteEditExercise.id, noteText.trim() || undefined);
-                      }
-                      setIsNoteModalVisible(false);
-                      Alert.alert(i18n.t('common.success'), i18n.t('exercises.noteUpdated'));
-                    }}
-                  >
-                    <Text style={styles.btnPrimaryText}>{i18n.t('common.save')}</Text>
-                  </Pressable>
-                </View>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      )}
     </View>
   );
 };

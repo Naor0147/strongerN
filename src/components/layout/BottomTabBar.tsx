@@ -106,6 +106,9 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
         });
 
         if (state.index !== state.routes.indexOf(route) && !event.defaultPrevented) {
+          import('expo-haptics').then(Haptics => {
+            Haptics.selectionAsync().catch(() => {});
+          });
           navigation.navigate(route.name);
         }
       };

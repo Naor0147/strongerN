@@ -952,6 +952,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
 
     if (willBeCompleted) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       playSetCheckedSound();
       playSatisfyingClickFinishSet();
       if (isAutoTimerEnabled) {
@@ -1863,29 +1864,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               </View>
 
-              {/* Workout Note Display */}
-              {workoutNote ? (
-                <Pressable
-                  onPress={() => setIsWorkoutNoteModalVisible(true)}
-                  style={[
-                    styles.notesContainer,
-                    {
-                      marginTop: 0,
-                      marginBottom: spacing.lg,
-                      paddingVertical: spacing.sm,
-                      paddingHorizontal: spacing.md,
-                      backgroundColor: colors.surface2,
+              {/* Inline Workout Note Input */}
+              <View style={styles.workoutNoteInlineContainer}>
+                <Ionicons name="document-text-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                <TextInput
+                  style={styles.workoutNoteInlineInput}
+                  placeholder="Add workout note..."
+                  placeholderTextColor={colors.textMuted}
+                  value={workoutNote}
+                  onChangeText={(val) => {
+                    setWorkoutNote(val);
+                    if (onUpdateComment) {
+                      onUpdateComment(val.trim());
                     }
-                  ]}
-                  android_ripple={rippleTokens.surface}
-                  accessibilityLabel="Edit workout note"
-                >
-                  <Ionicons name="document-text-outline" size={16} color={colors.accent} />
-                  <Text style={[styles.notesText, { color: colors.textPrimary, fontSize: font.sizes.sm }]}>
-                    {workoutNote}
-                  </Text>
-                </Pressable>
-              ) : null}
+                  }}
+                  multiline
+                  keyboardAppearance="dark"
+                  maxLength={250}
+                  testID="workout-note-input"
+                />
+              </View>
 
               {activeExercises.length === 0 ? (
                 <View style={styles.emptyContainer}>

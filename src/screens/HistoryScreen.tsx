@@ -11,6 +11,7 @@ import {
   ScrollView,
   InteractionManager,
   Platform,
+  Alert,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from 'react-native-reanimated';
 import * as RN from 'react-native';
@@ -20,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import { WorkoutSession, ExerciseSet } from '../data/mockData';
 import i18n from '../utils/i18n';
+import { showToast } from '../utils/toast';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card         from '../components/ui/Card';
@@ -320,7 +322,23 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
       <SwipeableRow
         borderRadius={radius.md}
         style={{ marginBottom: spacing.md }}
-        onDelete={() => onDeleteSession(item.id)}
+        onDeleteWithConfirm={(confirm, cancel) => {
+          Alert.alert(
+            i18n.t('history.deleteSession', { defaultValue: 'Delete Workout Session' }),
+            i18n.t('history.deleteSessionMsg', { name: item.title, defaultValue: `Are you sure you want to delete "${item.title}"? This cannot be undone.` }),
+            [
+              { text: i18n.t('common.cancel'), style: 'cancel', onPress: cancel },
+              {
+                text: i18n.t('common.delete'),
+                style: 'destructive',
+                onPress: () => {
+                  confirm(() => onDeleteSession(item.id));
+                  showToast(i18n.t('history.sessionDeleted', { defaultValue: 'Session deleted' }), 'info');
+                },
+              },
+            ]
+          );
+        }}
       >
         <SessionCard session={item} onResumeWorkout={onResumeWorkout} />
       </SwipeableRow>

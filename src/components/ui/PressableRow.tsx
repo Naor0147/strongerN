@@ -24,6 +24,7 @@ interface PressableRowProps {
   accessibilityLabel?: string;
   accessibilityRole?:  'button' | 'link' | 'menuitem' | 'none';
   disabled?:   boolean;
+  hitSlop?:    number | { top?: number; left?: number; bottom?: number; right?: number };
   /** Action slot that renders alongside the main pressable area, completely non-nested */
   actionSlot?: React.ReactNode;
 }
@@ -38,6 +39,7 @@ const PressableRow: React.FC<PressableRowProps> = ({
   accessibilityLabel,
   accessibilityRole = 'button',
   disabled,
+  hitSlop,
   actionSlot,
 }) => {
   const paddingStyle: ViewStyle = React.useMemo(() => {
@@ -87,6 +89,7 @@ const PressableRow: React.FC<PressableRowProps> = ({
           accessibilityLabel={accessibilityLabel}
           accessibilityRole={accessibilityRole}
           disabled={disabled}
+          hitSlop={hitSlop}
         >
           {children}
         </Pressable>
@@ -111,6 +114,7 @@ const PressableRow: React.FC<PressableRowProps> = ({
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       disabled={disabled}
+      hitSlop={hitSlop}
     >
       {children}
     </Pressable>

@@ -1,7 +1,7 @@
 // components/ui/Badge.tsx
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import { font, radius, spacing } from '../../theme';
+import { colors, font, radius, spacing } from '../../theme';
 
 interface BadgeProps {
   label:      string;
@@ -13,8 +13,8 @@ interface BadgeProps {
 
 const Badge: React.FC<BadgeProps> = ({
   label,
-  color     = '#4F8EF7',
-  textColor = '#FFFFFF',
+  color     = colors.accent,
+  textColor = colors.textPrimary,
   style,
   testID,
 }) => (

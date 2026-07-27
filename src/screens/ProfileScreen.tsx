@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   Platform,
   Linking,
+  KeyboardAvoidingView,
 } from 'react-native';
 import Animated, { useSharedValue, withTiming, withSpring, Easing, useAnimatedStyle, FadeIn } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -1214,40 +1215,46 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         transparent={true}
         onRequestClose={() => setIsRenameVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{i18n.t('profile.editName')}</Text>
-              <IconButton
-                name="close"
-                size={22}
-                color={colors.textSecondary}
-                onPress={() => setIsRenameVisible(false)}
-              />
-            </View>
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsRenameVisible(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <Pressable style={styles.modalCard} onPress={e => e.stopPropagation()}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{i18n.t('profile.editName')}</Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
+                  onPress={() => setIsRenameVisible(false)}
+                />
+              </View>
 
-            <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>{i18n.t('profile.yourName')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder={i18n.t('profile.namePlaceholder')}
-                placeholderTextColor={colors.textMuted}
-                value={tempName}
-                onChangeText={setTempName}
-                keyboardAppearance="dark"
-                maxLength={30}
-              />
+              <View style={styles.modalForm}>
+                <Text style={styles.inputLabel}>{i18n.t('profile.yourName')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={i18n.t('profile.namePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  value={tempName}
+                  onChangeText={setTempName}
+                  keyboardAppearance="dark"
+                  maxLength={30}
+                  autoFocus
+                />
 
-              <Pressable
-                style={styles.submitBtn}
-                onPress={handleRenameSubmit}
-                android_ripple={rippleTokens.accent}
-              >
-                <Text style={styles.submitBtnText}>{i18n.t('profile.saveName')}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
+                <Pressable
+                  style={styles.submitBtn}
+                  onPress={handleRenameSubmit}
+                  android_ripple={rippleTokens.accent}
+                >
+                  <Text style={styles.submitBtnText}>{i18n.t('profile.saveName')}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
 
 

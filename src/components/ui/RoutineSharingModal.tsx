@@ -17,6 +17,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
 import { Template } from '../../data/mockData';
 import i18n from '../../utils/i18n';
+import { showToast } from '../../utils/toast';
 
 interface RoutineSharingModalProps {
   visible: boolean;
@@ -36,14 +37,10 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
     try {
       Clipboard.setString(text);
       setCopied(true);
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Copied to clipboard!', ToastAndroid.SHORT);
-      } else {
-        Alert.alert(i18n.t('routineSharing.copied'), i18n.t('routineSharing.copiedMsg', { type: activeTab === 'link' ? 'Deep Link' : 'JSON Data' }));
-      }
+      showToast(i18n.t('routineSharing.copiedMsg', { type: activeTab === 'link' ? 'Deep Link' : 'JSON Data' }), 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch (e) {
-      Alert.alert('Error', 'Failed to copy to clipboard');
+      showToast('Failed to copy to clipboard', 'error');
     }
   }, [activeTab]);
 

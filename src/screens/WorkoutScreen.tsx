@@ -24,6 +24,7 @@ import Animated, { useAnimatedRef, useSharedValue, useAnimatedStyle, withSpring,
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, getSpringConfig } from '../theme';
 import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
 import i18n from '../utils/i18n';
+import { showToast } from '../utils/toast';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card          from '../components/ui/Card';
@@ -433,7 +434,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       setSelectedFolderFilter(newFolderName.trim());
       setNewFolderName('');
       setIsFolderModalVisible(false);
-      Alert.alert(i18n.t('common.success'), i18n.t('workout.folderCreatedSuccess'));
+      showToast(i18n.t('workout.folderCreatedSuccess'), 'success');
     }
   };
 
@@ -454,7 +455,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                 setSelectedFolderFilter('All');
                 setCurrentFolder(null);
               }
-              Alert.alert(i18n.t('workout.folderDeleted'), i18n.t('workout.folderDeletedMsg', { name: folderName }));
+              showToast(i18n.t('workout.folderDeletedMsg', { name: folderName }), 'info');
             }
           }
         }
@@ -546,7 +547,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
           parsed.exercisesDetails,
           parsed.notes,
         );
-        Alert.alert(i18n.t('common.success'), i18n.t('workout.routineImported', { name: parsed.name }));
+        showToast(i18n.t('workout.routineImported', { name: parsed.name }), 'success');
         setImportPayloadText('');
         setIsImportModalVisible(false);
       }
@@ -1177,48 +1178,53 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
         transparent
         onRequestClose={() => setIsFolderModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{i18n.t('workout.createFolder')}</Text>
-              <IconButton
-                name="close"
-                size={22}
-                color={colors.textSecondary}
-                onPress={() => setIsFolderModalVisible(false)}
-              />
-            </View>
-
-            <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>{i18n.t('workout.folderName')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder={i18n.t('workout.folderNamePlaceholder')}
-                placeholderTextColor={colors.textMuted}
-                value={newFolderName}
-                onChangeText={setNewFolderName}
-                keyboardAppearance="dark"
-                maxLength={20}
-                autoFocus
-              />
-
-              <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md }}>
-                <Pressable
-                  style={[styles.submitBtn, { flex: 1, backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1 }]}
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsFolderModalVisible(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <Pressable style={styles.modalCard} onPress={e => e.stopPropagation()}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{i18n.t('workout.createFolder')}</Text>
+                <IconButton
+                  name="close"
+                  size={22}
+                  color={colors.textSecondary}
                   onPress={() => setIsFolderModalVisible(false)}
-                >
-                  <Text style={[styles.submitBtnText, { color: colors.textSecondary }]}>{i18n.t('common.cancel')}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.submitBtn, { flex: 1 }]}
-                  onPress={handleSaveFolder}
-                >
-                  <Text style={styles.submitBtnText}>{i18n.t('common.save')}</Text>
-                </Pressable>
+                />
               </View>
-            </View>
-          </View>
-        </View>
+
+              <View style={styles.modalForm}>
+                <Text style={styles.inputLabel}>{i18n.t('workout.folderName')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={i18n.t('workout.folderNamePlaceholder')}
+                  placeholderTextColor={colors.textMuted}
+                  value={newFolderName}
+                  onChangeText={setNewFolderName}
+                  keyboardAppearance="dark"
+                  maxLength={20}
+                  autoFocus
+                />
+
+                <View style={{ flexDirection: 'row', columnGap: spacing.md, marginTop: spacing.md }}>
+                  <Pressable
+                    style={[styles.submitBtn, { flex: 1, backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1 }]}
+                    onPress={() => setIsFolderModalVisible(false)}
+                  >
+                    <Text style={[styles.submitBtnText, { color: colors.textSecondary }]}>{i18n.t('common.cancel')}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.submitBtn, { flex: 1 }]}
+                    onPress={handleSaveFolder}
+                  >
+                    <Text style={styles.submitBtnText}>{i18n.t('common.save')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
 
       {/* Modal 3: Ellipsis Context Options Sheet */}

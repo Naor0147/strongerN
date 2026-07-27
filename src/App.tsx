@@ -51,6 +51,7 @@ import ExercisesScreen from './screens/ExercisesScreen';
 import MeasureScreen   from './screens/MeasureScreen';
 import MuscleMapScreen from './screens/MuscleMapScreen';
 import E2EAppHarness from './screens/E2EAppHarness';
+import Toast from './components/ui/Toast';
 
 // Mock data
 import {
@@ -2478,6 +2479,7 @@ function App() {
         </View>
         </NavigationContainer>
       )}
+      <Toast />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

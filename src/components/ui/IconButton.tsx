@@ -13,7 +13,10 @@ interface IconButtonProps {
   accessibilityLabel?: string;
   style?:             ViewStyle;
   testID?:            string;
+  hitSlop?:           number | { top?: number; left?: number; bottom?: number; right?: number };
 }
+
+const DEFAULT_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 
 const IconButton: React.FC<IconButtonProps> = ({
   name,
@@ -23,6 +26,7 @@ const IconButton: React.FC<IconButtonProps> = ({
   accessibilityLabel,
   style,
   testID,
+  hitSlop = DEFAULT_HIT_SLOP,
 }) => (
   <PressableRow
     onPress={onPress}
@@ -30,6 +34,7 @@ const IconButton: React.FC<IconButtonProps> = ({
     style={[styles.btn, style]}
     accessibilityLabel={accessibilityLabel || `${name} button`}
     testID={testID}
+    hitSlop={hitSlop}
   >
     <Ionicons name={name} size={size} color={color} />
   </PressableRow>
@@ -37,9 +42,11 @@ const IconButton: React.FC<IconButtonProps> = ({
 
 const styles = StyleSheet.create({
   btn: {
-    padding:      8,
-    borderRadius: radius.full,
-    alignItems:   'center',
+    padding:        8,
+    minWidth:       44,
+    minHeight:      44,
+    borderRadius:   radius.full,
+    alignItems:     'center',
     justifyContent: 'center',
   },
 });

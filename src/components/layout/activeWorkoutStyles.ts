@@ -102,13 +102,8 @@ export const styles = StyleSheet.create({
     flexDirection:     'row',
     alignItems:        'center',
     justifyContent:    'space-between',
-    marginBottom:      spacing.lg,
+    marginBottom:      spacing.xs,
     paddingHorizontal: spacing.xs,
-  },
-  workoutTitleText: {
-    color:      colors.textPrimary,
-    fontSize:   font.sizes.xl,
-    fontFamily: font.bold,
   },
   workoutTitleInput: {
     color:      colors.textPrimary,
@@ -122,6 +117,25 @@ export const styles = StyleSheet.create({
   },
   workoutTitleOptionsBtn: {
     padding: spacing.xs,
+  },
+  workoutNoteInlineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.lg,
+    minHeight: 40,
+  },
+  workoutNoteInlineInput: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: font.sizes.sm,
+    fontFamily: font.medium,
+    paddingVertical: spacing.xs,
   },
 
   // Scroll Container

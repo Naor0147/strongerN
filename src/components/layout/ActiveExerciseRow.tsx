@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, TextInput } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, cancelAnimation, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import Sortable from 'react-native-sortables';
@@ -27,6 +27,8 @@ export interface ActiveExerciseRowProps {
   inputRefs: any;
   isRpeMode: boolean;
   addSet: (idx: number, unilateral?: boolean) => void;
+  updateExerciseNote?: (exIdx: number, note: string | undefined) => void;
+  onSaveLibraryNote?: (exerciseName: string, note: string | undefined) => void;
 }
 
 export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
@@ -48,10 +50,21 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
   inputRefs,
   isRpeMode,
   addSet,
+  updateExerciseNote,
+  onSaveLibraryNote,
 }) => {
   const enterScale = useSharedValue(0.95);
   const enterOpacity = useSharedValue(0);
   const enterTranslateY = useSharedValue(20);
+
+  const libEx = exercise.name ? exerciseLibraryMap.get(exercise.name.toLowerCase()) : undefined;
+  const initialNote = exercise.note !== undefined ? exercise.note : (libEx?.notes || '');
+  const [localNote, setLocalNote] = useState(initialNote);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+
+  useEffect(() => {
+    setLocalNote(exercise.note !== undefined ? exercise.note : (libEx?.notes || ''));
+  }, [exercise.note, libEx?.notes]);
 
   const hasEnteredRef = useRef(false);
   useEffect(() => {
@@ -150,21 +163,43 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
             </View>
           </View>
 
-          {(() => {
-            const libEx = exercise.name ? exerciseLibraryMap.get(exercise.name.toLowerCase()) : undefined;
-            const noteContent = exercise.note || libEx?.notes;
-            if (noteContent) {
-              return (
-                <View style={styles.notesContainer}>
-                  <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.notesText} testID="exercise-notes-text">
-                    {noteContent}
-                  </Text>
-                </View>
-              );
-            }
-            return null;
-          })()}
+          {/* Inline Exercise Note Editor */}
+          <View style={styles.notesContainer}>
+            <Ionicons name="document-text-outline" size={14} color={colors.accent} />
+            <TextInput
+              style={[styles.notesText, { color: colors.textPrimary, paddingVertical: 0 }]}
+              placeholder="Add exercise note / cue..."
+              placeholderTextColor={colors.textMuted}
+              value={localNote}
+              onChangeText={(val) => {
+                setLocalNote(val);
+                if (updateExerciseNote) {
+                  updateExerciseNote(exIdx, val.trim() || undefined);
+                }
+              }}
+              onFocus={() => setIsEditingNote(true)}
+              onBlur={() => {
+                setIsEditingNote(false);
+                if (updateExerciseNote) {
+                  updateExerciseNote(exIdx, localNote.trim() || undefined);
+                }
+              }}
+              multiline
+              keyboardAppearance="dark"
+              maxLength={150}
+              testID={`exercise-notes-input-${exIdx}`}
+            />
+            {localNote && onSaveLibraryNote && (
+              <Pressable
+                onPress={() => onSaveLibraryNote(exercise.name, localNote.trim() || undefined)}
+                style={({ pressed }) => [{ paddingHorizontal: 6, opacity: pressed ? 0.7 : 1 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Save as default library note"
+              >
+                <Ionicons name="bookmark-outline" size={14} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
 
           {/* Sets Column Headers */}
           <View style={styles.tableHeader}>

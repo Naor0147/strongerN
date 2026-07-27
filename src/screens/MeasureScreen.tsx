@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import { MeasureItem } from '../data/mockData';
 import i18n from '../utils/i18n';
+import { showToast } from '../utils/toast';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import SectionLabel from '../components/ui/SectionLabel';
@@ -239,7 +240,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
         });
       }
       setNewLogValue('');
-      Alert.alert(i18n.t('common.success'), i18n.t('measure.recordedValue', { label: selectedMetric.label }));
+      showToast(i18n.t('measure.recordedValue', { label: selectedMetric.label }), 'success');
     }
   };
 
@@ -252,7 +253,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
       onAddMetric(newMetricLabel.trim(), isNewPrimary);
       setNewMetricLabel('');
       setIsAddModalVisible(false);
-      Alert.alert(i18n.t('common.success'), i18n.t('measure.customMetricAdded', { name: newMetricLabel.trim() }));
+      showToast(i18n.t('measure.customMetricAdded', { name: newMetricLabel.trim() }), 'success');
     }
   };
 
@@ -422,25 +423,39 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                             entry={entry}
                             unit={unit}
                             onDelete={() => {
-                              if (onDeleteMetricLog) {
-                                onDeleteMetricLog(selectedMetric.id, entry.date);
-                                setSelectedMetric(prev => {
-                                  if (!prev) return null;
-                                  const updatedHistory = (prev.history || []).filter(h => h.date !== entry.date);
-                                  let updatedLastValue = undefined;
-                                  if (updatedHistory.length > 0) {
-                                    const latest = updatedHistory[updatedHistory.length - 1];
-                                    const cleaned = prev.lastValue || '';
-                                    const unitStr = cleaned.includes('%') ? '%' : cleaned.includes('kcal') ? ' kcal' : cleaned.includes('cm') ? ' cm' : ' kg';
-                                    updatedLastValue = `${latest.value}${unitStr}`;
+                              Alert.alert(
+                                i18n.t('common.delete'),
+                                i18n.t('extras.confirmDeleteEntry', { defaultValue: 'Are you sure you want to delete this log entry?' }),
+                                [
+                                  { text: i18n.t('common.cancel'), style: 'cancel' },
+                                  {
+                                    text: i18n.t('common.delete'),
+                                    style: 'destructive',
+                                    onPress: () => {
+                                      if (onDeleteMetricLog) {
+                                        onDeleteMetricLog(selectedMetric.id, entry.date);
+                                        setSelectedMetric(prev => {
+                                          if (!prev) return null;
+                                          const updatedHistory = (prev.history || []).filter(h => h.date !== entry.date);
+                                          let updatedLastValue = undefined;
+                                          if (updatedHistory.length > 0) {
+                                            const latest = updatedHistory[updatedHistory.length - 1];
+                                            const cleaned = prev.lastValue || '';
+                                            const unitStr = cleaned.includes('%') ? '%' : cleaned.includes('kcal') ? ' kcal' : cleaned.includes('cm') ? ' cm' : ' kg';
+                                            updatedLastValue = `${latest.value}${unitStr}`;
+                                          }
+                                          return {
+                                            ...prev,
+                                            lastValue: updatedLastValue,
+                                            history: updatedHistory,
+                                          };
+                                        });
+                                        showToast(i18n.t('extras.entryDeleted', { defaultValue: 'Entry deleted' }), 'info');
+                                      }
+                                    }
                                   }
-                                  return {
-                                    ...prev,
-                                    lastValue: updatedLastValue,
-                                    history: updatedHistory,
-                                  };
-                                });
-                              }
+                                ]
+                              );
                             }}
                           />
                         );
