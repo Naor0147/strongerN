@@ -284,10 +284,12 @@ export function useActiveExercisesState({
     setActiveExercises((prev) => {
       const next = [...prev];
       if (next[exIdx]) {
+        const currentEx = next[exIdx];
         next[exIdx] = {
-          ...next[exIdx],
+          ...currentEx,
           note,
-          isNoteLocked: isNoteLocked !== undefined ? isNoteLocked : next[exIdx].isNoteLocked,
+          showNote: currentEx.showNote !== false ? true : false,
+          isNoteLocked: isNoteLocked !== undefined ? isNoteLocked : currentEx.isNoteLocked,
         };
       }
       return next;

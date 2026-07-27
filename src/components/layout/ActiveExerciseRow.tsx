@@ -129,9 +129,11 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
     };
   });
 
-  const isNoteActive = exercise.showNote !== undefined
-    ? exercise.showNote
-    : !!((exercise.note && exercise.note.trim().length > 0) || (libEx?.notes && libEx.notes.trim().length > 0));
+  const isNoteActive = exercise.showNote !== false && (
+    exercise.showNote === true ||
+    (exercise.note !== undefined && exercise.note !== null) ||
+    (libEx?.notes && libEx.notes.trim().length > 0)
+  );
 
   return (
     <Animated.View style={animatedStyle}>
