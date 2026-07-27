@@ -31,8 +31,7 @@ import { I18nManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ProfileSkeleton } from '../components/ui/Skeleton';
 
-const EMPTY_ARRAY: any[] = [];
-const EMPTY_OBJECT: Record<string, any> = {};
+
 import { pickAndReadBackupFile } from '../utils/backupManager';
 import {
   scheduleDailyWorkoutReminders,
@@ -72,6 +71,8 @@ import StatCard     from '../components/ui/StatCard';
 import SectionLabel from '../components/ui/SectionLabel';
 import IconButton   from '../components/ui/IconButton';
 import { styles } from './profileStyles';
+import { EMPTY_ARRAY, EMPTY_OBJECT, formatLastSynced, getInitials, getStartOfWeek, getWeeklyStreak } from './profileUtils';
+
 
 interface ProfileScreenProps {
   isHydrating?:          boolean;
@@ -151,68 +152,7 @@ interface ProfileScreenProps {
 
 }
 
-const formatLastSynced = (isoString: string | null): string => {
-  if (!isoString) return i18n.t('extras.neverBackedUp');
-  const date = new Date(isoString);
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return i18n.t('extras.lastSyncedJustNow');
-  if (diffMins < 60) return i18n.t('extras.lastSyncedAgo', { time: `${diffMins}m` });
-  return i18n.t('extras.lastSyncedDate', { date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) });
-};
 
-function getInitials(name: string): string {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-const getStartOfWeek = (date: Date): Date => {
-  const d = new Date(date);
-  const day = d.getDay();
-  // Get Monday start
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  return start;
-};
-
-const getWeeklyStreak = (sessionsList: any[]): number => {
-  if (!sessionsList || sessionsList.length === 0) return 0;
-  
-  const weekStarts = new Set<number>();
-  sessionsList.forEach(s => {
-    const date = new Date(s.datetime);
-    if (isNaN(date.getTime())) return;
-    const start = getStartOfWeek(date);
-    weekStarts.add(start.getTime());
-  });
-
-  const now = new Date();
-  const currentWeekStart = getStartOfWeek(now).getTime();
-  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
-
-  let streak = 0;
-  let checkWeek = currentWeekStart;
-
-  if (weekStarts.has(currentWeekStart)) {
-    streak = 1;
-    checkWeek = currentWeekStart - oneWeekMs;
-    while (weekStarts.has(checkWeek)) {
-      streak++;
-      checkWeek -= oneWeekMs;
-    }
-  } else {
-    const lastWeekStart = currentWeekStart - oneWeekMs;
-    if (weekStarts.has(lastWeekStart)) {
-      streak = 1;
-      checkWeek = lastWeekStart - oneWeekMs;
-      while (weekStarts.has(checkWeek)) {
-        streak++;
-        checkWeek -= oneWeekMs;
-      }
-    }
-  }
-  return streak;
-};
 
 interface VolumeSliderProps {
   soundVolume: number;
