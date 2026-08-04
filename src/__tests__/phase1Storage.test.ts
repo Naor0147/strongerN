@@ -127,6 +127,14 @@ describe('Phase 1 MMKV V4 Infrastructure & Failure Injection', () => {
       const restored = restoreActiveWorkoutDraft();
       expect(restored?.workoutName).toBe('Payload 2');
     });
+
+    test('uses the latest verified journal slot without re-reading stale slots', () => {
+      saveActiveWorkoutDraft(normalizeActiveWorkoutDraftV2({ draftId: 'd1', workoutName: 'First' }));
+      // The cache is valid only while the durable head still points to it.
+      mockAdapter.setString(STORAGE_KEYS.ACTIVE_DRAFT_HEAD, 'slot_a');
+      saveActiveWorkoutDraft(normalizeActiveWorkoutDraftV2({ draftId: 'd1', workoutName: 'Second' }));
+      expect(restoreActiveWorkoutDraft()?.workoutName).toBe('Second');
+    });
   });
 
   describe('Envelope Validation & Integrity', () => {

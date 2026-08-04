@@ -78,6 +78,11 @@ export function parseAndValidateEnvelope(rawStr: string | null): DraftEnvelope |
 
 type JournalCandidate = { slotName: 'slot_a' | 'slot_b'; env: DraftEnvelope };
 
+// The journal is still re-read whenever its head no longer matches this cache.
+// During a normal workout this avoids repeatedly parsing two potentially large
+// snapshots merely to allocate the next sequence number.
+let latestVerifiedJournal: JournalCandidate | null = null;
+
 function compareCandidates(a: JournalCandidate, b: JournalCandidate, head: string | null): number {
   if (a.env.sequence !== b.env.sequence) return b.env.sequence - a.env.sequence;
   if (a.env.writtenAtMs !== b.env.writtenAtMs) return b.env.writtenAtMs - a.env.writtenAtMs;
@@ -94,6 +99,7 @@ function readJournal(): { head: string | null; candidates: JournalCandidate[] } 
   if (slotAEnv) candidates.push({ slotName: 'slot_a', env: slotAEnv });
   if (slotBEnv) candidates.push({ slotName: 'slot_b', env: slotBEnv });
   candidates.sort((a, b) => compareCandidates(a, b, head));
+  latestVerifiedJournal = candidates[0] ?? null;
   return { head, candidates };
 }
 
@@ -103,6 +109,19 @@ function nextJournalPosition(): {
   targetSlotKey: string;
   targetSlotName: 'slot_a' | 'slot_b';
 } {
+  const cachedHead = mmkvStorageAdapter.getString(STORAGE_KEYS.ACTIVE_DRAFT_HEAD);
+  if (latestVerifiedJournal && cachedHead === latestVerifiedJournal.slotName) {
+    const occupiedSlot = latestVerifiedJournal.slotName;
+    const targetSlotName = occupiedSlot === 'slot_a' ? 'slot_b' : 'slot_a';
+    return {
+      sequence: latestVerifiedJournal.env.sequence + 1,
+      revision: latestVerifiedJournal.env.revision + 1,
+      targetSlotKey: targetSlotName === 'slot_a'
+        ? STORAGE_KEYS.ACTIVE_DRAFT_SLOT_A
+        : STORAGE_KEYS.ACTIVE_DRAFT_SLOT_B,
+      targetSlotName,
+    };
+  }
   const { head, candidates } = readJournal();
   const latest = candidates[0];
   const occupiedSlot = latest?.slotName ?? (head === 'slot_a' || head === 'slot_b' ? head : 'slot_b');
@@ -167,6 +186,7 @@ export function saveActiveWorkoutDraft(draft: ActiveWorkoutDraftV2): boolean {
   if (!readBackEnvelope || readBackEnvelope.sequence !== position.sequence || readBackEnvelope.payloadChecksum !== checksum) {
     throw new DurableStorageUnavailableError(`Read-back verification failed for active workout slot ${position.targetSlotName}`);
   }
+  latestVerifiedJournal = { slotName: position.targetSlotName, env: readBackEnvelope };
 
   // The head is only a hint. The verified slot is already durable and restore scans both.
   try {
@@ -224,6 +244,7 @@ export function clearActiveWorkoutDraft(): boolean {
   if (!verified || verified.kind !== 'tombstone' || verified.sequence !== position.sequence) {
     throw new DurableStorageUnavailableError('Tombstone read-back verification failed');
   }
+  latestVerifiedJournal = { slotName: position.targetSlotName, env: verified };
   try {
     mmkvStorageAdapter.setString(STORAGE_KEYS.ACTIVE_DRAFT_HEAD, position.targetSlotName);
   } catch (error) {
