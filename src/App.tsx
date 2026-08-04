@@ -1562,6 +1562,15 @@ function App() {
   }, [templatesList, exercisesList, sessionsList, user, editingSessionId, workoutName, startTime, workoutExercises]);
 
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
+    if (useActiveWorkoutStore.getState().isWorkoutActive) {
+      Alert.alert(
+        i18n.t('workout.activeWorkoutInProgressTitle'),
+        i18n.t('workout.activeWorkoutInProgressMsg'),
+        [{ text: i18n.t('common.ok'), style: 'cancel' }]
+      );
+      return;
+    }
+
     const workoutStartedAt = new Date();
     const historyIndex = buildExerciseHistoryIndex(sessionsListRef.current);
     const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
@@ -1578,9 +1587,14 @@ function App() {
       }
     }
     
+    // Build O(1) library map for fast exercise lookups
+    const exerciseLibMap = new Map(
+      exercisesListRef.current.map(e => [e.name.toLowerCase().trim(), e])
+    );
+
     // Map exercise names to exercise set objects
     const mappedExercises = exerciseNames.map((exName, index) => {
-      const libraryEx = exercisesListRef.current.find(e => e.name.toLowerCase().trim() === exName.toLowerCase().trim());
+      const libraryEx = exerciseLibMap.get(exName.toLowerCase().trim());
       const isExUnilateral = libraryEx?.isUnilateral || false;
 
       // Find the corresponding detail, preferably by index first, fallback to name lookup

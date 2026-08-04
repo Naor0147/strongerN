@@ -277,6 +277,72 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
   const [exMenuIdx,     setExMenuIdx]     = useState<number | null>(null);
   const [isExMenuVisible, setIsExMenuVisible] = useState(false);
 
+  // Memoized O(1) lookup Map for exercises library
+  const exerciseMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(exercises)) {
+      for (let i = 0; i < exercises.length; i++) {
+        const ex = exercises[i];
+        if (ex && ex.name) {
+          map.set(ex.name.toLowerCase(), ex);
+        }
+      }
+    }
+    return map;
+  }, [exercises]);
+
+  // Fast single-pass helper to derive RoutineExercise array
+  const deriveInitialExercises = useCallback((
+    details?: any[],
+    names?: string[]
+  ): RoutineExercise[] => {
+    const timestamp = Date.now();
+    if (details && details.length > 0) {
+      return details.map((ex, exIdx) => {
+        const libEx = exerciseMap.get(ex.name.toLowerCase());
+        const isUnilateral = libEx?.isUnilateral || false;
+        const sets = (Array.isArray(ex.sets) && ex.sets.length > 0)
+          ? ex.sets.map((s: any, sIdx: number) => ({
+              id: `s-${exIdx}-${sIdx}-${timestamp}`,
+              weight: s.weight ? s.weight.toString() : '0',
+              reps: s.reps ? s.reps.toString() : '10',
+              category: s.category || 'S',
+              isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
+              leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
+              leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
+              rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
+              rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
+            }))
+          : [
+              { id: `s-${exIdx}-0-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${exIdx}-1-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${exIdx}-2-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+            ];
+        return {
+          id: `ex-${exIdx}-${timestamp}`,
+          name: ex.name,
+          notes: ex.notes || libEx?.notes || '',
+          superSetGroupId: ex.superSetGroupId,
+          sets,
+        };
+      });
+    }
+    return (names || []).map((name, idx) => {
+      const libEx = exerciseMap.get(name.toLowerCase());
+      const isUnilateral = libEx?.isUnilateral || false;
+      return {
+        id: `ex-${idx}-${timestamp}`,
+        name,
+        notes: libEx?.notes || '',
+        sets: [
+          { id: `s-${idx}-0-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+          { id: `s-${idx}-1-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+          { id: `s-${idx}-2-${timestamp}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+        ],
+      };
+    });
+  }, [exerciseMap]);
+
   // ── Render-phase prop-change resets (avoids no-adjust-state-on-prop-change) ──
   // When `visible` transitions to true, reset transient state inline so React
   // can batch it with the current render instead of triggering an extra one.
@@ -292,107 +358,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       setIsRoutineSettingsVisible(false);
       setIsDiscardConfirmVisible(false);
 
-      // Compute initial exercises inline (derived entirely from props)
-      let initialComputed: RoutineExercise[] = [];
-      if (initialExercisesDetails && initialExercisesDetails.length > 0) {
-        initialComputed = initialExercisesDetails.map((ex, exIdx) => {
-          const libEx = exercises.find(e => e.name.toLowerCase() === ex.name.toLowerCase());
-          const isUnilateral = libEx?.isUnilateral || false;
-          return {
-            id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
-            name: ex.name,
-            notes: ex.notes || libEx?.notes || '',
-            superSetGroupId: ex.superSetGroupId,
-            sets: (Array.isArray(ex.sets) && ex.sets.length > 0)
-              ? ex.sets.map((s: any, sIdx: number) => ({
-                  id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
-                  weight: s.weight ? s.weight.toString() : '0',
-                  reps: s.reps ? s.reps.toString() : '10',
-                  category: s.category || 'S',
-                  isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
-                  leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
-                  leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
-                  rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
-                  rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
-                }))
-              : [
-                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                ],
-          };
-        });
-      } else {
-        initialComputed = initialExercises.map((name, idx) => {
-          const libEx = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
-          const isUnilateral = libEx?.isUnilateral || false;
-          return {
-            id: `ex-${idx}-${Date.now()}-${Math.random()}`,
-            name,
-            notes: libEx?.notes || '',
-            sets: [
-              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-            ],
-          };
-        });
-      }
+      // Compute initial exercises derived entirely from props & exerciseMap
+      const initialComputed = deriveInitialExercises(initialExercisesDetails, initialExercises);
       setEditorExercises(initialComputed);
-    }
-  }
-
-  // Snapshot initial state and reset animation value whenever modal opens
-  // (state resets are done inline above via prevVisibleRef; only non-state
-  // side-effects live here to satisfy no-adjust-state-on-prop-change)
-  useEffect(() => {
-    if (visible) {
-      // Re-derive exercises to snapshot into initialRef (mirrors render-phase logic)
-      let initialComputed: RoutineExercise[] = [];
-      if (initialExercisesDetails && initialExercisesDetails.length > 0) {
-        initialComputed = initialExercisesDetails.map((ex, exIdx) => {
-          const libEx = exercises.find(e => e.name.toLowerCase() === ex.name.toLowerCase());
-          const isUnilateral = libEx?.isUnilateral || false;
-          return {
-            id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
-            name: ex.name,
-            notes: ex.notes || libEx?.notes || '',
-            superSetGroupId: ex.superSetGroupId,
-            sets: (Array.isArray(ex.sets) && ex.sets.length > 0)
-              ? ex.sets.map((s: any, sIdx: number) => ({
-                  id: `s-${exIdx}-${sIdx}-${Date.now()}-${Math.random()}`,
-                  weight: s.weight ? s.weight.toString() : '0',
-                  reps: s.reps ? s.reps.toString() : '10',
-                  category: s.category || 'S',
-                  isUnilateral: s.isUnilateral !== undefined ? s.isUnilateral : isUnilateral,
-                  leftWeight: s.leftWeight !== undefined ? s.leftWeight.toString() : undefined,
-                  leftReps: s.leftReps !== undefined ? s.leftReps.toString() : undefined,
-                  rightWeight: s.rightWeight !== undefined ? s.rightWeight.toString() : undefined,
-                  rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
-                }))
-              : [
-                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-                ],
-          };
-        });
-      } else {
-        initialComputed = initialExercises.map((name, idx) => {
-          const libEx = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
-          const isUnilateral = libEx?.isUnilateral || false;
-          return {
-            id: `ex-${idx}-${Date.now()}-${Math.random()}`,
-            name,
-            notes: libEx?.notes || '',
-            sets: [
-              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
-            ],
-          };
-        });
-      }
 
       initialRef.current = {
         name: initialName || '',
@@ -413,10 +381,8 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           })),
         }))),
       };
-
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }
 
   const checkHasChanges = () => {
     if (!initialRef.current) return false;
@@ -482,7 +448,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       const next = [...prev];
       const exName = next[exIdx].name;
       const last = next[exIdx].sets[next[exIdx].sets.length - 1];
-      const libEx = exercises.find(e => e.name.toLowerCase() === exName.toLowerCase());
+      const libEx = exerciseMap.get(exName.toLowerCase());
       const isUnilateral = last ? !!last.isUnilateral : (libEx?.isUnilateral || false);
       next[exIdx] = {
         ...next[exIdx],
@@ -629,7 +595,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     setEditorExercises(prev => [
       ...prev,
       ...names.map((name, idx) => {
-        const libEx = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
+        const libEx = exerciseMap.get(name.toLowerCase());
         const isUnilateral = libEx?.isUnilateral || false;
         const expectedSets = Array.from({ length: 3 }).map((_, setIndex) => {
           const expected = resolveLastPerformanceSuggestion(name, 'S', setIndex, sessions, isUnilateral);
@@ -1061,7 +1027,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               }));
 
                               // 2. Update global exercises list mode state
-                              const libEx = exercises.find(e => e.name.toLowerCase() === currentEx.name.toLowerCase());
+                              const libEx = exerciseMap.get(currentEx.name.toLowerCase());
                               if (libEx && onUpdateExercise) {
                                 onUpdateExercise(
                                   libEx.id,
