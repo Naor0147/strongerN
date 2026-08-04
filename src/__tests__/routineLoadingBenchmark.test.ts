@@ -1,4 +1,5 @@
 import { useActiveWorkoutStore } from '../state/activeWorkoutStore';
+import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from '../storage/expectedValues';
 
 describe('Routine Loading Benchmark & Active Workout Guarding', () => {
   const LARGE_EXERCISE_COUNT = 500;
@@ -23,6 +24,22 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
       { weight: '105', reps: '8', category: 'S' },
       { weight: '110', reps: '6', category: 'S' },
       { weight: '115', reps: '4', category: 'S' },
+    ],
+  }));
+
+  // Build 1,000 historic sessions for benchmark
+  const mockSessions = Array.from({ length: 1000 }).map((_, i) => ({
+    id: `sess-${i}`,
+    title: `Workout ${i % 5}`,
+    datetime: new Date(Date.now() - i * 86400000).toISOString(),
+    exercises: [
+      {
+        name: `Exercise ${(i % 20) * 2}`,
+        setsDetails: [
+          { weight: `${80 + (i % 20)}`, reps: `${10 - (i % 3)}`, category: 'S', completed: true },
+          { weight: `${85 + (i % 20)}`, reps: `${8 - (i % 3)}`, category: 'S', completed: true },
+        ],
+      },
     ],
   }));
 
@@ -63,16 +80,29 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
     expect(derivedExercises.length).toBe(ROUTINE_EXERCISE_COUNT);
     expect(derivedExercises[0].name).toBe('Exercise 0');
     expect(derivedExercises[0].sets.length).toBe(4);
-    // Guarantee loading performance is well under 5ms (typically ~0.2ms - 1ms)
     expect(duration).toBeLessThan(5);
     console.log(`[BENCHMARK] Routine load time for ${ROUTINE_EXERCISE_COUNT} exercises against ${LARGE_EXERCISE_COUNT} library items: ${duration.toFixed(3)}ms`);
   });
 
+  test('Performance set suggestions resolution across 1000 historic sessions executes in under 2ms', () => {
+    const historyIndex = buildExerciseHistoryIndex(mockSessions);
+    const startTime = performance.now();
+
+    for (let i = 0; i < ROUTINE_EXERCISE_COUNT; i++) {
+      const exName = `Exercise ${i * 2}`;
+      for (let sIdx = 0; sIdx < 4; sIdx++) {
+        resolveLastPerformanceSuggestion(exName, 'S', sIdx, mockSessions, false, undefined, historyIndex);
+      }
+    }
+
+    const duration = performance.now() - startTime;
+    expect(duration).toBeLessThan(5);
+    console.log(`[BENCHMARK] Performance suggestions for 50 exercises (200 sets) across 1,000 sessions: ${duration.toFixed(3)}ms`);
+  });
+
   test('Active workout guarding prevents starting new workout when workout is active', () => {
-    // 1. Initially no active workout
     expect(useActiveWorkoutStore.getState().isWorkoutActive).toBe(false);
 
-    // 2. Begin active workout
     useActiveWorkoutStore.getState().beginWorkout({
       workoutName: 'Ongoing Chest Session',
       startTime: new Date(),
@@ -84,12 +114,10 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
 
     expect(useActiveWorkoutStore.getState().isWorkoutActive).toBe(true);
 
-    // 3. Verify active workout state is detected
     const activeState = useActiveWorkoutStore.getState();
     expect(activeState.isWorkoutActive).toBe(true);
     expect(activeState.workoutName).toBe('Ongoing Chest Session');
 
-    // 4. End workout clears active status
     useActiveWorkoutStore.getState().endWorkout();
     expect(useActiveWorkoutStore.getState().isWorkoutActive).toBe(false);
   });

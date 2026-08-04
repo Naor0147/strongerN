@@ -48,19 +48,21 @@ export function buildExerciseHistoryIndex(sessions: any[] | null | undefined): M
   return index;
 }
 
+function isNonEmptyNumber(value: unknown): boolean {
+  if (value === null || value === undefined || value === '') return false;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0;
+}
+
 function hasUsablePerformance(set: any, isUnilateral: boolean): boolean {
-  const hasNumber = (value: unknown) => {
-    if (value === null || value === undefined || value === '') return false;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0;
-  };
+  if (!set) return false;
   if (isUnilateral) {
-    return hasNumber(set?.leftWeight ?? set?.weight ?? set?.weightKg)
-      && hasNumber(set?.leftReps ?? set?.reps)
-      && hasNumber(set?.rightWeight ?? set?.weight ?? set?.weightKg)
-      && hasNumber(set?.rightReps ?? set?.reps);
+    return isNonEmptyNumber(set.leftWeight ?? set.weight ?? set.weightKg)
+      && isNonEmptyNumber(set.leftReps ?? set.reps)
+      && isNonEmptyNumber(set.rightWeight ?? set.weight ?? set.weightKg)
+      && isNonEmptyNumber(set.rightReps ?? set.reps);
   }
-  return hasNumber(set?.weight ?? set?.weightKg) && hasNumber(set?.reps);
+  return isNonEmptyNumber(set.weight ?? set.weightKg) && isNonEmptyNumber(set.reps);
 }
 
 export function resolveLastPerformanceSuggestion(
@@ -76,46 +78,43 @@ export function resolveLastPerformanceSuggestion(
   if (!exerciseKey) return zeroSuggestion();
 
   const mapped = sessionsMap?.get(exerciseKey);
-  const isIndexedLookup = Array.isArray(mapped) && mapped.length > 0;
-  const source: any[] = isIndexedLookup && mapped ? mapped : (sessions ?? []);
-  const candidates = source
-    .map((entry: any) => {
-      if (entry?.ex) return { session: entry, exercise: entry.ex, timestamp: sessionTimestamp(entry) };
-      const exercise = Array.isArray(entry?.exercises)
-        ? entry.exercises.find((item: any) => normalized(item?.name) === exerciseKey)
-        : null;
-      return { session: entry, exercise, timestamp: sessionTimestamp(entry) };
-    })
-    .filter(({ exercise }: any) => {
-      if (!exercise || normalized(exercise.name) !== exerciseKey) return false;
-      if (targetVariation !== undefined
-        && normalized(exercise.variation ?? exercise.variationKey) !== normalized(targetVariation)) return false;
-      const rawSets = Array.isArray(exercise.setsDetails)
-        ? exercise.setsDetails
-        : Array.isArray(exercise.sets) ? exercise.sets : [];
-      return rawSets.some((set: any) => set?.completed !== false
-        && (set?.category ?? 'S') === category
-        && hasUsablePerformance(set, isUnilateral));
-    });
-
-  if (!isIndexedLookup) {
-    candidates.sort((a: any, b: any) => b.timestamp - a.timestamp);
-  }
-
+  const isIndexedLookup = Boolean(sessionsMap);
+  const source: any[] = sessionsMap ? (mapped ?? []) : (sessions ?? []);
+  const normTargetVar = targetVariation !== undefined ? normalized(targetVariation) : undefined;
   const ordinal = Math.max(0, Math.trunc(positionInCategory));
+
   let historicalSet: any = null;
-  for (const candidate of candidates) {
-    const rawSets = Array.isArray(candidate.exercise.setsDetails)
-      ? candidate.exercise.setsDetails
-      : Array.isArray(candidate.exercise.sets) ? candidate.exercise.sets : [];
-    const matchingSets = rawSets.filter((set: any) => set?.completed !== false
-      && (set?.category ?? 'S') === category
-      && hasUsablePerformance(set, isUnilateral));
+
+  for (let i = 0; i < source.length; i++) {
+    const entry = source[i];
+    const exercise = isIndexedLookup
+      ? entry?.ex
+      : (Array.isArray(entry?.exercises)
+          ? entry.exercises.find((item: any) => normalized(item?.name) === exerciseKey)
+          : null);
+
+    if (!exercise) continue;
+    if (!isIndexedLookup && normalized(exercise.name) !== exerciseKey) continue;
+    if (normTargetVar !== undefined && normalized(exercise.variation ?? exercise.variationKey) !== normTargetVar) continue;
+
+    const rawSets = Array.isArray(exercise.setsDetails)
+      ? exercise.setsDetails
+      : Array.isArray(exercise.sets) ? exercise.sets : [];
+
+    const matchingSets: any[] = [];
+    for (let sIdx = 0; sIdx < rawSets.length; sIdx++) {
+      const set = rawSets[sIdx];
+      if (set?.completed !== false && (set?.category ?? 'S') === category && hasUsablePerformance(set, isUnilateral)) {
+        matchingSets.push(set);
+      }
+    }
+
     if (matchingSets.length > 0) {
       historicalSet = matchingSets[Math.min(ordinal, matchingSets.length - 1)];
       break;
     }
   }
+
   if (!historicalSet) return zeroSuggestion();
 
   const weight = exactNumericString(historicalSet.weight ?? historicalSet.weightKg);

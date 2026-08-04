@@ -1655,12 +1655,17 @@ function App() {
       let bestReps = 0;
       let sets: any = 3;
 
-      const varSessions = getSessionsForExerciseVariation(exName, targetVariation, libraryEx, sessionsListRef.current);
-      const previousSession = varSessions.length > 0 ? varSessions[0] : null;
-      if (previousSession) {
-        const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
-        if (found) {
-          sets = typeof found.sets === 'number' ? found.sets : (Array.isArray(found.sets) ? (found.sets as any[]).length : 3);
+      const histEntries = historyIndex.get(exName.toLowerCase().trim());
+      if (histEntries && histEntries.length > 0) {
+        const prevEx = histEntries[0]?.ex;
+        if (prevEx) {
+          if (typeof prevEx.sets === 'number') {
+            sets = prevEx.sets;
+          } else if (Array.isArray(prevEx.setsDetails)) {
+            sets = prevEx.setsDetails.length;
+          } else if (Array.isArray(prevEx.sets)) {
+            sets = (prevEx.sets as any[]).length;
+          }
         }
       }
       const setCount = typeof sets === 'number' ? Math.max(1, sets) : 3;
