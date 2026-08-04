@@ -23,6 +23,11 @@ import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { useActiveWorkoutStore } from './state/activeWorkoutStore';
+import { bootstrapPersistence } from './storage/persistenceBootstrap';
+import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
+import { reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
+import { resolveLastPerformanceSuggestion } from './storage/expectedValues';
 // generateWorkoutInsights import removed (completion insights feature removed)
 
 // Screens — Auth
@@ -319,7 +324,8 @@ function App() {
   const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
   const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
 
-  const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
+  const editingSessionId = useActiveWorkoutStore(state => state.editingSessionId);
+  const setEditingSessionId = useActiveWorkoutStore(state => state.setEditingSessionId);
   const [isRpeMode, setIsRpeMode] = React.useState(true); // true = RPE, false = RIR
   const exerciseNameLanguage = i18n.locale.startsWith('he') ? 'he' as const : 'en' as const;
 
@@ -338,6 +344,7 @@ function App() {
   const [showWorkoutsChart, setShowWorkoutsChart] = React.useState(true);
   const [showHighlights, setShowHighlights] = React.useState(false);
   const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(false);
+  const historyRepositoryReadyRef = React.useRef(false);
 
 
   // Dynamically calculate weekly chart data based on sessionsList (Monday start to match getWeeklyStreak)
@@ -389,6 +396,9 @@ function App() {
             }
           }
           const parsed = await loadFromDb(STORAGE_KEY);
+          const legacyActiveWorkout = await loadFromDb('strongern_active_workout_state');
+          const persistence = await bootstrapPersistence(parsed, legacyActiveWorkout);
+          historyRepositoryReadyRef.current = persistence.historyReady;
           if (parsed) {
             if (parsed.user) {
               const currentAuth = await loadAuthState();
@@ -402,7 +412,9 @@ function App() {
                 avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
               }));
             }
-            if (parsed.sessionsList) {
+            if (persistence.historyReady) {
+              setSessionsList(persistence.sessions.map(sessionV2ToLegacy));
+            } else if (parsed.sessionsList) {
               setSessionsList(parsed.sessionsList.map((s: any) => ({
                 ...s,
                 datetime: new Date(s.datetime)
@@ -492,59 +504,8 @@ function App() {
             applyTheme('default', '#4F8EF7', parsedOverrides);
           }
 
-          // Restore active workout state from DB (cross-platform)
-          try {
-            const savedWorkout = await loadFromDb('strongern_active_workout_state');
-            console.log('[RESTORE] Loaded workout state:', savedWorkout ? 'found' : 'not found');
-            if (savedWorkout && (savedWorkout.isWorkoutActive !== false) && (savedWorkout.workoutName || savedWorkout.startTime)) {
-              console.log('[RESTORE] Restoring workout state, exercises count:', savedWorkout.workoutExercises?.length ?? 0);
-              const restoredExercises = Array.isArray(savedWorkout.workoutExercises)
-                ? savedWorkout.workoutExercises
-                    .filter((ex: any) => Boolean(ex && ex.name && typeof ex.name === 'string' && ex.name.trim().length > 0))
-                    .map((ex: any) => ({
-                      ...ex,
-                      variation: ex.variation || undefined,
-                      setsDetails: Array.isArray(ex.setsDetails) ? ex.setsDetails : [],
-                    }))
-                : [];
-
-              isWorkoutActiveRef.current = true;
-              setIsWorkoutActive(true);
-
-              if (savedWorkout.workoutName) {
-                workoutNameRef.current = savedWorkout.workoutName;
-                setWorkoutName(savedWorkout.workoutName);
-              }
-              if (savedWorkout.startTime) {
-                const st = new Date(savedWorkout.startTime);
-                startTimeRef.current = st;
-                setStartTime(st);
-              }
-              setWorkoutExercisesAndRef(restoredExercises);
-
-              if (savedWorkout.isWorkoutModalVisible !== undefined) {
-                isWorkoutModalVisibleRef.current = savedWorkout.isWorkoutModalVisible;
-                setIsWorkoutModalVisible(savedWorkout.isWorkoutModalVisible);
-              } else {
-                isWorkoutModalVisibleRef.current = true;
-                setIsWorkoutModalVisible(true);
-              }
-
-              if (savedWorkout.comment !== undefined) {
-                activeWorkoutCommentRef.current = savedWorkout.comment || '';
-                setActiveWorkoutComment(savedWorkout.comment || '');
-              }
-              activeWorkoutStateSavedRef.current = true;
-            } else {
-              console.log('[RESTORE] No active workout found in saved state');
-              isWorkoutActiveRef.current = false;
-              setIsWorkoutActive(false);
-              isWorkoutModalVisibleRef.current = false;
-              setIsWorkoutModalVisible(false);
-            }
-          } catch (e) {
-            console.warn('Error restoring active workout state', e);
-          }
+          useActiveWorkoutStore.getState().hydrate(persistence.activeDraft);
+          activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
           setIsWorkoutRestored(true);
         }
       } catch (e) {
@@ -639,6 +600,25 @@ function App() {
       console.warn('Error queuing state save to database', e);
     }
   }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isRpeMode, appTheme, customAccentColor, isDataLoaded]);
+
+  const historyReconcileTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  React.useEffect(() => {
+    if (!isDataLoaded || !historyRepositoryReadyRef.current) return;
+    if (historyReconcileTimerRef.current) clearTimeout(historyReconcileTimerRef.current);
+    historyReconcileTimerRef.current = setTimeout(() => {
+      const normalized = sessionsList.map((session, index) => legacySessionToV2(session, index));
+      reconcileSessions(normalized).catch((error) => {
+        console.error('[HistoryRepository] Background reconciliation failed:', error);
+      });
+      historyReconcileTimerRef.current = null;
+    }, 250);
+    return () => {
+      if (historyReconcileTimerRef.current) {
+        clearTimeout(historyReconcileTimerRef.current);
+        historyReconcileTimerRef.current = null;
+      }
+    };
+  }, [isDataLoaded, sessionsList]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -1507,12 +1487,19 @@ function App() {
 
 
   // Active workout management states
-  const [isWorkoutActive, setIsWorkoutActive] = React.useState(false);
-  const [workoutName, setWorkoutName] = React.useState("");
-  const [startTime, setStartTime] = React.useState<Date>(() => new Date());
-  const [workoutExercises, setWorkoutExercises] = React.useState<any[]>([]);
-  const [isWorkoutModalVisible, setIsWorkoutModalVisible] = React.useState(false);
-  const [activeWorkoutComment, setActiveWorkoutComment] = React.useState("");
+  const isWorkoutActive = useActiveWorkoutStore(state => state.isWorkoutActive);
+  const workoutName = useActiveWorkoutStore(state => state.workoutName);
+  const startTime = useActiveWorkoutStore(state => state.startTime);
+  const workoutExercises = useActiveWorkoutStore(state => state.workoutExercises);
+  const isWorkoutModalVisible = useActiveWorkoutStore(state => state.isWorkoutModalVisible);
+  const activeWorkoutComment = useActiveWorkoutStore(state => state.activeWorkoutComment);
+  const beginActiveWorkout = useActiveWorkoutStore(state => state.beginWorkout);
+  const endActiveWorkout = useActiveWorkoutStore(state => state.endWorkout);
+  const setWorkoutName = useActiveWorkoutStore(state => state.setWorkoutName);
+  const setStartTime = useActiveWorkoutStore(state => state.setStartTime);
+  const setWorkoutExercises = useActiveWorkoutStore(state => state.setWorkoutExercises);
+  const setIsWorkoutModalVisible = useActiveWorkoutStore(state => state.setWorkoutModalVisible);
+  const setActiveWorkoutComment = useActiveWorkoutStore(state => state.setActiveWorkoutComment);
   const [completionData, setCompletionData] = React.useState<{
     totalVolume: number;
     totalSets: number;
@@ -1561,7 +1548,7 @@ function App() {
     if (isWorkoutActiveRef.current && saveActiveWorkoutStateRef.current) {
       saveActiveWorkoutStateRef.current(false);
     }
-  }, []);
+  }, [setWorkoutExercises]);
 
   React.useEffect(() => {
     templatesListRef.current = templatesList;
@@ -1575,11 +1562,9 @@ function App() {
   }, [templatesList, exercisesList, sessionsList, user, editingSessionId, workoutName, startTime, workoutExercises]);
 
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
-    setWorkoutName(name);
-    setStartTime(new Date());
-    
+    const workoutStartedAt = new Date();
     const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
-    setActiveWorkoutComment(matchingTemplate?.notes || '');
+    const initialComment = matchingTemplate?.notes || '';
     if (matchingTemplate && matchingTemplate.defaultRestDuration !== undefined) {
       setDefaultRestDuration(matchingTemplate.defaultRestDuration);
     }
@@ -1605,32 +1590,51 @@ function App() {
       const targetVariation = detail?.variation;
 
       if (detail && detail.sets && detail.sets.length > 0) {
+        const categoryOrdinals: Record<string, number> = {};
+        const setsDetails = detail.sets.map((s: any) => {
+          const unilateral = s.isUnilateral || isExUnilateral;
+          const category = s.category || 'S';
+          const ordinal = categoryOrdinals[category] ?? 0;
+          categoryOrdinals[category] = ordinal + 1;
+          const expected = resolveLastPerformanceSuggestion(
+            exName,
+            category,
+            ordinal,
+            sessionsListRef.current,
+            unilateral,
+            targetVariation
+          );
+          return {
+            weight: expected.weight,
+            reps: expected.reps,
+            suggestedWeight: expected.weight,
+            suggestedReps: expected.reps,
+            completed: false,
+            category,
+            isUnilateral: unilateral,
+            leftWeight: unilateral ? expected.leftWeight : undefined,
+            leftReps: unilateral ? expected.leftReps : undefined,
+            rightWeight: unilateral ? expected.rightWeight : undefined,
+            rightReps: unilateral ? expected.rightReps : undefined,
+            suggestedLeftWeight: unilateral ? expected.leftWeight : undefined,
+            suggestedLeftReps: unilateral ? expected.leftReps : undefined,
+            suggestedRightWeight: unilateral ? expected.rightWeight : undefined,
+            suggestedRightReps: unilateral ? expected.rightReps : undefined,
+          };
+        });
         return {
           name: exName,
           variation: targetVariation,
           sets: detail.sets.length,
-          bestWeight: 60,
-          bestReps: 10,
+          bestWeight: Number(setsDetails[0]?.weight ?? 0),
+          bestReps: Number(setsDetails[0]?.reps ?? 0),
           superSetGroupId: detail.superSetGroupId,
-          setsDetails: detail.sets.map((s: any) => {
-            const unilateral = s.isUnilateral || isExUnilateral;
-            return {
-              weight: (s.weight ?? '0').toString(),
-              reps: (s.reps ?? '10').toString(),
-              completed: false,
-              category: s.category || 'S',
-              isUnilateral: unilateral,
-              leftWeight: unilateral ? (s.leftWeight !== undefined ? s.leftWeight.toString() : (s.weight ?? '60').toString()) : undefined,
-              leftReps: unilateral ? (s.leftReps !== undefined ? s.leftReps.toString() : (s.reps ?? '10').toString()) : undefined,
-              rightWeight: unilateral ? (s.rightWeight !== undefined ? s.rightWeight.toString() : (s.weight ?? '60').toString()) : undefined,
-              rightReps: unilateral ? (s.rightReps !== undefined ? s.rightReps.toString() : (s.reps ?? '10').toString()) : undefined,
-            };
-          }),
+          setsDetails,
         };
       }
 
-      let bestWeight = 60;
-      let bestReps = 10;
+      let bestWeight = 0;
+      let bestReps = 0;
       let sets: any = 3;
 
       const varSessions = getSessionsForExerciseVariation(exName, targetVariation, libraryEx, sessionsListRef.current);
@@ -1638,11 +1642,39 @@ function App() {
       if (previousSession) {
         const found = previousSession.exercises.find((e: any) => e.name && e.name.toLowerCase().trim() === exName.toLowerCase().trim());
         if (found) {
-          bestWeight = found.bestWeight || 60;
-          bestReps = found.bestReps || 10;
           sets = typeof found.sets === 'number' ? found.sets : (Array.isArray(found.sets) ? (found.sets as any[]).length : 3);
         }
       }
+      const setCount = typeof sets === 'number' ? Math.max(1, sets) : 3;
+      const expectedSets = Array.from({ length: setCount }).map((_, setIndex) => {
+        const expected = resolveLastPerformanceSuggestion(
+          exName,
+          'S',
+          setIndex,
+          sessionsListRef.current,
+          isExUnilateral,
+          targetVariation
+        );
+        return {
+          weight: expected.weight,
+          reps: expected.reps,
+          suggestedWeight: expected.weight,
+          suggestedReps: expected.reps,
+          completed: false,
+          category: 'S' as const,
+          isUnilateral: isExUnilateral,
+          leftWeight: isExUnilateral ? expected.leftWeight : undefined,
+          leftReps: isExUnilateral ? expected.leftReps : undefined,
+          rightWeight: isExUnilateral ? expected.rightWeight : undefined,
+          rightReps: isExUnilateral ? expected.rightReps : undefined,
+          suggestedLeftWeight: isExUnilateral ? expected.leftWeight : undefined,
+          suggestedLeftReps: isExUnilateral ? expected.leftReps : undefined,
+          suggestedRightWeight: isExUnilateral ? expected.rightWeight : undefined,
+          suggestedRightReps: isExUnilateral ? expected.rightReps : undefined,
+        };
+      });
+      bestWeight = Number(expectedSets[0]?.weight ?? 0);
+      bestReps = Number(expectedSets[0]?.reps ?? 0);
       
       return {
         name: exName,
@@ -1650,22 +1682,11 @@ function App() {
         sets,
         bestWeight,
         bestReps,
-        setsDetails: Array.from({ length: typeof sets === 'number' ? sets : 3 }).map(() => ({
-          weight: bestWeight.toString(),
-          reps: bestReps.toString(),
-          completed: false,
-          category: 'S' as const,
-          isUnilateral: isExUnilateral,
-          leftWeight: isExUnilateral ? bestWeight.toString() : undefined,
-          leftReps: isExUnilateral ? bestReps.toString() : undefined,
-          rightWeight: isExUnilateral ? bestWeight.toString() : undefined,
-          rightReps: isExUnilateral ? bestReps.toString() : undefined,
-        })),
+        setsDetails: expectedSets,
       };
     });
 
     console.log('[START WORKOUT] Creating', mappedExercises.length, 'exercises');
-    setWorkoutExercisesAndRef(mappedExercises.length > 0 ? mappedExercises : []);
 
     // Phase C: Update lastUsed on the matching template when the workout starts
     if (name && name !== i18n.t('extras.emptyWorkout')) {
@@ -1676,9 +1697,15 @@ function App() {
       ));
     }
 
-    setIsWorkoutActive(true);
-    setIsWorkoutModalVisible(true);
-  }, [setWorkoutExercisesAndRef]);
+    beginActiveWorkout({
+      workoutName: name,
+      startTime: workoutStartedAt,
+      workoutExercises: mappedExercises.length > 0 ? mappedExercises : [],
+      isWorkoutModalVisible: true,
+      activeWorkoutComment: initialComment,
+      editingSessionId: null,
+    });
+  }, [beginActiveWorkout]);
 
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
@@ -1689,15 +1716,14 @@ function App() {
       return;
     }
 
-    setEditingSessionId(session.id);
-    setWorkoutName(session.title);
-    setStartTime(new Date(session.datetime));
-    setActiveWorkoutComment(session.comment || '');
-
     // Map session exercises back to active workout exercises structure
     const mapped = session.exercises.map((ex: any) => {
       return {
+        id: ex.id,
         name: ex.name,
+        variation: ex.variation,
+        superSetGroupId: ex.superSetGroupId,
+        note: ex.note,
         sets: ex.setsDetails?.length || ex.sets || 3,
         bestWeight: ex.bestWeight,
         bestReps: ex.bestReps,
@@ -1705,21 +1731,28 @@ function App() {
       };
     });
 
-    setWorkoutExercisesAndRef(mapped);
-    setIsWorkoutActive(true);
-    setIsWorkoutModalVisible(true);
+    beginActiveWorkout({
+      workoutName: session.title,
+      startTime: new Date(session.datetime),
+      workoutExercises: mapped,
+      isWorkoutModalVisible: true,
+      activeWorkoutComment: session.comment || '',
+      editingSessionId: session.id,
+    });
   };
 
   const handleDiscardWorkout = React.useCallback(() => {
-    setIsWorkoutActive(false);
-    setIsWorkoutModalVisible(false);
-    setWorkoutExercisesAndRef([]);
-    setWorkoutName('Active Workout');
-    setEditingSessionId(null);
-    setActiveWorkoutComment('');
-  }, []);
+    try {
+      endActiveWorkout();
+      deleteFromDb('strongern_active_workout_state').catch(() => {});
+      activeWorkoutStateSavedRef.current = false;
+    } catch (error) {
+      console.error('[Persistence] Refusing to discard an un-tombstoned active workout:', error);
+      Alert.alert(i18n.t('common.error'), 'The workout could not be safely discarded. Please try again.');
+    }
+  }, [endActiveWorkout]);
 
-  const handleFinishWorkout = React.useCallback((summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => {
+  const handleFinishWorkout = React.useCallback(async (summary: { totalVolume: number; totalSets: number; durationMin: number; comment?: string }) => {
     if (summary.totalSets === 0) {
       handleDiscardWorkout();
       return;
@@ -1799,7 +1832,6 @@ function App() {
         }
         return s;
       });
-      setEditingSessionId(null);
     } else {
       const newSession = {
         id: `session-new-${Date.now()}`,
@@ -1815,6 +1847,24 @@ function App() {
       nextUser.totalWorkouts = updatedSessions.length;
     }
 
+    const durableSession = editingSessionIdRef.current
+      ? updatedSessions.find((session: any) => session.id === editingSessionIdRef.current)
+      : updatedSessions[0];
+    try {
+      if (durableSession && historyRepositoryReadyRef.current) {
+        await upsertSession(legacySessionToV2(durableSession));
+      } else {
+        await saveToDb(STORAGE_KEY, { ...latestAppDataRef.current, sessionsList: updatedSessions });
+      }
+      endActiveWorkout();
+      deleteFromDb('strongern_active_workout_state').catch(() => {});
+      activeWorkoutStateSavedRef.current = false;
+    } catch (error) {
+      console.error('[Persistence] Workout finish transaction failed; active draft retained.', error);
+      Alert.alert(i18n.t('common.error'), 'Your workout is still safely stored, but finishing it failed. Please try again.');
+      return;
+    }
+
     setSessionsList(updatedSessions);
     setUser(nextUser);
     
@@ -1828,10 +1878,7 @@ function App() {
       name: workoutNameRef.current,
     });
 
-    setIsWorkoutActive(false);
-    setIsWorkoutModalVisible(false);
-    setActiveWorkoutComment('');
-  }, [handleDiscardWorkout]);
+  }, [handleDiscardWorkout, endActiveWorkout]);
 
   const handleCloseWorkoutModal = React.useCallback(() => {
     setIsWorkoutModalVisible(false);
@@ -1850,8 +1897,19 @@ function App() {
 
   // Phase A1: Removed nested setState (was crashing React 19 concurrent renderer).
   // totalWorkouts is now kept in sync via a separate useEffect below.
-  const handleDeleteSession = React.useCallback((sessionId: string) => {
-    setSessionsList(prev => prev.filter(s => s.id !== sessionId));
+  const handleDeleteSession = React.useCallback(async (sessionId: string) => {
+    try {
+      const nextSessions = sessionsListRef.current.filter(s => s.id !== sessionId);
+      if (historyRepositoryReadyRef.current) {
+        await softDeleteSession(sessionId);
+      } else {
+        await saveToDb(STORAGE_KEY, { ...latestAppDataRef.current, sessionsList: nextSessions });
+      }
+      setSessionsList(nextSessions);
+    } catch (error) {
+      console.error('[HistoryRepository] Refusing non-durable history deletion:', error);
+      Alert.alert(i18n.t('common.error'), 'The workout could not be safely deleted. Please try again.');
+    }
   }, []);
 
   // Keep totalWorkouts derived from sessionsList length (avoids nested setState crash)
@@ -2139,17 +2197,16 @@ function App() {
   const handleWorkoutCrashRecovery = React.useCallback(() => {
     console.warn('[RECOVERY] Resetting active workout state after ErrorBoundary caught crash');
     try {
+      endActiveWorkout();
       deleteFromDb('strongern_active_workout_state');
     } catch (e) {
-      console.error('Error deleting corrupt active workout state:', e);
+      console.error('Error tombstoning corrupt active workout state:', e);
+      return;
     }
-    setWorkoutExercisesAndRef([]);
     isWorkoutActiveRef.current = false;
-    setIsWorkoutActive(false);
     isWorkoutModalVisibleRef.current = false;
-    setIsWorkoutModalVisible(false);
     activeWorkoutStateSavedRef.current = false;
-  }, [setWorkoutExercisesAndRef]);
+  }, [endActiveWorkout]);
 
   // Show login/onboarding if not yet completed
   return (

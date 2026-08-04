@@ -13,7 +13,16 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -121,16 +130,17 @@ const HistorySkeletonList: React.FC = React.memo(() => {
   const opacity = useSharedValue(0.35);
 
   React.useEffect(() => {
-    const start = () => {
-      opacity.value = withTiming(0.75, { duration: 650 }, (finished) => {
-        if (finished)
-          opacity.value = withTiming(0.35, { duration: 650 }, (f2) => {
-            if (f2) start();
-          });
-      });
-    };
-    start();
-  }, []);
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.75, { duration: 650 }),
+        withTiming(0.35, { duration: 650 }),
+      ),
+      -1,
+      false,
+    );
+
+    return () => cancelAnimation(opacity);
+  }, [opacity]);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 

@@ -73,7 +73,7 @@ import { styles } from './activeWorkoutStyles';
 
 
 import { SetSuggestion, SetRecord, ActiveExercise, ActiveWorkoutModalProps } from './activeWorkoutTypes';
-import { safeLayoutAnim, WebSafeAlert, EMPTY_ARRAY, EMPTY_OBJECT, formatElapsed, getBestPerformanceSuggestionForSet, getPreviousSessionSetSuggestion, serializeState, sanitizeSuperSets } from './activeWorkoutUtils';
+import { safeLayoutAnim, WebSafeAlert, EMPTY_ARRAY, EMPTY_OBJECT, formatElapsed, getBestPerformanceSuggestionForSet, getPreviousSessionSetSuggestion, mapActiveExercisesToLegacy, serializeState, sanitizeSuperSets } from './activeWorkoutUtils';
 import { restTimerEmitter, RestTimerEmitter } from './restTimerEmitter';
 import { AnimatedCheckmark } from './AnimatedCheckmark';
 import { RestTimerHeaderButton, RestTimerRulerContainer } from './RestTimerHeaderControls';
@@ -230,6 +230,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [isExMenuVisible, setIsExMenuVisible] = useState(false);
   const [isExerciseInsightsVisible, setIsExerciseInsightsVisible] = useState(false);
   const [isReplaceMode, setIsReplaceMode] = useState(false);
+  const commitActiveExercisesToParent = useCallback((nextExercises: ActiveExercise[]) => {
+    if (onUpdateActiveExercises) {
+      onUpdateActiveExercises(mapActiveExercisesToLegacy(nextExercises));
+    }
+  }, [onUpdateActiveExercises]);
 
   const {
     activeExercises,
@@ -271,6 +276,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setActiveExerciseMenuIndex,
     isReplaceMode,
     onUpdateExerciseNotes,
+    onActiveExercisesCommit: commitActiveExercisesToParent,
   });
 
   const handleCloseKeyboard = useCallback(() => {
@@ -648,7 +654,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const existingDetails = ex.setsDetails;
           if (existingDetails && existingDetails.length > 0) {
             return {
-              id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
+              id: (ex as any).id || `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
               note: (ex as any).note,
               variation: (ex as any).variation,
@@ -700,7 +706,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 }
 
                 return {
-                  id:           `set-${exIdx}-${sIdx}-${Date.now()}`,
+                  id:           s.id || `set-${exIdx}-${sIdx}-${Date.now()}`,
                   weight:       s.weight !== undefined && s.weight !== null ? s.weight.toString() : '',
                   reps:         s.reps !== undefined && s.reps !== null ? s.reps.toString() : '',
                   completed:    completed,
@@ -724,7 +730,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           }
  
            return {
-             id: `ex-${exIdx}-${Date.now()}-${Math.random()}`,
+             id: (ex as any).id || `ex-${exIdx}-${Date.now()}-${Math.random()}`,
              name: ex.name,
              note: (ex as any).note,
              variation: (ex as any).variation,
@@ -738,7 +744,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                  console.warn('[ActiveWorkout] Error getting previous set suggestion:', err);
                }
                return {
-                 id:        `set-${exIdx}-${setIdx}-${Date.now()}`,
+                 id:        (ex.setsDetails?.[setIdx] as any)?.id || `set-${exIdx}-${setIdx}-${Date.now()}`,
                  weight:    '',
                  reps:      '',
                  completed: false,
@@ -781,58 +787,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (debounceSyncRef.current) {
       clearTimeout(debounceSyncRef.current);
     }
-    if (onUpdateActiveExercises) {
-      const mapped = exs.map(ex => {
-        const completedSets = ex.sets.filter(s => s.completed);
-        const allWeights = completedSets.flatMap(s => {
-          if (s.isUnilateral) {
-            return [parseFloat(s.leftWeight || s.weight) || 0, parseFloat(s.rightWeight || s.weight) || 0];
-          }
-          return [parseFloat(s.weight) || 0];
-        });
-        const allReps = completedSets.flatMap(s => {
-          if (s.isUnilateral) {
-            return [parseInt(s.leftReps || s.reps, 10) || 0, parseInt(s.rightReps || s.reps, 10) || 0];
-          }
-          return [parseInt(s.reps, 10) || 0];
-        });
-        return {
-          name: ex.name,
-          note: ex.note,
-          variation: ex.variation,
-          sets: ex.sets.length,
-          bestWeight: allWeights.length > 0 ? Math.max(...allWeights, 0) : 0,
-          bestReps: allReps.length > 0 ? Math.max(...allReps, 0) : 0,
-          superSetGroupId: ex.superSetGroupId,
-          setsDetails: ex.sets.map(s => ({
-            weight: s.weight !== undefined ? s.weight : '',
-            reps: s.reps !== undefined ? s.reps : '',
-            suggestedWeight: (s as any).suggestedWeight,
-            suggestedReps: (s as any).suggestedReps,
-            completed: s.completed,
-            rpe: s.rpe ? s.rpe : undefined,
-            category: s.category || 'S',
-            isUnilateral: s.isUnilateral || false,
-            leftWeight: s.leftWeight !== undefined ? s.leftWeight : undefined,
-            leftReps: s.leftReps !== undefined ? s.leftReps : undefined,
-            rightWeight: s.rightWeight !== undefined ? s.rightWeight : undefined,
-            rightReps: s.rightReps !== undefined ? s.rightReps : undefined,
-          })),
-        };
-      });
-      onUpdateActiveExercises(mapped);
-    }
-  }, [onUpdateActiveExercises]);
+    commitActiveExercisesToParent(exs);
+  }, [commitActiveExercisesToParent]);
 
   useEffect(() => {
     flushExercisesToParentRef.current = flushExercisesToParent;
   }, [flushExercisesToParent]);
-
-  // Sync active exercises back to parent App state so they are stored
-  useEffect(() => {
-    if (!hasSyncedPropsRef.current) return;
-    flushExercisesToParent(activeExercises);
-  }, [activeExercises, flushExercisesToParent]);
 
   // Web beforeunload listener to flush active exercises immediately
   useEffect(() => {
@@ -992,10 +952,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Calculate volume & sets for summary
   const handleFinishPress = () => {
     cleanupTimerAndNotifications();
+    const input = activeInputRef.current;
+    if (input) {
+      updateSetField(input.exIdx, input.setIdx, input.fieldName, tempInputValueRef.current);
+    }
+    const exercisesForFinish = activeExercisesRef.current;
     let totalVolume = 0;
     let totalSets   = 0;
     
-    activeExercises.forEach(ex => {
+    exercisesForFinish.forEach(ex => {
       ex.sets.forEach(set => {
         if (set.completed) {
           if (set.isUnilateral) {
@@ -1025,7 +990,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const sessionSec = Math.max(0, Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000));
     
     // Check if user made any actual changes to the workout
-    const currentSerialized = serializeState(activeExercises, workoutNote);
+    const currentSerialized = serializeState(exercisesForFinish, workoutNote);
     const hasChanges = currentSerialized !== initialStateRef.current.exercises;
     
     let durationMin = 0;
@@ -1043,7 +1008,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     
     wasInitializedRef.current = false;
-    flushExercisesToParent(activeExercises);
+    flushExercisesToParent(exercisesForFinish);
     onFinish({
       totalVolume,
       totalSets,

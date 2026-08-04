@@ -1,6 +1,7 @@
 import { Platform, Alert, LayoutAnimation, UIManager } from 'react-native';
-import { SetSuggestion } from './activeWorkoutTypes';
+import { ActiveExercise, SetSuggestion } from './activeWorkoutTypes';
 import { getSessionsForExerciseVariation } from '../../utils/variationUtils';
+import { resolveLastPerformanceSuggestion } from '../../storage/expectedValues';
 
 export const safeLayoutAnim = (preset = LayoutAnimation.Presets.easeInEaseOut) => {
   try {
@@ -34,6 +35,50 @@ export const WebSafeAlert = {
 
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: Record<string, any> = {};
+
+export function mapActiveExercisesToLegacy(exercises: ActiveExercise[]): any[] {
+  return exercises.map((exercise) => {
+    const completedSets = exercise.sets.filter((set) => set.completed);
+    const weights = completedSets.flatMap((set) => set.isUnilateral
+      ? [Number(set.leftWeight ?? set.weight) || 0, Number(set.rightWeight ?? set.weight) || 0]
+      : [Number(set.weight) || 0]);
+    const reps = completedSets.flatMap((set) => set.isUnilateral
+      ? [Number(set.leftReps ?? set.reps) || 0, Number(set.rightReps ?? set.reps) || 0]
+      : [Number(set.reps) || 0]);
+    return {
+      id: exercise.id,
+      name: exercise.name,
+      note: exercise.note,
+      showNote: exercise.showNote,
+      isNoteLocked: exercise.isNoteLocked,
+      autoTimer: exercise.autoTimer,
+      variation: exercise.variation,
+      sets: exercise.sets.length,
+      bestWeight: weights.length ? Math.max(...weights, 0) : 0,
+      bestReps: reps.length ? Math.max(...reps, 0) : 0,
+      superSetGroupId: exercise.superSetGroupId,
+      setsDetails: exercise.sets.map((set) => ({
+        id: set.id,
+        weight: set.weight ?? '',
+        reps: set.reps ?? '',
+        suggestedWeight: set.suggestedWeight ?? '',
+        suggestedReps: set.suggestedReps ?? '',
+        completed: set.completed,
+        rpe: set.rpe || undefined,
+        category: set.category || 'S',
+        isUnilateral: Boolean(set.isUnilateral),
+        leftWeight: set.leftWeight,
+        leftReps: set.leftReps,
+        rightWeight: set.rightWeight,
+        rightReps: set.rightReps,
+        suggestedLeftWeight: set.suggestedLeftWeight,
+        suggestedLeftReps: set.suggestedLeftReps,
+        suggestedRightWeight: set.suggestedRightWeight,
+        suggestedRightReps: set.suggestedRightReps,
+      })),
+    };
+  });
+}
 
 export function formatElapsed(startTime: Date | string | number | null | undefined, offsetSeconds: number = 0): string {
   if (!startTime) return '0:00';
@@ -72,6 +117,17 @@ export const getBestPerformanceSuggestionForSet = (
   exerciseObj?: any,
   sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
+  return resolveLastPerformanceSuggestion(
+    exName,
+    category,
+    positionInCategory,
+    sessions,
+    isUnilateral,
+    targetVariation,
+    sessionsMap
+  );
+  /* Legacy progressive-overload scoring retained below for source compatibility; the
+     exact-last-performance resolver above is now the sole runtime policy.
   if (!exName || typeof exName !== 'string') {
     return { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
   }
@@ -257,6 +313,7 @@ export const getBestPerformanceSuggestionForSet = (
       rightReps: bilateralBest?.reps || '',
     };
   }
+  */
 };
 
 export const getPreviousSessionSetSuggestion = (
@@ -269,6 +326,16 @@ export const getPreviousSessionSetSuggestion = (
   exIdx?: number,
   sessionsMap?: Map<string, any[]>
 ): SetSuggestion => {
+  return resolveLastPerformanceSuggestion(
+    exName,
+    category,
+    positionInCategory,
+    sessions,
+    isUnilateral,
+    undefined,
+    sessionsMap
+  );
+  /* Legacy tiered matching retained below for source compatibility.
   const cleanStr = (s: string | undefined | null) => (s || '').trim().toLowerCase();
 
   const formatVal = (val: any): string => {
@@ -430,6 +497,7 @@ export const getPreviousSessionSetSuggestion = (
     rightWeight: bestMatchVals.weight || '',
     rightReps: bestMatchVals.reps || '',
   };
+  */
 };
 
 export const serializeState = (exercises: any[], note: string): string => {

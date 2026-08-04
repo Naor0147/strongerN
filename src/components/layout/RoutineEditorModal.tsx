@@ -45,6 +45,7 @@ import { ExerciseCard } from './ExerciseCard';
 import Sortable from 'react-native-sortables';
 import { SwipeableRow } from './SwipeableRow';
 import { saveCrashLogSync } from '../../utils/crashLogger';
+import { resolveLastPerformanceSuggestion } from '../../storage/expectedValues';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SetRecord {
@@ -315,9 +316,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
                 }))
               : [
-                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
                 ],
           };
         });
@@ -330,9 +331,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
             name,
             notes: libEx?.notes || '',
             sets: [
-              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
             ],
           };
         });
@@ -370,9 +371,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                   rightReps: s.rightReps !== undefined ? s.rightReps.toString() : undefined,
                 }))
               : [
-                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-0-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-1-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+                  { id: `s-${exIdx}-2-${Date.now()}-${Math.random()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
                 ],
           };
         });
@@ -385,9 +386,9 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
             name,
             notes: libEx?.notes || '',
             sets: [
-              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-0-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-1-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
+              { id: `s-${idx}-2-${Date.now()}`, weight: '0', reps: '0', category: 'S' as const, isUnilateral },
             ],
           };
         });
@@ -490,13 +491,13 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
           {
             id:       `s-${exIdx}-${Date.now()}-${Math.random()}`,
             weight:   last?.weight ?? '0',
-            reps:     last?.reps   ?? '10',
+            reps:     last?.reps   ?? '0',
             category: last?.category ?? 'S',
             isUnilateral,
             leftWeight:   isUnilateral ? (last?.leftWeight ?? last?.weight ?? '0') : undefined,
-            leftReps:     isUnilateral ? (last?.leftReps ?? last?.reps ?? '10') : undefined,
+            leftReps:     isUnilateral ? (last?.leftReps ?? last?.reps ?? '0') : undefined,
             rightWeight:  isUnilateral ? (last?.rightWeight ?? last?.weight ?? '0') : undefined,
-            rightReps:    isUnilateral ? (last?.rightReps ?? last?.reps ?? '10') : undefined,
+            rightReps:    isUnilateral ? (last?.rightReps ?? last?.reps ?? '0') : undefined,
           },
         ],
       };
@@ -630,14 +631,24 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
       ...names.map((name, idx) => {
         const libEx = exercises.find(e => e.name.toLowerCase() === name.toLowerCase());
         const isUnilateral = libEx?.isUnilateral || false;
+        const expectedSets = Array.from({ length: 3 }).map((_, setIndex) => {
+          const expected = resolveLastPerformanceSuggestion(name, 'S', setIndex, sessions, isUnilateral);
+          return {
+            id: `s-new-${idx}-${setIndex}-${Date.now()}`,
+            weight: expected.weight,
+            reps: expected.reps,
+            category: 'S' as const,
+            isUnilateral,
+            leftWeight: isUnilateral ? expected.leftWeight : undefined,
+            leftReps: isUnilateral ? expected.leftReps : undefined,
+            rightWeight: isUnilateral ? expected.rightWeight : undefined,
+            rightReps: isUnilateral ? expected.rightReps : undefined,
+          };
+        });
         return {
           id: `ex-new-${idx}-${Date.now()}-${Math.random()}`,
           name,
-          sets: [
-            { id: `s-new-${idx}-0-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-            { id: `s-new-${idx}-1-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-            { id: `s-new-${idx}-2-${Date.now()}`, weight: '0', reps: '10', category: 'S' as const, isUnilateral },
-          ],
+          sets: expectedSets,
         };
       }),
     ]);

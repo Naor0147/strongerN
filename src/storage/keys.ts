@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   ACTIVE_DRAFT_SLOT_A: 'strongern_active_draft_slot_a',
   ACTIVE_DRAFT_SLOT_B: 'strongern_active_draft_slot_b',
   ACTIVE_DRAFT_FINISH_JOURNAL: 'strongern_finish_journal',
+  ACTIVE_DRAFT_INPUT_PATCH: 'strongern_active_input_patch',
 
   // Settings & Small Preferences (Hot Path)
   SETTINGS_COMPACT_V2: 'strongern_settings_v2',

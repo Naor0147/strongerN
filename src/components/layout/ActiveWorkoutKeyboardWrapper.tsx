@@ -3,6 +3,7 @@ import { ActiveExercise } from './activeWorkoutTypes';
 import { activeInputStore } from '../../utils/activeInputStore';
 import { keyboardValueStore } from '../../utils/keyboardValueStore';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
+import { saveActiveInputPatch } from '../../storage/activeInputPatch';
 
 export const ActiveWorkoutKeyboardWrapper = React.memo(({
   activeExercises,
@@ -20,6 +21,16 @@ export const ActiveWorkoutKeyboardWrapper = React.memo(({
   tempInputValueRef: React.MutableRefObject<string>;
 }) => {
   const [activeInput, setActiveInput] = useState<any>(null);
+  const activeExercisesRef = useRef(activeExercises);
+  const activeInputRef = useRef<any>(null);
+
+  useEffect(() => {
+    activeExercisesRef.current = activeExercises;
+  }, [activeExercises]);
+
+  useEffect(() => {
+    activeInputRef.current = activeInput;
+  }, [activeInput]);
 
   useEffect(() => {
     return activeInputStore.subscribe(setActiveInput);
@@ -29,11 +40,15 @@ export const ActiveWorkoutKeyboardWrapper = React.memo(({
   const handleChange = useCallback((newValue: string) => {
     tempInputValueRef.current = newValue;
     keyboardValueStore.setValue(newValue);
+    const input = activeInputRef.current;
+    const exercise = activeExercisesRef.current[input?.exIdx];
+    const set = exercise?.sets[input?.setIdx];
+    if (input && exercise && set) {
+      saveActiveInputPatch(exercise.id, set.id, input.fieldName, newValue);
+    }
   }, [tempInputValueRef]);
 
   // Stable RPE handler via ref to avoid inline recreation
-  const activeInputRef = useRef<any>(null);
-  activeInputRef.current = activeInput;
 
   const handleRpeChange = useCallback((newRpe: string) => {
     const ai = activeInputRef.current;

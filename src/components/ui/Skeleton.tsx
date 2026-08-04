@@ -1,6 +1,14 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, DimensionValue, StyleProp, ViewStyle } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { colors, radius, spacing } from '../../theme';
 
 export interface SkeletonBlockProps {
@@ -14,24 +22,20 @@ export const ShimmerContainer: React.FC<{ children: React.ReactNode; style?: Sty
   const opacity = useSharedValue(0.35);
 
   useEffect(() => {
-    let mounted = true;
-    const pulse = () => {
-      if (!mounted) return;
-      opacity.value = withTiming(0.75, { duration: 650, easing: Easing.inOut(Easing.ease) }, (finished) => {
-        if (finished && mounted) {
-          opacity.value = withTiming(0.35, { duration: 650, easing: Easing.inOut(Easing.ease) }, (f2) => {
-            if (f2 && mounted) {
-              pulse();
-            }
-          });
-        }
-      });
-    };
-    pulse();
+    const easing = Easing.inOut(Easing.ease);
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.75, { duration: 650, easing }),
+        withTiming(0.35, { duration: 650, easing }),
+      ),
+      -1,
+      false,
+    );
+
     return () => {
-      mounted = false;
+      cancelAnimation(opacity);
     };
-  }, []);
+  }, [opacity]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

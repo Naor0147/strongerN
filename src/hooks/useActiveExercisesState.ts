@@ -16,6 +16,7 @@ import {
 import { safeLayoutAnim } from '../components/layout/activeWorkoutUtils';
 import { saveCrashLogSync } from '../utils/crashLogger';
 import { WorkoutSession, Exercise } from '../data/mockData';
+import { clearActiveInputPatch } from '../storage/activeInputPatch';
 
 export interface UseActiveExercisesStateParams {
   initialExercises: ActiveExercise[];
@@ -35,6 +36,7 @@ export interface UseActiveExercisesStateParams {
   isReplaceMode: boolean;
   onUpdateExerciseNotes?: (id: string, note?: string) => void;
   sessionsByExerciseMap?: Map<string, WorkoutSession[]>;
+  onActiveExercisesCommit?: (exercises: ActiveExercise[]) => void;
 }
 
 export function useActiveExercisesState({
@@ -55,8 +57,20 @@ export function useActiveExercisesState({
   isReplaceMode,
   onUpdateExerciseNotes,
   sessionsByExerciseMap,
+  onActiveExercisesCommit,
 }: UseActiveExercisesStateParams) {
-  const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>(initialExercises);
+  const [activeExercises, setActiveExercisesState] = useState<ActiveExercise[]>(initialExercises);
+
+  const setActiveExercises = useCallback<React.Dispatch<React.SetStateAction<ActiveExercise[]>>>((action) => {
+    const previous = activeExercisesRef.current;
+    const next = typeof action === 'function'
+      ? (action as (value: ActiveExercise[]) => ActiveExercise[])(previous)
+      : action;
+    if (next === previous) return;
+    onActiveExercisesCommit?.(next);
+    activeExercisesRef.current = next;
+    setActiveExercisesState(next);
+  }, [activeExercisesRef, onActiveExercisesCommit]);
 
   // Synchronize activeExercisesRef
   useEffect(() => {
@@ -90,6 +104,7 @@ export function useActiveExercisesState({
         nextArr[exIdx] = { ...targetEx, sets: nextSets };
         return nextArr;
       });
+      clearActiveInputPatch();
     },
     []
   );
@@ -139,6 +154,7 @@ export function useActiveExercisesState({
         nextArr[exIdx] = { ...targetEx, sets: nextSets };
         return nextArr;
       });
+      clearActiveInputPatch();
     },
     [isAutoTimerEnabled, defaultRestDuration, activeExercisesRef, activeInputRef, tempInputValueRef]
   );
@@ -325,8 +341,8 @@ export function useActiveExercisesState({
             }
           }
 
-          const defaultW = (libEx?.bestWeight ?? 0).toString();
-          const defaultR = (libEx?.bestReps ?? 0).toString();
+          const defaultW = '0';
+          const defaultR = '0';
           let suggested: SetSuggestion = {
             weight: defaultW,
             reps: defaultR,
@@ -395,8 +411,8 @@ export function useActiveExercisesState({
             }
           }
           const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-          const defaultW = (libEx?.bestWeight ?? 0).toString();
-          const defaultR = (libEx?.bestReps ?? 0).toString();
+          const defaultW = '0';
+          const defaultR = '0';
           let suggested: SetSuggestion = {
             weight: defaultW,
             reps: defaultR,
@@ -468,8 +484,8 @@ export function useActiveExercisesState({
           const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
             const category = 'S';
             const positionInCategory = sIdx;
-            const defaultW = (libEx?.bestWeight ?? 0).toString();
-            const defaultR = (libEx?.bestReps ?? 0).toString();
+            const defaultW = '0';
+            const defaultR = '0';
             let suggested: SetSuggestion = {
               weight: defaultW,
               reps: defaultR,

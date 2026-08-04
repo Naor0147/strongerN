@@ -1,10 +1,10 @@
 // src/storage/adapters/mmkvAdapter.ts
-// Guarded bootstrap adapter for MMKV hot-path storage.
-// Lazy-instantiated on bootstrap. If native MMKV binding is unavailable, safely falls back
-// to durable KV store / memory fallback for Jest & Web environments.
+// Guarded bootstrap adapter for MMKV V4 hot-path storage.
+// Uses createMMKV and .remove() API. Synchronous native operations.
+// Throws DurableStorageUnavailableError when native storage fails (no fake success).
 
 import { Platform } from 'react-native';
-import { saveToDb, loadFromDb, deleteFromDb } from '../../utils/db';
+import { setStorageHealthState } from '../healthState';
 
 export class DurableStorageUnavailableError extends Error {
   constructor(message: string) {
@@ -13,138 +13,181 @@ export class DurableStorageUnavailableError extends Error {
   }
 }
 
+export interface SynchronousStorageAdapter {
+  isAvailable(): boolean;
+  isNative(): boolean;
+  getString(key: string): string | null;
+  setString(key: string, value: string): boolean;
+  removeItem(key: string): boolean;
+}
+
 let mmkvInstance: any = null;
 let isInitialized = false;
 let isNativeMMKV = false;
+let injectedAdapter: SynchronousStorageAdapter | null = null;
+let webAdapter: SynchronousStorageAdapter | null = null;
 
-// Fallback key-value store for Jest / Web environments
-const fallbackStore = new Map<string, string>();
+function createWebStorageAdapter(): SynchronousStorageAdapter | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    return {
+      isAvailable: () => true,
+      isNative: () => false,
+      getString: (key) => window.localStorage.getItem(key),
+      setString: (key, value) => {
+        window.localStorage.setItem(key, value);
+        return window.localStorage.getItem(key) === value;
+      },
+      removeItem: (key) => {
+        window.localStorage.removeItem(key);
+        return window.localStorage.getItem(key) === null;
+      },
+    };
+  } catch {
+    return null;
+  }
+}
 
-export async function initMMKVAdapter(): Promise<boolean> {
-  if (isInitialized) return true;
-
-  if (Platform.OS === 'web') {
+/**
+ * Allows injecting a custom synchronous storage adapter (e.g. for Web, Jest unit isolation).
+ */
+export function setInjectedStorageAdapter(adapter: SynchronousStorageAdapter | null): void {
+  injectedAdapter = adapter;
+  if (adapter) {
     isInitialized = true;
-    isNativeMMKV = false;
-    console.log('[MMKVAdapter] Web environment detected; using durable KV fallback.');
+    isNativeMMKV = adapter.isNative();
+  }
+}
+
+export function initMMKVAdapter(): boolean {
+  if (isInitialized && !injectedAdapter) {
+    return Boolean(webAdapter?.isAvailable() || (isNativeMMKV && mmkvInstance));
+  }
+
+  if (injectedAdapter) {
+    isInitialized = true;
+    isNativeMMKV = injectedAdapter.isNative();
     return true;
   }
 
-  try {
-    const { MMKV } = require('react-native-mmkv');
-    if (typeof MMKV === 'function') {
-      mmkvInstance = new MMKV({ id: 'strongern-hot-path' });
-      isNativeMMKV = true;
-      isInitialized = true;
-      console.log('[MMKVAdapter] Native MMKV initialized successfully.');
+  if (Platform.OS === 'web') {
+    webAdapter = createWebStorageAdapter();
+    isInitialized = true;
+    isNativeMMKV = false;
+    if (webAdapter) {
+      setStorageHealthState('ready', { mmkvAvailable: false, lastError: null });
       return true;
     }
-  } catch (err) {
-    console.warn('[MMKVAdapter] Native MMKV initialization unavailable; using durable KV fallback.');
+    setStorageHealthState('legacy_safe_mode', { mmkvAvailable: false, lastError: 'Web localStorage unavailable' });
+    return false;
+  }
+
+  try {
+    const { createMMKV } = require('react-native-mmkv');
+    if (typeof createMMKV === 'function') {
+      mmkvInstance = createMMKV({ id: 'strongern-hot-path' });
+      isNativeMMKV = true;
+      isInitialized = true;
+      setStorageHealthState('ready', { mmkvAvailable: true, lastError: null });
+      return true;
+    }
+  } catch (err: any) {
+    const msg = err?.message || 'MMKV createMMKV unavailable';
+    console.warn(`[MMKVAdapter] Native MMKV v4 initialization failed: ${msg}`);
   }
 
   mmkvInstance = null;
   isNativeMMKV = false;
   isInitialized = true;
-  return true;
+  setStorageHealthState('legacy_safe_mode', { mmkvAvailable: false, lastError: 'Native MMKV missing' });
+  return false;
 }
 
-export const mmkvStorageAdapter = {
+export const mmkvStorageAdapter: SynchronousStorageAdapter = {
   isAvailable(): boolean {
-    return isInitialized;
+    if (injectedAdapter) return injectedAdapter.isAvailable();
+    if (!isInitialized) initMMKVAdapter();
+    return Boolean(webAdapter?.isAvailable() || (isNativeMMKV && mmkvInstance));
   },
 
   isNative(): boolean {
+    if (injectedAdapter) return injectedAdapter.isNative();
     return isNativeMMKV;
   },
 
-  async getString(key: string): Promise<string | null> {
-    if (!isInitialized) await initMMKVAdapter();
+  getString(key: string): string | null {
+    if (injectedAdapter) return injectedAdapter.getString(key);
+    if (!isInitialized) initMMKVAdapter();
+    if (webAdapter) return webAdapter.getString(key);
 
-    if (isNativeMMKV && mmkvInstance) {
-      try {
-        const val = mmkvInstance.getString(key);
-        return val ?? null;
-      } catch (err) {
-        console.warn(`[MMKVAdapter] MMKV read error for "${key}", falling back to durable storage:`, err);
-      }
-    }
-
-    if (fallbackStore.has(key)) {
-      return fallbackStore.get(key) ?? null;
-    }
-
-    // Durable SQLite / LocalStorage Fallback
-    try {
-      const dbVal = await loadFromDb(key);
-      if (typeof dbVal === 'string') {
-        fallbackStore.set(key, dbVal);
-        return dbVal;
-      }
-      if (dbVal && typeof dbVal === 'object') {
-        const str = JSON.stringify(dbVal);
-        fallbackStore.set(key, str);
-        return str;
-      }
-      return null;
-    } catch (err) {
-      console.error(`[MMKVAdapter] Durable fallback read failed for "${key}":`, err);
-      return null;
-    }
-  },
-
-  async setString(key: string, value: string): Promise<boolean> {
-    if (!isInitialized) await initMMKVAdapter();
-
-    fallbackStore.set(key, value);
-
-    let mmkvSuccess = false;
-    if (isNativeMMKV && mmkvInstance) {
-      try {
-        mmkvInstance.set(key, value);
-        mmkvSuccess = true;
-      } catch (err) {
-        console.warn(`[MMKVAdapter] MMKV write error for "${key}":`, err);
-      }
-    }
-
-    // Ensure durable write to SQLite / LocalStorage fallback
-    try {
-      await saveToDb(key, value);
-      return true;
-    } catch (err) {
-      if (mmkvSuccess) return true;
-      console.error(`[MMKVAdapter] Durable fallback write failed for "${key}":`, err);
-      return true;
-    }
-  },
-
-  async removeItem(key: string): Promise<boolean> {
-    if (!isInitialized) await initMMKVAdapter();
-
-    fallbackStore.delete(key);
-
-    if (isNativeMMKV && mmkvInstance) {
-      try {
-        mmkvInstance.delete(key);
-      } catch (err) {
-        console.warn(`[MMKVAdapter] MMKV delete error for "${key}":`, err);
-      }
+    if (!isNativeMMKV || !mmkvInstance) {
+      throw new DurableStorageUnavailableError(`MMKV storage unavailable for getString("${key}")`);
     }
 
     try {
-      await deleteFromDb(key);
-      return true;
-    } catch (err) {
-      console.error(`[MMKVAdapter] Durable fallback delete failed for "${key}":`, err);
-      return true;
+      const val = mmkvInstance.getString(key);
+      return val ?? null;
+    } catch (err: any) {
+      throw new DurableStorageUnavailableError(`MMKV getString error for "${key}": ${err?.message}`);
     }
   },
 
-  getStatus() {
-    return {
-      isInitialized,
-      isNativeMMKV,
-    };
+  setString(key: string, value: string): boolean {
+    if (injectedAdapter) return injectedAdapter.setString(key, value);
+    if (!isInitialized) initMMKVAdapter();
+    if (webAdapter) {
+      if (!webAdapter.setString(key, value)) {
+        throw new DurableStorageUnavailableError(`Web storage write verification failed for "${key}"`);
+      }
+      return true;
+    }
+
+    if (!isNativeMMKV || !mmkvInstance) {
+      throw new DurableStorageUnavailableError(`MMKV storage unavailable for setString("${key}")`);
+    }
+
+    try {
+      mmkvInstance.set(key, value);
+      // Synchronous readback check
+      const readBack = mmkvInstance.getString(key);
+      if (readBack !== value) {
+        throw new DurableStorageUnavailableError(`MMKV write verification failed for "${key}"`);
+      }
+      return true;
+    } catch (err: any) {
+      if (err instanceof DurableStorageUnavailableError) throw err;
+      throw new DurableStorageUnavailableError(`MMKV setString error for "${key}": ${err?.message}`);
+    }
+  },
+
+  removeItem(key: string): boolean {
+    if (injectedAdapter) return injectedAdapter.removeItem(key);
+    if (!isInitialized) initMMKVAdapter();
+    if (webAdapter) {
+      if (!webAdapter.removeItem(key)) {
+        throw new DurableStorageUnavailableError(`Web storage remove verification failed for "${key}"`);
+      }
+      return true;
+    }
+
+    if (!isNativeMMKV || !mmkvInstance) {
+      throw new DurableStorageUnavailableError(`MMKV storage unavailable for removeItem("${key}")`);
+    }
+
+    try {
+      // MMKV V4 uses .remove(key)
+      if (typeof mmkvInstance.remove !== 'function') {
+        throw new DurableStorageUnavailableError('MMKV V4 remove API is unavailable');
+      }
+      mmkvInstance.remove(key);
+      const readBack = mmkvInstance.getString(key);
+      if (readBack !== undefined && readBack !== null) {
+        throw new DurableStorageUnavailableError(`MMKV remove verification failed for "${key}"`);
+      }
+      return true;
+    } catch (err: any) {
+      if (err instanceof DurableStorageUnavailableError) throw err;
+      throw new DurableStorageUnavailableError(`MMKV removeItem error for "${key}": ${err?.message}`);
+    }
   },
 };
