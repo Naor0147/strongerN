@@ -69,6 +69,7 @@ import { activeInputStore } from '../../utils/activeInputStore';
 import { useTrackRender } from '../../utils/renderTracker';
 import { VariationDropdown } from '../ui/VariationDropdown';
 import { getSessionsForExerciseVariation } from '../../utils/variationUtils';
+import { buildExerciseHistoryIndex } from '../../storage/expectedValues';
 import { styles } from './activeWorkoutStyles';
 
 
@@ -570,33 +571,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [activeExercises]);
 
   const sessionsByExerciseMap = useMemo(() => {
-    const map = new Map<string, any[]>();
-    if (!sessions) return map;
     try {
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        if (s && s.exercises && Array.isArray(s.exercises)) {
-          for (let j = 0; j < s.exercises.length; j++) {
-            const ex = s.exercises[j];
-            if (ex && ex.name && typeof ex.name === 'string') {
-              const key = ex.name.trim().toLowerCase();
-              let list = map.get(key);
-              if (!list) {
-                list = [];
-                map.set(key, list);
-              }
-              list.push({ datetime: s.datetime, ex });
-            }
-          }
-        }
-      }
-      map.forEach(list => {
-        list.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-      });
+      return buildExerciseHistoryIndex(sessions);
     } catch (e) {
       console.warn('[sessionsByExerciseMap] Error building sessions map:', e);
+      return new Map<string, any[]>();
     }
-    return map;
   }, [sessions]);
 
   const [renderedCardLimit, setRenderedCardLimit] = useState(4);
@@ -670,7 +650,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 let suggestedRightWeight = '';
                 let suggestedRightReps = '';
 
-                if (useRoutineTargets) {
+                const hasStoredSuggestion = s.suggestedWeight !== undefined
+                  || s.suggestedReps !== undefined
+                  || s.suggestedLeftWeight !== undefined
+                  || s.suggestedRightWeight !== undefined;
+                if (useRoutineTargets || hasStoredSuggestion) {
                   suggestedWeight = s.suggestedWeight?.toString() || (s.weight && s.weight !== '0' ? s.weight.toString() : '');
                   suggestedReps = s.suggestedReps?.toString() || (s.reps && s.reps !== '0' ? s.reps.toString() : '');
                   if (isUnilateral) {

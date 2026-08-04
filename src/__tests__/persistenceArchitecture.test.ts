@@ -1,4 +1,4 @@
-import { resolveLastPerformanceSuggestion } from '../storage/expectedValues';
+import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from '../storage/expectedValues';
 import { legacySessionToV2, sessionV2ToLegacy } from '../storage/history/legacySessionMapper';
 import { initMMKVAdapter, setInjectedStorageAdapter, SynchronousStorageAdapter } from '../storage/adapters/mmkvAdapter';
 import { normalizeActiveWorkoutDraftV2 } from '../storage/contracts/validators';
@@ -68,6 +68,26 @@ describe('persistence architecture', () => {
       expect(resolveLastPerformanceSuggestion(
         'Bench Press', 'S', 0, [unfinishedLatest, ...sessions], false, 'Paused'
       )).toMatchObject({ weight: '82.5', reps: '6' });
+    });
+
+    test('skips a recent completed set with missing values and uses older valid history', () => {
+      const incompleteLatest = {
+        datetime: new Date('2026-08-04T10:00:00Z'),
+        exercises: [{
+          name: 'Bench Press', variation: 'Paused',
+          setsDetails: [{ weight: '', reps: '', completed: true, category: 'S' }],
+        }],
+      };
+      expect(resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 0, [incompleteLatest, ...sessions], false, 'Paused'
+      )).toMatchObject({ weight: '82.5', reps: '6' });
+    });
+
+    test('uses a pre-indexed history without changing the exact result', () => {
+      const index = buildExerciseHistoryIndex(sessions);
+      expect(resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 1, sessions, false, 'Paused', index
+      )).toMatchObject({ weight: '80', reps: '7' });
     });
 
     test('returns explicit zero weight and zero reps only when no matching history exists', () => {

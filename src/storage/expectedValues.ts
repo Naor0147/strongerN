@@ -25,6 +25,44 @@ function sessionTimestamp(session: any): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+/**
+ * Build this once when a workout starts. Resolving every set against the full
+ * session list made long routines repeatedly sort the same history on the JS
+ * thread.
+ */
+export function buildExerciseHistoryIndex(sessions: any[] | null | undefined): Map<string, any[]> {
+  const index = new Map<string, any[]>();
+  for (const session of sessions ?? []) {
+    if (!Array.isArray(session?.exercises)) continue;
+    for (const exercise of session.exercises) {
+      const key = normalized(exercise?.name);
+      if (!key) continue;
+      const entries = index.get(key) ?? [];
+      entries.push({ datetime: session.datetime ?? session.startedAtMs, startedAtMs: session.startedAtMs, ex: exercise });
+      index.set(key, entries);
+    }
+  }
+  for (const entries of index.values()) {
+    entries.sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a));
+  }
+  return index;
+}
+
+function hasUsablePerformance(set: any, isUnilateral: boolean): boolean {
+  const hasNumber = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return false;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0;
+  };
+  if (isUnilateral) {
+    return hasNumber(set?.leftWeight ?? set?.weight ?? set?.weightKg)
+      && hasNumber(set?.leftReps ?? set?.reps)
+      && hasNumber(set?.rightWeight ?? set?.weight ?? set?.weightKg)
+      && hasNumber(set?.rightReps ?? set?.reps);
+  }
+  return hasNumber(set?.weight ?? set?.weightKg) && hasNumber(set?.reps);
+}
+
 export function resolveLastPerformanceSuggestion(
   exerciseName: string,
   category: string,
@@ -38,7 +76,9 @@ export function resolveLastPerformanceSuggestion(
   if (!exerciseKey) return zeroSuggestion();
 
   const mapped = sessionsMap?.get(exerciseKey);
-  const candidates = (mapped?.length ? mapped : sessions ?? [])
+  const isIndexedLookup = Array.isArray(mapped) && mapped.length > 0;
+  const source: any[] = isIndexedLookup && mapped ? mapped : (sessions ?? []);
+  const candidates = source
     .map((entry: any) => {
       if (entry?.ex) return { session: entry, exercise: entry.ex, timestamp: sessionTimestamp(entry) };
       const exercise = Array.isArray(entry?.exercises)
@@ -53,20 +93,30 @@ export function resolveLastPerformanceSuggestion(
       const rawSets = Array.isArray(exercise.setsDetails)
         ? exercise.setsDetails
         : Array.isArray(exercise.sets) ? exercise.sets : [];
-      return rawSets.some((set: any) => set?.completed !== false && (set?.category ?? 'S') === category);
-    })
-    .sort((a: any, b: any) => b.timestamp - a.timestamp);
+      return rawSets.some((set: any) => set?.completed !== false
+        && (set?.category ?? 'S') === category
+        && hasUsablePerformance(set, isUnilateral));
+    });
 
-  const latestExercise = candidates[0]?.exercise;
-  if (!latestExercise) return zeroSuggestion();
-  const rawSets = Array.isArray(latestExercise.setsDetails)
-    ? latestExercise.setsDetails
-    : Array.isArray(latestExercise.sets) ? latestExercise.sets : [];
-  const performedSets = rawSets.filter((set: any) => set?.completed !== false);
-  const matchingSets = performedSets.filter((set: any) => (set?.category ?? 'S') === category);
-  if (matchingSets.length === 0) return zeroSuggestion();
+  if (!isIndexedLookup) {
+    candidates.sort((a: any, b: any) => b.timestamp - a.timestamp);
+  }
+
   const ordinal = Math.max(0, Math.trunc(positionInCategory));
-  const historicalSet = matchingSets[Math.min(ordinal, matchingSets.length - 1)];
+  let historicalSet: any = null;
+  for (const candidate of candidates) {
+    const rawSets = Array.isArray(candidate.exercise.setsDetails)
+      ? candidate.exercise.setsDetails
+      : Array.isArray(candidate.exercise.sets) ? candidate.exercise.sets : [];
+    const matchingSets = rawSets.filter((set: any) => set?.completed !== false
+      && (set?.category ?? 'S') === category
+      && hasUsablePerformance(set, isUnilateral));
+    if (matchingSets.length > 0) {
+      historicalSet = matchingSets[Math.min(ordinal, matchingSets.length - 1)];
+      break;
+    }
+  }
+  if (!historicalSet) return zeroSuggestion();
 
   const weight = exactNumericString(historicalSet.weight ?? historicalSet.weightKg);
   const reps = exactNumericString(historicalSet.reps);

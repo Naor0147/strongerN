@@ -27,7 +27,7 @@ import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
 import { reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
-import { resolveLastPerformanceSuggestion } from './storage/expectedValues';
+import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 // generateWorkoutInsights import removed (completion insights feature removed)
 
 // Screens — Auth
@@ -1563,6 +1563,7 @@ function App() {
 
   const handleStartWorkout = React.useCallback((name: string, exerciseNames: string[], exercisesDetails?: any[]) => {
     const workoutStartedAt = new Date();
+    const historyIndex = buildExerciseHistoryIndex(sessionsListRef.current);
     const matchingTemplate = templatesListRef.current.find(t => t.name.toLowerCase().trim() === name.toLowerCase().trim());
     const initialComment = matchingTemplate?.notes || '';
     if (matchingTemplate && matchingTemplate.defaultRestDuration !== undefined) {
@@ -1602,20 +1603,23 @@ function App() {
             ordinal,
             sessionsListRef.current,
             unilateral,
-            targetVariation
+            targetVariation,
+            historyIndex
           );
           return {
-            weight: expected.weight,
-            reps: expected.reps,
+            // Suggestions are intentionally not values: they remain muted until
+            // the lifter explicitly enters or accepts them.
+            weight: '',
+            reps: '',
             suggestedWeight: expected.weight,
             suggestedReps: expected.reps,
             completed: false,
             category,
             isUnilateral: unilateral,
-            leftWeight: unilateral ? expected.leftWeight : undefined,
-            leftReps: unilateral ? expected.leftReps : undefined,
-            rightWeight: unilateral ? expected.rightWeight : undefined,
-            rightReps: unilateral ? expected.rightReps : undefined,
+            leftWeight: unilateral ? '' : undefined,
+            leftReps: unilateral ? '' : undefined,
+            rightWeight: unilateral ? '' : undefined,
+            rightReps: unilateral ? '' : undefined,
             suggestedLeftWeight: unilateral ? expected.leftWeight : undefined,
             suggestedLeftReps: unilateral ? expected.leftReps : undefined,
             suggestedRightWeight: unilateral ? expected.rightWeight : undefined,
@@ -1653,28 +1657,29 @@ function App() {
           setIndex,
           sessionsListRef.current,
           isExUnilateral,
-          targetVariation
+          targetVariation,
+          historyIndex
         );
         return {
-          weight: expected.weight,
-          reps: expected.reps,
+          weight: '',
+          reps: '',
           suggestedWeight: expected.weight,
           suggestedReps: expected.reps,
           completed: false,
           category: 'S' as const,
           isUnilateral: isExUnilateral,
-          leftWeight: isExUnilateral ? expected.leftWeight : undefined,
-          leftReps: isExUnilateral ? expected.leftReps : undefined,
-          rightWeight: isExUnilateral ? expected.rightWeight : undefined,
-          rightReps: isExUnilateral ? expected.rightReps : undefined,
+          leftWeight: isExUnilateral ? '' : undefined,
+          leftReps: isExUnilateral ? '' : undefined,
+          rightWeight: isExUnilateral ? '' : undefined,
+          rightReps: isExUnilateral ? '' : undefined,
           suggestedLeftWeight: isExUnilateral ? expected.leftWeight : undefined,
           suggestedLeftReps: isExUnilateral ? expected.leftReps : undefined,
           suggestedRightWeight: isExUnilateral ? expected.rightWeight : undefined,
           suggestedRightReps: isExUnilateral ? expected.rightReps : undefined,
         };
       });
-      bestWeight = Number(expectedSets[0]?.weight ?? 0);
-      bestReps = Number(expectedSets[0]?.reps ?? 0);
+      bestWeight = Number(expectedSets[0]?.suggestedWeight ?? 0);
+      bestReps = Number(expectedSets[0]?.suggestedReps ?? 0);
       
       return {
         name: exName,
