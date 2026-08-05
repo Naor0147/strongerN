@@ -82,15 +82,15 @@ Write-Host "   - System RAM: Detected $totalRamGb GB RAM" -ForegroundColor Gray
 Write-Host "   - Gradle Optimizations: Active in android/gradle.properties (6GB heap, 16 parallel workers, build cache)" -ForegroundColor $SuccessColor
 
 # 3. Check ADB Device Connectivity
-Write-Host "`n[3/6] Scanning ADB devices..." -ForegroundColor $PrimaryColor
-$adb = "adb.exe"
-if (Test-Path "$AndroidHome\platform-tools\adb.exe") {
-    $adb = "$AndroidHome\platform-tools\adb.exe"
+$adb = "$AndroidHome\platform-tools\adb.exe"
+if (-not (Test-Path $adb)) {
+    $adbCmd = Get-Command "adb.exe" -ErrorAction SilentlyContinue
+    if ($adbCmd) { $adb = $adbCmd.Source } else { $adb = "adb" }
 }
 
 $devices = @()
 $unauthorized = @()
-$adbOutput = & $adb devices 2>$null
+$adbOutput = try { & $adb devices 2>$null } catch { $null }
 if ($adbOutput) {
     foreach ($line in $adbOutput) {
         if ($line -match '^(\S+)\s+device$') {
