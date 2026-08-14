@@ -39,7 +39,7 @@ Cold Start Flow (Optimized):
 | M1 | Benchmarking Suite (R3) | Implement `scripts/benchmark-startup.js` and record baseline cold-start metrics for 0, 50, 300+ sessions | None | DONE |
 | M2 | Cold Start & SQLite Hydration (R1) | Optimize `persistenceBootstrap.ts`, query batching, fast-path bypass of monolithic legacy JSON parsing, and sub-150ms 300+ session hydration | M1 | DONE |
 | M3 | State Save Decoupling & Delta Writes (R2) | Decouple settings into MMKV `strongern_settings_v2`, eliminate monolithic `sessionsList` JSON stringify in `App.tsx`, remove full `reconcileSessions` thrashing, enforce incremental delta writes | M2 | DONE |
-| M4 | Comprehensive Verification, APK & Master Push (R4) | Run full test suite, typechecks, benchmark verification, app version bump, graphify update, release APK build, and git push to master | M3 | IN_PROGRESS |
+| M4 | Comprehensive Verification, APK & Master Push (R4) | Run full test suite, typechecks, benchmark verification, app version bump, graphify update, release APK build, and git push to master | M3 | DONE |
 
 ## Interface Contracts
 ### Compact Settings Store (`src/storage/adapters/mmkvAdapter.ts` & `src/storage/keys.ts`)
