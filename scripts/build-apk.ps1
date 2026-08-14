@@ -44,6 +44,19 @@ if ([string]::IsNullOrEmpty($AndroidHome)) {
 $env:PATH = "$env:PATH;$AndroidHome\platform-tools"
 Write-Host "   - Android SDK: $AndroidHome" -ForegroundColor Gray
 
+# Ensure Node is available in PATH
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    if (Get-Command fnm -ErrorAction SilentlyContinue) {
+        fnm env --shell powershell | Out-String | Invoke-Expression
+    }
+}
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $nodeVer = (node -v).Trim()
+    Write-Host "   - Node.js: $nodeVer" -ForegroundColor Gray
+} else {
+    Write-Host "   - Node.js: [WARN] node not found in PATH" -ForegroundColor $WarningColor
+}
+
 # Set Java Home to JDK 19 if available
 $jdk19Path = "C:\Program Files\Java\jdk-19"
 if (Test-Path $jdk19Path) {

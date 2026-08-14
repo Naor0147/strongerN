@@ -118,6 +118,19 @@ jest.mock('react-native-reanimated', () => {
 // Setup react-native-gesture-handler mock
 require('react-native-gesture-handler/jestSetup');
 
+// Mock expo-file-system/legacy
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///mock-documents/',
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue('{}'),
+  EncodingType: { UTF8: 'utf8' },
+}));
+
+// Mock expo-document-picker
+jest.mock('expo-document-picker', () => ({
+  getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true }),
+}));
+
 
 
 

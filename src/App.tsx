@@ -26,7 +26,8 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
+import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 // generateWorkoutInsights import removed (completion insights feature removed)
 
@@ -384,9 +385,11 @@ function App() {
   React.useEffect(() => {
     async function loadData() {
       try {
-        const dbReady = await initDb();
+        const [dbReady, secureOverridesStr] = await Promise.all([
+          initDb(),
+          getSecureItem('theme_overrides').catch(() => null),
+        ]);
         if (dbReady) {
-          const secureOverridesStr = await getSecureItem('theme_overrides');
           let parsedOverrides: any = {};
           if (secureOverridesStr) {
             try {
@@ -395,10 +398,13 @@ function App() {
               console.warn('Failed to parse theme overrides', e);
             }
           }
-          const parsed = await loadFromDb(STORAGE_KEY);
-          const legacyActiveWorkout = await loadFromDb('strongern_active_workout_state');
+          const [parsed, legacyActiveWorkout] = await Promise.all([
+            loadFromDb(STORAGE_KEY),
+            loadFromDb('strongern_active_workout_state'),
+          ]);
           const persistence = await bootstrapPersistence(parsed, legacyActiveWorkout);
           historyRepositoryReadyRef.current = persistence.historyReady;
+
           if (parsed) {
             if (parsed.user) {
               const currentAuth = await loadAuthState();
@@ -411,14 +417,6 @@ function App() {
                 name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
                 avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
               }));
-            }
-            if (persistence.historyReady) {
-              setSessionsList(persistence.sessions.map(sessionV2ToLegacy));
-            } else if (parsed.sessionsList) {
-              setSessionsList(parsed.sessionsList.map((s: any) => ({
-                ...s,
-                datetime: new Date(s.datetime)
-              })));
             }
             if (parsed.templatesList) {
               setTemplatesList(parsed.templatesList.map((t: any) => ({
@@ -452,7 +450,6 @@ function App() {
             }
             if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
             if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
-            if (parsed.isAutoTimerEnabled !== undefined) setIsAutoTimerEnabled(parsed.isAutoTimerEnabled);
             if (parsed.googleUser !== undefined) {
               const secureToken = await getSecureItem('google_oauth_token');
               if (parsed.googleUser && secureToken) {
@@ -461,48 +458,60 @@ function App() {
                 setGoogleUser(parsed.googleUser);
               }
             }
-            if (parsed.animationSpeed !== undefined) setAnimationSpeed(parsed.animationSpeed);
             if (parsed.lastSynced !== undefined) setLastSynced(parsed.lastSynced);
             if (parsed.foldersList) setFoldersList(parsed.foldersList);
             if (parsed.activeProgramId !== undefined) setActiveProgramId(parsed.activeProgramId);
             if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
-            if (parsed.isHealthSyncEnabled !== undefined) setIsHealthSyncEnabled(parsed.isHealthSyncEnabled);
-            if (parsed.isLiveHeartRateEnabled !== undefined) setIsLiveHeartRateEnabled(parsed.isLiveHeartRateEnabled);
+          }
 
-            if (parsed.isProgramsEnabled !== undefined) setIsProgramsEnabled(parsed.isProgramsEnabled);
-            if (parsed.isHistoryEnabled !== undefined) setIsHistoryEnabled(parsed.isHistoryEnabled);
-            if (parsed.isMusclesEnabled !== undefined) setIsMusclesEnabled(parsed.isMusclesEnabled);
-            if (parsed.enableRoutineFolders !== undefined) setEnableRoutineFolders(parsed.enableRoutineFolders);
-            if (parsed.isDeveloperModeEnabled !== undefined) setIsDeveloperModeEnabled(parsed.isDeveloperModeEnabled);
-            if (parsed.customAccentColor !== undefined) setCustomAccentColor(parsed.customAccentColor);
-            if (parsed.appTheme !== undefined) {
-              setAppThemeState(parsed.appTheme);
-              const { applyTheme } = require('./theme');
-              applyTheme(parsed.appTheme, parsed.customAccentColor || '#4F8EF7', parsedOverrides);
-            } else {
-              const { applyTheme } = require('./theme');
-              applyTheme('default', '#4F8EF7', parsedOverrides);
-            }
-            if (parsed.isProgressiveOverloadEnabled !== undefined) setIsProgressiveOverloadEnabled(parsed.isProgressiveOverloadEnabled);
-            if (parsed.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(parsed.isAutoFinishSetEnabled);
+          if (persistence.historyReady) {
+            setSessionsList(persistence.sessions.map(sessionV2ToLegacy));
+          } else if (parsed?.sessionsList) {
+            setSessionsList(parsed.sessionsList.map((s: any) => ({
+              ...s,
+              datetime: new Date(s.datetime)
+            })));
+          }
 
-            if (parsed.isRpeMode !== undefined) setIsRpeMode(parsed.isRpeMode);
-            if (parsed.soundSetCompleted !== undefined) setSoundSetCompleted(parsed.soundSetCompleted);
-            if (parsed.soundWorkoutFinished !== undefined) setSoundWorkoutFinished(parsed.soundWorkoutFinished);
-            if (parsed.soundTimerCompleted !== undefined) setSoundTimerCompleted(parsed.soundTimerCompleted);
-            if (parsed.customSounds !== undefined) setCustomSounds(parsed.customSounds);
-            if (parsed.soundVolume !== undefined) setSoundVolume(parsed.soundVolume);
-            if (parsed.defaultRestDuration !== undefined) setDefaultRestDuration(parsed.defaultRestDuration);
-            if (parsed.showAchievementBadges !== undefined) setShowAchievementBadges(parsed.showAchievementBadges);
-            if (parsed.showSummaryWidgets !== undefined) setShowSummaryWidgets(parsed.showSummaryWidgets);
-            if (parsed.showWeeklyTonnage !== undefined) setShowWeeklyTonnage(parsed.showWeeklyTonnage);
-            if (parsed.showWorkoutsChart !== undefined) setShowWorkoutsChart(parsed.showWorkoutsChart);
-            if (parsed.showHighlights !== undefined) setShowHighlights(parsed.showHighlights);
-            if (parsed.showHypertrophyGoal !== undefined) setShowHypertrophyGoal(parsed.showHypertrophyGoal);
+          // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
+          const settings = persistence.settings || {};
+          const st = (key: string) => settings[key as keyof typeof settings] !== undefined
+            ? settings[key as keyof typeof settings]
+            : (parsed ? parsed[key] : undefined);
+
+          if (st('isAutoTimerEnabled') !== undefined) setIsAutoTimerEnabled(st('isAutoTimerEnabled'));
+          if (st('animationSpeed') !== undefined) setAnimationSpeed(st('animationSpeed'));
+          if (st('isHealthSyncEnabled') !== undefined) setIsHealthSyncEnabled(st('isHealthSyncEnabled'));
+          if (st('isLiveHeartRateEnabled') !== undefined) setIsLiveHeartRateEnabled(st('isLiveHeartRateEnabled'));
+          if (st('isProgramsEnabled') !== undefined) setIsProgramsEnabled(st('isProgramsEnabled'));
+          if (st('isHistoryEnabled') !== undefined) setIsHistoryEnabled(st('isHistoryEnabled'));
+          if (st('isMusclesEnabled') !== undefined) setIsMusclesEnabled(st('isMusclesEnabled'));
+          if (st('enableRoutineFolders') !== undefined) setEnableRoutineFolders(st('enableRoutineFolders'));
+          if (st('isDeveloperModeEnabled') !== undefined) setIsDeveloperModeEnabled(st('isDeveloperModeEnabled'));
+          if (st('customAccentColor') !== undefined) setCustomAccentColor(st('customAccentColor'));
+          if (st('appTheme') !== undefined) {
+            setAppThemeState(st('appTheme'));
+            const { applyTheme } = require('./theme');
+            applyTheme(st('appTheme'), st('customAccentColor') || '#4F8EF7', parsedOverrides);
           } else {
             const { applyTheme } = require('./theme');
             applyTheme('default', '#4F8EF7', parsedOverrides);
           }
+          if (st('isProgressiveOverloadEnabled') !== undefined) setIsProgressiveOverloadEnabled(st('isProgressiveOverloadEnabled'));
+          if (st('isAutoFinishSetEnabled') !== undefined) setIsAutoFinishSetEnabled(st('isAutoFinishSetEnabled'));
+          if (st('isRpeMode') !== undefined) setIsRpeMode(st('isRpeMode'));
+          if (st('soundSetCompleted') !== undefined) setSoundSetCompleted(st('soundSetCompleted'));
+          if (st('soundWorkoutFinished') !== undefined) setSoundWorkoutFinished(st('soundWorkoutFinished'));
+          if (st('soundTimerCompleted') !== undefined) setSoundTimerCompleted(st('soundTimerCompleted'));
+          if (st('customSounds') !== undefined) setCustomSounds(st('customSounds'));
+          if (st('soundVolume') !== undefined) setSoundVolume(st('soundVolume'));
+          if (st('defaultRestDuration') !== undefined) setDefaultRestDuration(st('defaultRestDuration'));
+          if (st('showAchievementBadges') !== undefined) setShowAchievementBadges(st('showAchievementBadges'));
+          if (st('showSummaryWidgets') !== undefined) setShowSummaryWidgets(st('showSummaryWidgets'));
+          if (st('showWeeklyTonnage') !== undefined) setShowWeeklyTonnage(st('showWeeklyTonnage'));
+          if (st('showWorkoutsChart') !== undefined) setShowWorkoutsChart(st('showWorkoutsChart'));
+          if (st('showHighlights') !== undefined) setShowHighlights(st('showHighlights'));
+          if (st('showHypertrophyGoal') !== undefined) setShowHypertrophyGoal(st('showHypertrophyGoal'));
 
           useActiveWorkoutStore.getState().hydrate(persistence.activeDraft);
           activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
@@ -541,28 +550,15 @@ function App() {
     }
   }, []);
 
-  // Save to database on state changes
+  // Save compact settings to MMKV on settings changes (hot-path synchronous native persistence)
   React.useEffect(() => {
     if (!isDataLoaded) return;
     try {
-      const googleUserToSave = googleUser ? { ...googleUser, accessToken: undefined } : null;
-      const data = {
-        user,
-        sessionsList,
-        templatesList,
-        exercisesList,
-        primaryMetricsList,
-        bodyPartMetricsList,
+      saveCompactSettings({
         isAutoTimerEnabled,
-        googleUser: googleUserToSave,
         animationSpeed,
-        lastSynced,
-        foldersList,
-        activeProgramId,
-        programStartDate,
         isHealthSyncEnabled,
         isLiveHeartRateEnabled,
-
         isProgramsEnabled,
         isHistoryEnabled,
         isMusclesEnabled,
@@ -585,6 +581,57 @@ function App() {
         isRpeMode,
         appTheme,
         customAccentColor,
+      });
+    } catch (e) {
+      console.warn('[CompactSettings] Failed to save compact settings:', e);
+    }
+  }, [
+    isDataLoaded,
+    isAutoTimerEnabled,
+    animationSpeed,
+    isHealthSyncEnabled,
+    isLiveHeartRateEnabled,
+    isProgramsEnabled,
+    isHistoryEnabled,
+    isMusclesEnabled,
+    soundSetCompleted,
+    soundWorkoutFinished,
+    soundTimerCompleted,
+    customSounds,
+    soundVolume,
+    defaultRestDuration,
+    showAchievementBadges,
+    showSummaryWidgets,
+    showWeeklyTonnage,
+    showWorkoutsChart,
+    showHighlights,
+    showHypertrophyGoal,
+    enableRoutineFolders,
+    isDeveloperModeEnabled,
+    isProgressiveOverloadEnabled,
+    isAutoFinishSetEnabled,
+    isRpeMode,
+    appTheme,
+    customAccentColor,
+  ]);
+
+  // Save core user app data (templates, custom exercises, metrics, profile, routines) to database
+  // Note: sessionsList is decoupled into relational SQLite v2 (strongern_v2.db) and omitted here
+  React.useEffect(() => {
+    if (!isDataLoaded) return;
+    try {
+      const googleUserToSave = googleUser ? { ...googleUser, accessToken: undefined } : null;
+      const data = {
+        user,
+        templatesList,
+        exercisesList,
+        primaryMetricsList,
+        bodyPartMetricsList,
+        googleUser: googleUserToSave,
+        lastSynced,
+        foldersList,
+        activeProgramId,
+        programStartDate,
       };
       latestAppDataRef.current = data;
       if (rootSaveTimeoutRef.current) {
@@ -599,26 +646,19 @@ function App() {
     } catch (e) {
       console.warn('Error queuing state save to database', e);
     }
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, animationSpeed, lastSynced, foldersList, activeProgramId, programStartDate, isHealthSyncEnabled, isLiveHeartRateEnabled, isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, customSounds, soundVolume, defaultRestDuration, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, showHypertrophyGoal, enableRoutineFolders, isDeveloperModeEnabled, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isRpeMode, appTheme, customAccentColor, isDataLoaded]);
-
-  const historyReconcileTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  React.useEffect(() => {
-    if (!isDataLoaded || !historyRepositoryReadyRef.current) return;
-    if (historyReconcileTimerRef.current) clearTimeout(historyReconcileTimerRef.current);
-    historyReconcileTimerRef.current = setTimeout(() => {
-      const normalized = sessionsList.map((session, index) => legacySessionToV2(session, index));
-      reconcileSessions(normalized).catch((error) => {
-        console.error('[HistoryRepository] Background reconciliation failed:', error);
-      });
-      historyReconcileTimerRef.current = null;
-    }, 250);
-    return () => {
-      if (historyReconcileTimerRef.current) {
-        clearTimeout(historyReconcileTimerRef.current);
-        historyReconcileTimerRef.current = null;
-      }
-    };
-  }, [isDataLoaded, sessionsList]);
+  }, [
+    user,
+    templatesList,
+    exercisesList,
+    primaryMetricsList,
+    bodyPartMetricsList,
+    googleUser,
+    lastSynced,
+    foldersList,
+    activeProgramId,
+    programStartDate,
+    isDataLoaded,
+  ]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -788,6 +828,11 @@ function App() {
           });
           mergedSessions.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
           setSessionsList(mergedSessions);
+          if (historyRepositoryReadyRef.current) {
+            reconcileSessions(mergedSessions.map((s: any, idx: number) => legacySessionToV2(s, idx))).catch((err) => {
+              console.error('[HistoryRepository] Google Drive sync reconciliation failed:', err);
+            });
+          }
 
           // 2. Merge User Profile details
           const mergedUser = {
@@ -1127,10 +1172,16 @@ function App() {
         });
       }
       if (parsed.sessionsList) {
-        setSessionsList(parsed.sessionsList.map((s: any) => ({
+        const restoredSessions = parsed.sessionsList.map((s: any) => ({
           ...s,
           datetime: new Date(s.datetime)
-        })));
+        }));
+        setSessionsList(restoredSessions);
+        if (historyRepositoryReadyRef.current) {
+          reconcileSessions(restoredSessions.map((s: any, idx: number) => legacySessionToV2(s, idx))).catch((err) => {
+            console.error('[HistoryRepository] Backup restore reconciliation failed:', err);
+          });
+        }
       }
       if (parsed.templatesList) {
         setTemplatesList(parsed.templatesList.map((t: any) => ({
@@ -1211,6 +1262,11 @@ function App() {
       
       if (importedSessions.length > 0) {
         setSessionsList(prev => [...importedSessions, ...prev]);
+        if (historyRepositoryReadyRef.current) {
+          bulkImportSessions(importedSessions.map((s, idx) => legacySessionToV2(s, idx))).catch((err) => {
+            console.error('[HistoryRepository] Bulk import sessions failed:', err);
+          });
+        }
         setUser(prev => ({
           ...prev,
           totalWorkouts: sessionsList.length + importedSessions.length
@@ -1410,6 +1466,11 @@ function App() {
     setGoogleUser(null);
     setLastSynced(null);
     deleteSecureItem('google_oauth_token');
+    if (historyRepositoryReadyRef.current) {
+      reconcileSessions([]).catch((err) => {
+        console.error('[HistoryRepository] Clear all sessions failed:', err);
+      });
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem(STORAGE_KEY);
@@ -1811,28 +1872,6 @@ function App() {
               rightReps: s.isUnilateral ? (parseInt(s.rightReps, 10) || 0) : undefined,
             })),
           });
-        } else {
-          const setsArray: any[] = ex.sets || [];
-          // Derive summary stats from completed sets only
-          const doneSets = setsArray.filter((s: any) => s.completed === true);
-          const bestWeight = doneSets.reduce((max: number, s: any) => Math.max(max, parseFloat(s.weight) || 0), 0);
-          const bestReps = doneSets.reduce((max: number, s: any) => Math.max(max, parseInt(s.reps, 10) || 0), 0);
-          acc.push({
-            name: ex.name,
-            variation: ex.variation,
-            // sets count = completed only (history display)
-            sets: doneSets.length,
-            bestWeight: bestWeight || ex.bestWeight || 0,
-            bestReps: bestReps || ex.bestReps || 0,
-            // setsDetails = ALL sets (done + undone) so resuming shows full workout
-            setsDetails: setsArray.map((s: any) => ({
-              weight: parseFloat(s.weight) || 0,
-              reps: parseInt(s.reps, 10) || 0,
-              completed: s.completed === true,
-              rpe: s.rpe ? parseFloat(s.rpe) : undefined,
-              category: s.category || 'S',
-            })),
-          });
         }
       }
       return acc;
@@ -1877,11 +1916,8 @@ function App() {
     try {
       if (durableSession && historyRepositoryReadyRef.current) {
         await upsertSession(legacySessionToV2(durableSession));
-      } else {
-        await saveToDb(STORAGE_KEY, { ...latestAppDataRef.current, sessionsList: updatedSessions });
       }
       endActiveWorkout();
-      deleteFromDb('strongern_active_workout_state').catch(() => {});
       activeWorkoutStateSavedRef.current = false;
     } catch (error) {
       console.error('[Persistence] Workout finish transaction failed; active draft retained.', error);
@@ -1926,8 +1962,6 @@ function App() {
       const nextSessions = sessionsListRef.current.filter(s => s.id !== sessionId);
       if (historyRepositoryReadyRef.current) {
         await softDeleteSession(sessionId);
-      } else {
-        await saveToDb(STORAGE_KEY, { ...latestAppDataRef.current, sessionsList: nextSessions });
       }
       setSessionsList(nextSessions);
     } catch (error) {
@@ -1944,7 +1978,6 @@ function App() {
   }, [sessionsList]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
-  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const isWorkoutActiveRef = React.useRef(isWorkoutActive);
   const isWorkoutModalVisibleRef = React.useRef(isWorkoutModalVisible);
@@ -1956,64 +1989,14 @@ function App() {
     workoutExercisesRef.current = workoutExercises;
   }, [isWorkoutActive, isWorkoutModalVisible, activeWorkoutComment, workoutExercises]);
 
-  const getFreshWorkoutState = React.useCallback(() => {
-    if (!isWorkoutActiveRef.current) return null;
-    return {
-      isWorkoutActive: true,
-      workoutName: workoutNameRef.current || 'Active Workout',
-      startTime: startTimeRef.current
-        ? (startTimeRef.current instanceof Date ? startTimeRef.current.toISOString() : new Date(startTimeRef.current).toISOString())
-        : new Date().toISOString(),
-      workoutExercises: workoutExercisesRef.current || [],
-      isWorkoutModalVisible: isWorkoutModalVisibleRef.current,
-      comment: activeWorkoutCommentRef.current || '',
-    };
-  }, []);
-
-  const saveActiveWorkoutState = React.useCallback((forceFlush = false) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    const freshState = getFreshWorkoutState();
-    if (freshState) {
-      // Validate exercises before persisting
-      const validExercises = Array.isArray(freshState.workoutExercises)
-        ? freshState.workoutExercises.filter(
-            (ex: any) => Boolean(ex && ex.name && typeof ex.name === 'string' && ex.name.trim().length > 0)
-          )
-        : [];
-      if (validExercises.length < freshState.workoutExercises.length) {
-        console.warn('[SAVE] Filtered out', freshState.workoutExercises.length - validExercises.length, 'invalid exercises before saving');
-      }
-      freshState.workoutExercises = validExercises;
-      console.log('[SAVE] Saving active workout state, exercises count:', freshState.workoutExercises.length);
-      saveToDb('strongern_active_workout_state', freshState).catch(e => {
-        console.error('[SAVE] Error saving active workout state:', e);
-      });
-      activeWorkoutStateSavedRef.current = true;
-    } else if (activeWorkoutStateSavedRef.current) {
-      console.log('[SAVE] Deleting workout state because workout is no longer active');
-      deleteFromDb('strongern_active_workout_state');
-      activeWorkoutStateSavedRef.current = false;
-    }
-  }, [getFreshWorkoutState]);
-
-  React.useEffect(() => {
-    saveActiveWorkoutStateRef.current = saveActiveWorkoutState;
-  }, [saveActiveWorkoutState]);
-
   const flushSave = React.useCallback(() => {
     console.log('[SAVE] AppState change/flush save triggered');
     try {
-      // 1. Flush main root data (exercises, tags, sessions, user settings)
       flushMainAppData();
-      // 2. Flush active workout state from live refs
-      saveActiveWorkoutState(true);
     } catch (e) {
       console.error('[SAVE] Error during flushSave:', e);
     }
-  }, [flushMainAppData, saveActiveWorkoutState]);
+  }, [flushMainAppData]);
 
   // Flush on web beforeunload
   React.useEffect(() => {
@@ -2025,11 +2008,6 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [flushSave]);
 
-  // Persist active workout state on changes (cross-platform via db.ts)
-  React.useEffect(() => {
-    if (!isDataLoaded || !isWorkoutRestored) return;
-    saveActiveWorkoutState(false);
-  }, [isWorkoutActive, workoutName, startTime, workoutExercises, isWorkoutModalVisible, activeWorkoutComment, isDataLoaded, isWorkoutRestored, saveActiveWorkoutState]);
 
   // Save workout state when app goes to background (native)
   React.useEffect(() => {

@@ -67,6 +67,7 @@
     "web": "expo start --web",
     "e2e": "node scripts/run-e2e.js",
     "microbench": "node scripts/run-microbench.js",
+    "benchmark:startup": "node scripts/benchmark-startup.js",
     "analyze-trace": "node scripts/analyze-cpu-profile.js",
     "test": "jest",
     "test:watch": "jest --watch",

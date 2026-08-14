@@ -117,6 +117,15 @@ export function reconcileSessions(sessions: WorkoutSessionV2[]): Promise<void> {
   });
 }
 
+export function bulkImportSessions(sessions: WorkoutSessionV2[]): Promise<void> {
+  return enqueueWrite(async () => {
+    const db = await requireDb();
+    await transaction(db, async () => {
+      for (const session of sessions) await writeSession(db, session);
+    });
+  });
+}
+
 export function softDeleteSession(sessionId: string): Promise<void> {
   return enqueueWrite(async () => {
     const db = await requireDb();
@@ -144,37 +153,58 @@ function mapSetRow(row: any): SetLogV2 {
   };
 }
 
-export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
+export async function loadAllSessions(): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
-  const sessionRows: any[] = await db.getAllAsync(
-    `SELECT * FROM workout_sessions WHERE deleted_at_ms IS NULL
-     ORDER BY started_at_ms DESC, id DESC LIMIT ? OFFSET ?;`,
-    [Math.max(1, Math.min(limit, 500)), Math.max(0, offset)]
-  );
+  
+  const [sessionRows, exerciseRows, setRows]: [any[], any[], any[]] = await Promise.all([
+    db.getAllAsync(
+      `SELECT id, title, title_norm, started_at_ms, ended_at_ms, duration_sec, comment,
+              total_volume_milli_kg, prs, created_at_ms, updated_at_ms, revision, deleted_at_ms
+       FROM workout_sessions
+       WHERE deleted_at_ms IS NULL
+       ORDER BY started_at_ms DESC, id DESC;`
+    ),
+    db.getAllAsync(
+      `SELECT se.id, se.session_id, se.exercise_id, se.name_snapshot, se.name_norm,
+              se.variation_key, se.position, se.superset_group_id, se.note
+       FROM session_exercises se
+       JOIN workout_sessions ws ON ws.id = se.session_id
+       WHERE ws.deleted_at_ms IS NULL
+       ORDER BY se.session_id, se.position;`
+    ),
+    db.getAllAsync(
+      `SELECT sl.id, sl.session_exercise_id, sl.position, sl.category, sl.completed,
+              sl.weight_milli_kg, sl.reps, sl.rpe_tenths, sl.is_unilateral,
+              sl.left_weight_milli_kg, sl.left_reps, sl.right_weight_milli_kg, sl.right_reps
+       FROM set_logs sl
+       JOIN session_exercises se ON se.id = sl.session_exercise_id
+       JOIN workout_sessions ws ON ws.id = se.session_id
+       WHERE ws.deleted_at_ms IS NULL
+       ORDER BY sl.session_exercise_id, sl.position;`
+    ),
+  ]);
+
   if (sessionRows.length === 0) return [];
 
-  const sessionIds = sessionRows.map((row) => row.id);
-  const placeholders = sessionIds.map(() => '?').join(',');
-  const exerciseRows: any[] = await db.getAllAsync(
-    `SELECT * FROM session_exercises WHERE session_id IN (${placeholders}) ORDER BY session_id, position;`,
-    sessionIds
-  );
-  const exerciseIds = exerciseRows.map((row) => row.id);
-  const setRows: any[] = exerciseIds.length === 0 ? [] : await db.getAllAsync(
-    `SELECT * FROM set_logs WHERE session_exercise_id IN (${exerciseIds.map(() => '?').join(',')})
-     ORDER BY session_exercise_id, position;`,
-    exerciseIds
-  );
-
   const setsByExercise = new Map<string, SetLogV2[]>();
-  for (const row of setRows) {
-    const list = setsByExercise.get(row.session_exercise_id) ?? [];
+  for (let i = 0; i < setRows.length; i++) {
+    const row = setRows[i];
+    let list = setsByExercise.get(row.session_exercise_id);
+    if (!list) {
+      list = [];
+      setsByExercise.set(row.session_exercise_id, list);
+    }
     list.push(mapSetRow(row));
-    setsByExercise.set(row.session_exercise_id, list);
   }
+
   const exercisesBySession = new Map<string, SessionExerciseV2[]>();
-  for (const row of exerciseRows) {
-    const list = exercisesBySession.get(row.session_id) ?? [];
+  for (let i = 0; i < exerciseRows.length; i++) {
+    const row = exerciseRows[i];
+    let list = exercisesBySession.get(row.session_id);
+    if (!list) {
+      list = [];
+      exercisesBySession.set(row.session_id, list);
+    }
     list.push({
       id: row.id,
       sessionId: row.session_id,
@@ -190,22 +220,111 @@ export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSess
     exercisesBySession.set(row.session_id, list);
   }
 
-  return sessionRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    titleNorm: row.title_norm,
-    startedAtMs: row.started_at_ms,
-    endedAtMs: row.ended_at_ms ?? null,
-    durationSec: row.duration_sec,
-    comment: row.comment ?? null,
-    totalVolumeMilliKg: row.total_volume_milli_kg,
-    prs: row.prs,
-    createdAtMs: row.created_at_ms,
-    updatedAtMs: row.updated_at_ms,
-    revision: row.revision,
-    deletedAtMs: row.deleted_at_ms ?? null,
-    exercises: exercisesBySession.get(row.id) ?? [],
-  }));
+  const sessions: WorkoutSessionV2[] = new Array(sessionRows.length);
+  for (let i = 0; i < sessionRows.length; i++) {
+    const row = sessionRows[i];
+    sessions[i] = {
+      id: row.id,
+      title: row.title,
+      titleNorm: row.title_norm,
+      startedAtMs: row.started_at_ms,
+      endedAtMs: row.ended_at_ms ?? null,
+      durationSec: row.duration_sec,
+      comment: row.comment ?? null,
+      totalVolumeMilliKg: row.total_volume_milli_kg,
+      prs: row.prs,
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+      revision: row.revision,
+      deletedAtMs: row.deleted_at_ms ?? null,
+      exercises: exercisesBySession.get(row.id) ?? [],
+    };
+  }
+
+  return sessions;
+}
+
+export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
+  const db = await requireDb();
+  const sessionRows: any[] = await db.getAllAsync(
+    `SELECT * FROM workout_sessions WHERE deleted_at_ms IS NULL
+     ORDER BY started_at_ms DESC, id DESC LIMIT ? OFFSET ?;`,
+    [Math.max(1, Math.min(limit, 500)), Math.max(0, offset)]
+  );
+  if (sessionRows.length === 0) return [];
+
+  const sessionIds = sessionRows.map((row) => row.id);
+  const placeholders = sessionIds.map(() => '?').join(',');
+
+  const [exerciseRows, setRows]: [any[], any[]] = await Promise.all([
+    db.getAllAsync(
+      `SELECT * FROM session_exercises WHERE session_id IN (${placeholders}) ORDER BY session_id, position;`,
+      sessionIds
+    ),
+    db.getAllAsync(
+      `SELECT sl.* FROM set_logs sl
+       JOIN session_exercises se ON se.id = sl.session_exercise_id
+       WHERE se.session_id IN (${placeholders})
+       ORDER BY sl.session_exercise_id, sl.position;`,
+      sessionIds
+    ),
+  ]);
+
+  const setsByExercise = new Map<string, SetLogV2[]>();
+  for (let i = 0; i < setRows.length; i++) {
+    const row = setRows[i];
+    let list = setsByExercise.get(row.session_exercise_id);
+    if (!list) {
+      list = [];
+      setsByExercise.set(row.session_exercise_id, list);
+    }
+    list.push(mapSetRow(row));
+  }
+  const exercisesBySession = new Map<string, SessionExerciseV2[]>();
+  for (let i = 0; i < exerciseRows.length; i++) {
+    const row = exerciseRows[i];
+    let list = exercisesBySession.get(row.session_id);
+    if (!list) {
+      list = [];
+      exercisesBySession.set(row.session_id, list);
+    }
+    list.push({
+      id: row.id,
+      sessionId: row.session_id,
+      exerciseId: row.exercise_id ?? null,
+      nameSnapshot: row.name_snapshot,
+      nameNorm: row.name_norm,
+      variationKey: row.variation_key,
+      position: row.position,
+      supersetGroupId: row.superset_group_id ?? null,
+      note: row.note ?? null,
+      sets: setsByExercise.get(row.id) ?? [],
+    });
+    exercisesBySession.set(row.session_id, list);
+  }
+
+  const sessions: WorkoutSessionV2[] = new Array(sessionRows.length);
+  for (let i = 0; i < sessionRows.length; i++) {
+    const row = sessionRows[i];
+    sessions[i] = {
+      id: row.id,
+      title: row.title,
+      titleNorm: row.title_norm,
+      startedAtMs: row.started_at_ms,
+      endedAtMs: row.ended_at_ms ?? null,
+      durationSec: row.duration_sec,
+      comment: row.comment ?? null,
+      totalVolumeMilliKg: row.total_volume_milli_kg,
+      prs: row.prs,
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+      revision: row.revision,
+      deletedAtMs: row.deleted_at_ms ?? null,
+      exercises: exercisesBySession.get(row.id) ?? [],
+    };
+  }
+
+  return sessions;
 }
 
 export async function countSessions(): Promise<number> {

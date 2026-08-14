@@ -1,6 +1,7 @@
-import { LegacyActiveWorkoutV1, LegacyAppDataV1, MigrationState, WorkoutSessionV2 } from './contracts/types';
+import { AppSettingsCompactV2, LegacyActiveWorkoutV1, LegacyAppDataV1, MigrationState, WorkoutSessionV2 } from './contracts/types';
 import { calculateChecksum, validateLegacyActiveWorkoutV1, validateLegacyAppDataV1 } from './contracts/validators';
 import { initMMKVAdapter } from './adapters/mmkvAdapter';
+import { loadCompactSettings, saveCompactSettings } from './compactSettings';
 import {
   hasActiveWorkoutJournalRecord,
   restoreActiveWorkoutDraft,
@@ -9,10 +10,9 @@ import {
 import { legacyActiveWorkoutToRuntime, runtimeStateToDraft } from './activeWorkoutBridge';
 import { setStorageHealthState } from './healthState';
 import {
-  countSessions,
   getPersistenceMeta,
   initHistoryRepository,
-  listSessions,
+  loadAllSessions,
   setPersistenceMeta,
   upsertSession,
 } from './history/repository';
@@ -25,20 +25,43 @@ export interface PersistenceBootstrapResult {
   historyReady: boolean;
   activeDraft: ReturnType<typeof restoreActiveWorkoutDraft>;
   sessions: WorkoutSessionV2[];
+  settings: AppSettingsCompactV2 | null;
   migration: MigrationState;
+}
+
+function extractSettingsFromLegacy(legacy: LegacyAppDataV1): AppSettingsCompactV2 {
+  return {
+    isAutoTimerEnabled: legacy.isAutoTimerEnabled,
+    animationSpeed: legacy.animationSpeed,
+    isHealthSyncEnabled: legacy.isHealthSyncEnabled,
+    isLiveHeartRateEnabled: legacy.isLiveHeartRateEnabled,
+    isProgramsEnabled: legacy.isProgramsEnabled,
+    isHistoryEnabled: legacy.isHistoryEnabled,
+    isMusclesEnabled: legacy.isMusclesEnabled,
+    soundSetCompleted: legacy.soundSetCompleted,
+    soundWorkoutFinished: legacy.soundWorkoutFinished,
+    soundTimerCompleted: legacy.soundTimerCompleted,
+    customSounds: legacy.customSounds,
+    soundVolume: legacy.soundVolume,
+    defaultRestDuration: legacy.defaultRestDuration,
+    showAchievementBadges: legacy.showAchievementBadges,
+    showSummaryWidgets: legacy.showSummaryWidgets,
+    showWeeklyTonnage: legacy.showWeeklyTonnage,
+    showWorkoutsChart: legacy.showWorkoutsChart,
+    showHighlights: legacy.showHighlights,
+    showHypertrophyGoal: legacy.showHypertrophyGoal,
+    enableRoutineFolders: legacy.enableRoutineFolders,
+    isDeveloperModeEnabled: legacy.isDeveloperModeEnabled,
+    isProgressiveOverloadEnabled: legacy.isProgressiveOverloadEnabled,
+    isAutoFinishSetEnabled: legacy.isAutoFinishSetEnabled,
+    isRpeMode: legacy.isRpeMode,
+    appTheme: legacy.appTheme,
+    customAccentColor: legacy.customAccentColor,
+  };
 }
 
 function fingerprintLegacySessions(sessions: any[]): string {
   return calculateChecksum(JSON.stringify(sessions, (_key, value) => value instanceof Date ? value.toISOString() : value));
-}
-
-async function loadAllSessions(): Promise<WorkoutSessionV2[]> {
-  const count = await countSessions();
-  const output: WorkoutSessionV2[] = [];
-  for (let offset = 0; offset < count; offset += 250) {
-    output.push(...await listSessions(250, offset));
-  }
-  return output;
 }
 
 export async function bootstrapPersistence(
@@ -47,46 +70,104 @@ export async function bootstrapPersistence(
 ): Promise<PersistenceBootstrapResult> {
   const mmkvReady = initMMKVAdapter();
   const historyReady = await initHistoryRepository();
-  const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw ?? {});
-  const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : {};
-  const legacySessions = Array.isArray(legacyApp.sessionsList) ? legacyApp.sessionsList : [];
-  const sourceFingerprint = fingerprintLegacySessions(legacySessions);
   const now = Date.now();
-  const migration: MigrationState = {
-    status: 'in_progress',
+
+  let sessions: WorkoutSessionV2[] = [];
+  let migration: MigrationState = {
+    status: 'unstarted',
     version: 2,
     startedAtMs: now,
     completedAtMs: null,
-    sourceFingerprint,
-    runId: `migration-${now}-${sourceFingerprint}`,
+    sourceFingerprint: '',
+    runId: `bootstrap-${now}`,
     error: null,
   };
 
-  let sessions: WorkoutSessionV2[] = [];
   try {
     if (historyReady) {
+      // Check if relational SQLite V2 has already completed initial migration
       const previousRaw = await getPersistenceMeta(MIGRATION_META_KEY);
+      let isAlreadyMigrated = false;
       let previousFingerprint = '';
-      try { previousFingerprint = JSON.parse(previousRaw ?? '{}').sourceFingerprint ?? ''; } catch {}
-      if (previousFingerprint !== sourceFingerprint) {
+
+      if (previousRaw) {
+        try {
+          const parsedMeta = JSON.parse(previousRaw);
+          if (parsedMeta && parsedMeta.version >= 2 && parsedMeta.verifiedAtMs) {
+            isAlreadyMigrated = true;
+            previousFingerprint = parsedMeta.sourceFingerprint ?? '';
+          }
+        } catch {
+          isAlreadyMigrated = false;
+        }
+      }
+
+      if (isAlreadyMigrated) {
+        // FAST-PATH HYDRATION: Relational SQLite V2 is verified and marked ready.
+        // Bypass legacy JSON stringify & DJB2 character checksumming routine on cold start.
+        sessions = await loadAllSessions();
+        migration = {
+          status: 'verified',
+          version: 2,
+          startedAtMs: now,
+          completedAtMs: Date.now(),
+          sourceFingerprint: previousFingerprint,
+          runId: `fastpath-${now}`,
+          error: null,
+        };
+      } else {
+        // LEGACY MIGRATION PATH: First-run or unmigrated legacy JSON data.
+        const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw ?? {});
+        const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : {};
+        const legacySessions = Array.isArray(legacyApp.sessionsList) ? legacyApp.sessionsList : [];
+        const sourceFingerprint = fingerprintLegacySessions(legacySessions);
+
+        migration = {
+          status: 'in_progress',
+          version: 2,
+          startedAtMs: now,
+          completedAtMs: null,
+          sourceFingerprint,
+          runId: `migration-${now}-${sourceFingerprint}`,
+          error: null,
+        };
+
         for (let index = 0; index < legacySessions.length; index += 1) {
           await upsertSession(legacySessionToV2(legacySessions[index], index));
         }
-        const ids = new Set((await loadAllSessions()).map((session) => session.id));
+
+        sessions = await loadAllSessions();
+        const ids = new Set(sessions.map((session) => session.id));
         const missing = legacySessions
           .map((session, index) => legacySessionToV2(session, index).id)
           .filter((id) => !ids.has(id));
         if (missing.length > 0) throw new Error(`Migration verification failed for ${missing.length} sessions`);
+
         await setPersistenceMeta(MIGRATION_META_KEY, JSON.stringify({
           version: 2,
           sourceFingerprint,
           sourceCount: legacySessions.length,
           verifiedAtMs: Date.now(),
         }));
+
+        migration.status = 'verified';
+        migration.completedAtMs = Date.now();
       }
-      sessions = await loadAllSessions();
     } else {
+      // Fallback when relational SQLite is unavailable (e.g., Web)
+      const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw ?? {});
+      const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : {};
+      const legacySessions = Array.isArray(legacyApp.sessionsList) ? legacyApp.sessionsList : [];
       sessions = legacySessions.map(legacySessionToV2);
+      migration = {
+        status: 'verified',
+        version: 1,
+        startedAtMs: now,
+        completedAtMs: Date.now(),
+        sourceFingerprint: '',
+        runId: `fallback-${now}`,
+        error: null,
+      };
     }
 
     if (mmkvReady && !hasActiveWorkoutJournalRecord()) {
@@ -99,8 +180,6 @@ export async function bootstrapPersistence(
       }
     }
 
-    migration.status = 'verified';
-    migration.completedAtMs = Date.now();
     setStorageHealthState(historyReady && mmkvReady ? 'ready' : 'legacy_safe_mode', {
       mmkvAvailable: mmkvReady,
       sqliteAvailable: historyReady,
@@ -115,7 +194,27 @@ export async function bootstrapPersistence(
       lastError: migration.error,
     });
     console.error('[PersistenceBootstrap] Automatic migration failed; legacy source remains untouched.', error);
+    const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw ?? {});
+    const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : {};
+    const legacySessions = Array.isArray(legacyApp.sessionsList) ? legacyApp.sessionsList : [];
     sessions = legacySessions.map(legacySessionToV2);
+  }
+
+  let settings: AppSettingsCompactV2 | null = null;
+  if (mmkvReady) {
+    settings = loadCompactSettings();
+  }
+  if (!settings && legacyAppRaw && typeof legacyAppRaw === 'object') {
+    const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw);
+    const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : (legacyAppRaw as LegacyAppDataV1);
+    settings = extractSettingsFromLegacy(legacyApp);
+    if (mmkvReady && settings) {
+      try {
+        saveCompactSettings(settings);
+      } catch (err) {
+        console.warn('[PersistenceBootstrap] Initial compact settings save failed:', err);
+      }
+    }
   }
 
   let activeDraft = null;
@@ -133,5 +232,5 @@ export async function bootstrapPersistence(
       }
     }
   }
-  return { mmkvReady, historyReady, activeDraft, sessions, migration };
+  return { mmkvReady, historyReady, activeDraft, sessions, settings, migration };
 }

@@ -53,6 +53,37 @@ export interface LegacyAppDataV1 {
   customAccentColor?: string;
 }
 
+export interface AppSettingsCompactV2 {
+  isAutoTimerEnabled?: boolean;
+  animationSpeed?: number;
+  isHealthSyncEnabled?: boolean;
+  isLiveHeartRateEnabled?: boolean;
+  isProgramsEnabled?: boolean;
+  isHistoryEnabled?: boolean;
+  isMusclesEnabled?: boolean;
+  soundSetCompleted?: string;
+  soundWorkoutFinished?: string;
+  soundTimerCompleted?: string;
+  customSounds?: Array<{ id: string; name: string; uri: string }>;
+  soundVolume?: number;
+  defaultRestDuration?: number;
+  showAchievementBadges?: boolean;
+  showSummaryWidgets?: boolean;
+  showWeeklyTonnage?: boolean;
+  showWorkoutsChart?: boolean;
+  showHighlights?: boolean;
+  showHypertrophyGoal?: boolean;
+  enableRoutineFolders?: boolean;
+  isDeveloperModeEnabled?: boolean;
+  isProgressiveOverloadEnabled?: boolean;
+  isAutoFinishSetEnabled?: boolean;
+  isRpeMode?: boolean;
+  appTheme?: string;
+  customAccentColor?: string;
+}
+
+export type AppSettings = AppSettingsCompactV2;
+
 export interface LegacyActiveWorkoutExerciseV1 {
   id?: string;
   name: string;

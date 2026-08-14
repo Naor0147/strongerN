@@ -191,3 +191,5 @@ export const mmkvStorageAdapter: SynchronousStorageAdapter = {
     }
   },
 };
+
+export { loadCompactSettings, saveCompactSettings, clearCompactSettings } from '../compactSettings';
