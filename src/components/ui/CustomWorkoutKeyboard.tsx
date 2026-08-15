@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { colors, font, spacing, radius, ripple as rippleTokens } from '../../theme';
+import Animated, { FadeInDown, FadeOutDown, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { colors, font, spacing, radius, ripple as rippleTokens, getScaledDuration } from '../../theme';
 import i18n from '../../utils/i18n';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -110,6 +110,7 @@ interface CustomWorkoutKeyboardProps {
   inputKey?: string;
   isRpeMode?: boolean;
   maxLength?: number;
+  onHeightChange?: (height: number) => void;
 }
 
 const RPE_OPTIONS = ['6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
@@ -143,6 +144,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
   inputKey,
   isRpeMode = true,
   maxLength = 6,
+  onHeightChange,
 }) => {
   const [showRpeBar, setShowRpeBar] = useState(false);
   const isFirstKeyRef = useRef(true);
@@ -247,7 +249,12 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
   const handleRpeClear = () => { playFeedback('heavy'); onChangeRpe?.(''); };
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={styles.container}
+      entering={FadeInDown.duration(getScaledDuration(160))}
+      exiting={FadeOutDown.duration(getScaledDuration(120))}
+      onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
+    >
       <View style={styles.topBar}>
         <Text style={styles.titleText} numberOfLines={1}>
           {title ? `${title.toUpperCase()}` : ''}
@@ -400,7 +407,7 @@ export const CustomWorkoutKeyboard: React.FC<CustomWorkoutKeyboardProps> = React
           )}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 

@@ -1,7 +1,7 @@
 import { Platform, Alert, LayoutAnimation, UIManager } from 'react-native';
 import { ActiveExercise, SetSuggestion } from './activeWorkoutTypes';
 import { getSessionsForExerciseVariation } from '../../utils/variationUtils';
-import { resolveLastPerformanceSuggestion } from '../../storage/expectedValues';
+import { ExpectedValueContext, ExpectedValuesIndex, resolveLastPerformanceSuggestion } from '../../storage/expectedValues';
 
 export const safeLayoutAnim = (preset = LayoutAnimation.Presets.easeInEaseOut) => {
   try {
@@ -53,6 +53,7 @@ export function mapActiveExercisesToLegacy(exercises: ActiveExercise[]): any[] {
       isNoteLocked: exercise.isNoteLocked,
       autoTimer: exercise.autoTimer,
       variation: exercise.variation,
+      useRoutineTargets: exercise.useRoutineTargets,
       sets: exercise.sets.length,
       bestWeight: weights.length ? Math.max(...weights, 0) : 0,
       bestReps: reps.length ? Math.max(...reps, 0) : 0,
@@ -115,7 +116,8 @@ export const getBestPerformanceSuggestionForSet = (
   isUnilateral: boolean,
   targetVariation?: string,
   exerciseObj?: any,
-  sessionsMap?: Map<string, any[]>
+  sessionsMap?: ExpectedValuesIndex,
+  context: ExpectedValueContext = {}
 ): SetSuggestion => {
   return resolveLastPerformanceSuggestion(
     exName,
@@ -124,7 +126,8 @@ export const getBestPerformanceSuggestionForSet = (
     sessions,
     isUnilateral,
     targetVariation,
-    sessionsMap
+    sessionsMap,
+    context
   );
   /* Legacy progressive-overload scoring retained below for source compatibility; the
      exact-last-performance resolver above is now the sole runtime policy.
@@ -324,7 +327,8 @@ export const getPreviousSessionSetSuggestion = (
   isUnilateral: boolean,
   workoutName?: string,
   exIdx?: number,
-  sessionsMap?: Map<string, any[]>
+  sessionsMap?: ExpectedValuesIndex,
+  context: ExpectedValueContext = {}
 ): SetSuggestion => {
   return resolveLastPerformanceSuggestion(
     exName,
@@ -333,7 +337,12 @@ export const getPreviousSessionSetSuggestion = (
     sessions,
     isUnilateral,
     undefined,
-    sessionsMap
+    sessionsMap,
+    {
+      ...context,
+      routineName: context.routineName ?? workoutName,
+      exercisePosition: context.exercisePosition ?? exIdx,
+    }
   );
   /* Legacy tiered matching retained below for source compatibility.
   const cleanStr = (s: string | undefined | null) => (s || '').trim().toLowerCase();

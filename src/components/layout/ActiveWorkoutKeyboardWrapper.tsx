@@ -12,6 +12,7 @@ export const ActiveWorkoutKeyboardWrapper = React.memo(({
   handleNextField,
   handleCloseKeyboard,
   tempInputValueRef,
+  onHeightChange,
 }: {
   activeExercises: ActiveExercise[];
   updateSetField: any;
@@ -19,6 +20,7 @@ export const ActiveWorkoutKeyboardWrapper = React.memo(({
   handleNextField: any;
   handleCloseKeyboard: any;
   tempInputValueRef: React.MutableRefObject<string>;
+  onHeightChange?: (height: number) => void;
 }) => {
   const [activeInput, setActiveInput] = useState<any>(null);
   const activeExercisesRef = useRef(activeExercises);
@@ -80,6 +82,7 @@ export const ActiveWorkoutKeyboardWrapper = React.memo(({
       isRpeMode={isRpeMode}
       onNext={handleNextField}
       onClose={handleCloseKeyboard}
+      onHeightChange={onHeightChange}
     />
   );
 });

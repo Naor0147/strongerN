@@ -259,6 +259,7 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
               <ActiveSetRowItem
                 key={set.id}
                 set={set}
+                exerciseId={exercise.id}
                 setIdx={setIdx}
                 exIdx={exIdx}
                 onFocus={handleSetFocus}

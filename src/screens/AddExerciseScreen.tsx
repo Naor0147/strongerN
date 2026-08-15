@@ -12,6 +12,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import { Exercise } from '../data/mockData';
 import IconButton from '../components/ui/IconButton';
 import i18n from '../utils/i18n';
 import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
+import * as Haptics from 'expo-haptics';
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -52,7 +54,7 @@ const getMuscleColor = (muscleGroup: string): string => {
 interface AddExerciseScreenProps {
   visible: boolean;
   exercises: Exercise[];
-  onConfirm: (exerciseNames: string[]) => void;
+  onConfirm: (exerciseNames: string[]) => void | Promise<void>;
   onClose: () => void;
   onAddCustomExercise?: (name: string, muscle: string, equipment: string, isUnilateral?: boolean) => any;
   /** If provided (replace mode), single-tap selects immediately */
@@ -74,13 +76,14 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   exerciseNameLanguage = 'en',
 }) => {
   const insets = useSafeAreaInsets();
-  const prevVisibleRef = useRef(false);
   const [searchQuery, setSearchQuery]       = useState('');
   const [selectedMuscles, setSelectedMuscles]     = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedNames, setSelectedNames]   = useState<string[]>([]);
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [isFilterVisible, setIsFilterVisible]   = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Custom exercise form
   const [customName, setCustomName]     = useState('');
@@ -89,20 +92,22 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
   const [isUnilateral, setIsUnilateral] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Reset state when opened (inline render-phase adjustment — avoids no-adjust-state-on-prop-change)
-  if (prevVisibleRef.current !== visible) {
-    prevVisibleRef.current = visible;
-    if (visible) {
-      setSearchQuery('');
-      setSelectedMuscles([]);
-      setSelectedEquipment([]);
-      setSelectedNames([]);
-      setIsCreatingCustom(false);
-      setIsFilterVisible(false);
-      setIsUnilateral(false);
-      setShowAdvanced(false);
-    }
-  }
+  const closePicker = useCallback(() => {
+    submitLockRef.current = false;
+    setIsSubmitting(false);
+    setSearchQuery('');
+    setSelectedMuscles([]);
+    setSelectedEquipment([]);
+    setSelectedNames([]);
+    setIsCreatingCustom(false);
+    setIsFilterVisible(false);
+    setCustomName('');
+    setCustomMuscle('Chest');
+    setCustomEquip('Barbell');
+    setIsUnilateral(false);
+    setShowAdvanced(false);
+    onClose();
+  }, [onClose]);
 
   const exerciseFrequencies = useMemo(() => {
     const freqs: Record<string, number> = {};
@@ -119,15 +124,18 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     return freqs;
   }, [sessions]);
 
+  const selectedMuscleSet = useMemo(() => new Set(selectedMuscles), [selectedMuscles]);
+  const selectedEquipmentSet = useMemo(() => new Set(selectedEquipment), [selectedEquipment]);
+
   const filteredExercises = useMemo(() => {
     // Filter out null/undefined or nameless exercises to avoid crashes
     let result = (exercises || []).filter(ex => ex && typeof ex.name === 'string' && ex.name.trim().length > 0);
 
     if (selectedMuscles.length > 0) {
-      result = result.filter(ex => ex.muscleGroup !== undefined && ex.muscleGroup !== null && selectedMuscles.includes(ex.muscleGroup));
+      result = result.filter(ex => ex.muscleGroup !== undefined && ex.muscleGroup !== null && selectedMuscleSet.has(ex.muscleGroup));
     }
     if (selectedEquipment.length > 0) {
-      result = result.filter(ex => selectedEquipment.includes(ex.equipment || 'Other'));
+      result = result.filter(ex => selectedEquipmentSet.has(ex.equipment || 'Other'));
     }
 
     const q = searchQuery.toLowerCase().trim();
@@ -193,7 +201,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
         return freqB - freqA;
       });
     }
-  }, [exercises, searchQuery, selectedMuscles, selectedEquipment, exerciseFrequencies]);
+  }, [exercises, searchQuery, selectedMuscles.length, selectedEquipment.length, selectedMuscleSet, selectedEquipmentSet, exerciseFrequencies]);
 
   const toggleMuscle = useCallback((m: string) => {
     setSelectedMuscles(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
@@ -203,15 +211,34 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
     setSelectedEquipment(prev => prev.includes(eq) ? prev.filter(x => x !== eq) : [...prev, eq]);
   }, []);
 
+  const commitAndDismiss = useCallback(async (names: string[]) => {
+    if (names.length === 0 || submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    }
+    try {
+      await onConfirm(names);
+      closePicker();
+    } catch (error) {
+      console.error('[AddExercise] Failed to add exercises:', error);
+      Alert.alert(i18n.t('common.error'), i18n.t('extras.addExerciseFailed'));
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
+  }, [closePicker, onConfirm]);
+
   const toggleSelect = useCallback((name: string) => {
     if (singleSelect) {
-      onConfirm([name]);
+      void commitAndDismiss([name]);
       return;
     }
     setSelectedNames(prev =>
       prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
     );
-  }, [singleSelect, onConfirm]);
+  }, [singleSelect, commitAndDismiss]);
 
   const handleSaveCustom = () => {
     if (!customName.trim()) return;
@@ -223,7 +250,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
       }
     }
     if (singleSelect) {
-      onConfirm([newExName]);
+      void commitAndDismiss([newExName]);
       return;
     }
     setSelectedNames(prev => [...prev, newExName]);
@@ -280,7 +307,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
       visible={visible}
       animationType="slide"
       transparent={false}
-      onRequestClose={onClose}
+      onRequestClose={closePicker}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -291,7 +318,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           {/* ── Header ── */}
           <View style={styles.header}>
             <Pressable
-              onPress={isCreatingCustom ? () => setIsCreatingCustom(false) : onClose}
+              onPress={isCreatingCustom ? () => setIsCreatingCustom(false) : closePicker}
               style={styles.backBtn}
               android_ripple={rippleTokens.borderless}
               accessibilityLabel="Close"
@@ -326,11 +353,12 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
 
               {!isCreatingCustom && !singleSelect && (
                 <Pressable
-                  onPress={() => onConfirm(selectedNames)}
-                  disabled={selectedNames.length === 0}
-                  style={[
+                  onPress={() => void commitAndDismiss(selectedNames)}
+                  disabled={selectedNames.length === 0 || isSubmitting}
+                  style={({ pressed }) => [
                     styles.confirmSquareBtn,
-                    selectedNames.length > 0 ? styles.confirmSquareBtnActive : styles.confirmSquareBtnDisabled,
+                    selectedNames.length > 0 && !isSubmitting ? styles.confirmSquareBtnActive : styles.confirmSquareBtnDisabled,
+                    pressed && !isSubmitting && { transform: [{ scale: 0.92 }] },
                   ]}
                   android_ripple={rippleTokens.accent}
                   accessibilityLabel="Confirm add exercises"
@@ -338,7 +366,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
                   <Ionicons
                     name="checkmark"
                     size={20}
-                    color={selectedNames.length > 0 ? colors.bg : colors.textMuted}
+                    color={selectedNames.length > 0 && !isSubmitting ? colors.bg : colors.textMuted}
                   />
                   {selectedNames.length > 0 && (
                     <View style={styles.countBadge}>

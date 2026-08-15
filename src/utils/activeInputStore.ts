@@ -1,6 +1,13 @@
 class ActiveInputStore {
   private listeners = new Set<(input: any) => void>();
-  private activeInput: { exIdx: number; setIdx: number; fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps'; focusTime?: number } | null = null;
+  private activeInput: {
+    exIdx: number;
+    setIdx: number;
+    exerciseId?: string;
+    setId?: string;
+    fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
+    focusTime?: number;
+  } | null = null;
 
   subscribe(cb: (input: any) => void) {
     this.listeners.add(cb);

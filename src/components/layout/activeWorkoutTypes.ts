@@ -7,6 +7,9 @@ export interface SetSuggestion {
   leftReps?: string;
   rightWeight?: string;
   rightReps?: string;
+  sourceTier?: number;
+  sampleSize?: number;
+  confidence?: 'none' | 'low' | 'medium' | 'high';
 }
 
 export interface SetRecord {
@@ -39,6 +42,7 @@ export interface ActiveExercise {
   note?: string;
   showNote?: boolean;
   isNoteLocked?: boolean;
+  useRoutineTargets?: boolean;
 }
 
 export interface ActiveWorkoutModalProps {

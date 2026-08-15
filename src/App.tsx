@@ -147,6 +147,11 @@ function App() {
     return <E2EAppHarness />;
   }
 
+  return <MainApp />;
+}
+
+function MainApp() {
+
   // Clear legacy localStorage e2e key if present
   if (typeof window !== 'undefined' && window.localStorage?.getItem('is_e2e_mode')) {
     try {
@@ -646,6 +651,12 @@ function App() {
     } catch (e) {
       console.warn('Error queuing state save to database', e);
     }
+    return () => {
+      if (rootSaveTimeoutRef.current) {
+        clearTimeout(rootSaveTimeoutRef.current);
+        rootSaveTimeoutRef.current = null;
+      }
+    };
   }, [
     user,
     templatesList,
@@ -1327,20 +1338,18 @@ function App() {
   }, []);
 
   const handleUpdateExerciseVariations = React.useCallback((id: string, variations: string[]) => {
-    setExercisesList(prev => {
-      const updated = prev.map(e => e.id === id ? { ...e, variations } : e);
-      exercisesListRef.current = updated;
-      if (latestAppDataRef.current) {
-        latestAppDataRef.current = {
-          ...latestAppDataRef.current,
-          exercisesList: updated,
-        };
-        saveToDb(STORAGE_KEY, latestAppDataRef.current).catch(e => {
-          console.error('[SAVE] Error saving updated variations to DB:', e);
-        });
-      }
-      return updated;
-    });
+    const updated = exercisesListRef.current.map(e => e.id === id ? { ...e, variations } : e);
+    exercisesListRef.current = updated;
+    setExercisesList(updated);
+    if (latestAppDataRef.current) {
+      latestAppDataRef.current = {
+        ...latestAppDataRef.current,
+        exercisesList: updated,
+      };
+      saveToDb(STORAGE_KEY, latestAppDataRef.current).catch(e => {
+        console.error('[SAVE] Error saving updated variations to DB:', e);
+      });
+    }
   }, []);
 
   const handleAddTemplate = React.useCallback((name: string, exerciseNames: string[], folder?: string, exercisesDetails?: any[], notes?: string, useRoutineTargets?: boolean, defaultRestDuration?: number) => {
@@ -1672,15 +1681,33 @@ function App() {
           const category = s.category || 'S';
           const ordinal = categoryOrdinals[category] ?? 0;
           categoryOrdinals[category] = ordinal + 1;
-          const expected = resolveLastPerformanceSuggestion(
-            exName,
-            category,
-            ordinal,
-            sessionsListRef.current,
-            unilateral,
-            targetVariation,
-            historyIndex
-          );
+          const templateSuggestion = {
+            weight: String(s.weight ?? ''),
+            reps: String(s.reps ?? ''),
+            leftWeight: String(s.leftWeight ?? s.weight ?? ''),
+            leftReps: String(s.leftReps ?? s.reps ?? ''),
+            rightWeight: String(s.rightWeight ?? s.weight ?? ''),
+            rightReps: String(s.rightReps ?? s.reps ?? ''),
+          };
+          const expected = matchingTemplate?.useRoutineTargets
+            ? templateSuggestion
+            : resolveLastPerformanceSuggestion(
+                exName,
+                category,
+                ordinal,
+                sessionsListRef.current,
+                unilateral,
+                targetVariation,
+                historyIndex,
+                {
+                  routineName: name,
+                  exercisePosition: index,
+                  supersetGroupId: detail.superSetGroupId,
+                  progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                  equipment: libraryEx?.equipment,
+                  templateSuggestion,
+                }
+              );
           return {
             // Suggestions are intentionally not values: they remain muted until
             // the lifter explicitly enters or accepts them.
@@ -1708,6 +1735,7 @@ function App() {
           bestWeight: Number(setsDetails[0]?.weight ?? 0),
           bestReps: Number(setsDetails[0]?.reps ?? 0),
           superSetGroupId: detail.superSetGroupId,
+          useRoutineTargets: Boolean(matchingTemplate?.useRoutineTargets),
           setsDetails,
         };
       }
@@ -1716,9 +1744,9 @@ function App() {
       let bestReps = 0;
       let sets: any = 3;
 
-      const histEntries = historyIndex.get(exName.toLowerCase().trim());
+      const histEntries = historyIndex.byExercise.get(exName.toLowerCase().trim());
       if (histEntries && histEntries.length > 0) {
-        const prevEx = histEntries[0]?.ex;
+        const prevEx = histEntries[0]?.exercise;
         if (prevEx) {
           if (typeof prevEx.sets === 'number') {
             sets = prevEx.sets;
@@ -1738,7 +1766,13 @@ function App() {
           sessionsListRef.current,
           isExUnilateral,
           targetVariation,
-          historyIndex
+          historyIndex,
+          {
+            routineName: name,
+            exercisePosition: index,
+            progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+            equipment: libraryEx?.equipment,
+          }
         );
         return {
           weight: '',
@@ -1790,7 +1824,7 @@ function App() {
       activeWorkoutComment: initialComment,
       editingSessionId: null,
     });
-  }, [beginActiveWorkout]);
+  }, [beginActiveWorkout, isProgressiveOverloadEnabled]);
 
   const handleResumeWorkout = (session: any) => {
     if (isWorkoutActive) {
@@ -2098,9 +2132,9 @@ function App() {
   ), [isWorkoutActive, workoutName, startTime]);
 
   // Memoize Tab screens to prevent them from unmounting/re-mounting or re-rendering on every App state change
-  const historyScreenElement = React.useMemo(() => {
-    return <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />;
-  }, [sessionsList, handleResumeWorkout, handleDeleteSession]);
+  const historyScreenElement = (
+    <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />
+  );
 
   const workoutScreenElement = React.useMemo(() => {
     return (

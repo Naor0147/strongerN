@@ -11,8 +11,16 @@ import { SetInputCell } from '../ui/SetInputCell';
 import { AnimatedCheckmark } from './AnimatedCheckmark';
 import i18n from '../../utils/i18n';
 
+const SET_ROW_RADIUS_STYLE = {
+  borderTopLeftRadius: radius.xs,
+  borderTopRightRadius: radius.xs,
+  borderBottomLeftRadius: radius.xs,
+  borderBottomRightRadius: radius.xs,
+};
+
 export interface ActiveSetRowItemProps {
   set: SetRecord;
+  exerciseId: string;
   setIdx: number;
   exIdx: number;
   onFocus: (exIdx: number, setIdx: number, fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => void;
@@ -27,6 +35,7 @@ export interface ActiveSetRowItemProps {
 
 export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   set,
+  exerciseId,
   setIdx,
   exIdx,
   onFocus,
@@ -45,14 +54,18 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
 
   useEffect(() => {
     return activeInputStore.subscribe((input: any) => {
-      const isMyRow = input !== null && input.exIdx === exIdx && input.setIdx === setIdx;
+      const isMyRow = input !== null && (
+        input.exerciseId && input.setId
+          ? input.exerciseId === exerciseId && input.setId === set.id
+          : input.exIdx === exIdx && input.setIdx === setIdx
+      );
       const field = isMyRow ? input.fieldName : null;
       setActiveField((prev) => {
         if (prev === field) return prev;
         return field;
       });
     });
-  }, [exIdx, setIdx]);
+  }, [exerciseId, exIdx, set.id, setIdx]);
 
   const isWeightFocused = activeField === 'weight';
   const isRepsFocused = activeField === 'reps';
@@ -65,12 +78,7 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
   const showPrevConnected = false;
   const showNextConnected = isCompleted && isNextCompleted;
 
-  const rowStyle = {
-    borderTopLeftRadius: radius.xs,
-    borderTopRightRadius: radius.xs,
-    borderBottomLeftRadius: radius.xs,
-    borderBottomRightRadius: radius.xs,
-  };
+  const rowStyle = SET_ROW_RADIUS_STYLE;
 
   // Unilateral set rendering
   if (set.isUnilateral) {
@@ -143,13 +151,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isLeftWeightFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={String(set.leftWeight || set.weight || '')}
+                    value={String(set.leftWeight ?? set.weight ?? '')}
                     onPress={() => onFocus(exIdx, setIdx, 'leftWeight')}
                     placeholder={set.suggestedLeftWeight || set.suggestedWeight || '0'}
                     isActive={isLeftWeightFocused}
                     isCompleted={set.completed}
                     exIdx={exIdx}
                     setIdx={setIdx}
+                    exerciseId={exerciseId}
+                    setId={set.id}
                     fieldName="leftWeight"
                   />
                 </View>
@@ -162,13 +172,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isLeftRepsFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={String(set.leftReps || set.reps || '')}
+                    value={String(set.leftReps ?? set.reps ?? '')}
                     onPress={() => onFocus(exIdx, setIdx, 'leftReps')}
                     placeholder={set.suggestedLeftReps || set.suggestedReps || '0'}
                     isActive={isLeftRepsFocused}
                     isCompleted={set.completed}
                     exIdx={exIdx}
                     setIdx={setIdx}
+                    exerciseId={exerciseId}
+                    setId={set.id}
                     fieldName="leftReps"
                   />
                 </View>
@@ -186,13 +198,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isRightWeightFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={String(set.rightWeight || set.weight || '')}
+                    value={String(set.rightWeight ?? set.weight ?? '')}
                     onPress={() => onFocus(exIdx, setIdx, 'rightWeight')}
                     placeholder={set.suggestedRightWeight || set.suggestedWeight || '0'}
                     isActive={isRightWeightFocused}
                     isCompleted={set.completed}
                     exIdx={exIdx}
                     setIdx={setIdx}
+                    exerciseId={exerciseId}
+                    setId={set.id}
                     fieldName="rightWeight"
                   />
                 </View>
@@ -205,13 +219,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                       isRightRepsFocused && { borderColor: colors.accent },
                     ]}
                     textStyle={set.completed && styles.textCompleted}
-                    value={String(set.rightReps || set.reps || '')}
+                    value={String(set.rightReps ?? set.reps ?? '')}
                     onPress={() => onFocus(exIdx, setIdx, 'rightReps')}
                     placeholder={set.suggestedRightReps || set.suggestedReps || '0'}
                     isActive={isRightRepsFocused}
                     isCompleted={set.completed}
                     exIdx={exIdx}
                     setIdx={setIdx}
+                    exerciseId={exerciseId}
+                    setId={set.id}
                     fieldName="rightReps"
                   />
                 </View>
@@ -311,13 +327,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 isWeightFocused && { borderColor: colors.accent },
               ]}
               textStyle={set.completed && styles.textCompleted}
-              value={String(set.weight || '')}
+              value={String(set.weight ?? '')}
               onPress={() => onFocus(exIdx, setIdx, 'weight')}
               placeholder={set.suggestedWeight || '0'}
               isActive={isWeightFocused}
               isCompleted={set.completed}
               exIdx={exIdx}
               setIdx={setIdx}
+              exerciseId={exerciseId}
+              setId={set.id}
               fieldName="weight"
             />
           </View>
@@ -336,13 +354,15 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
                 ref={(r: any) => { inputRefs.current[`${exIdx}-${setIdx}-reps`] = r; }}
                 style={styles.repsInput}
                 textStyle={set.completed && styles.textCompleted}
-                value={String(set.reps || '')}
+                value={String(set.reps ?? '')}
                 onPress={() => onFocus(exIdx, setIdx, 'reps')}
                 placeholder={set.suggestedReps || '0'}
                 isActive={isRepsFocused}
                 isCompleted={set.completed}
                 exIdx={exIdx}
                 setIdx={setIdx}
+                exerciseId={exerciseId}
+                setId={set.id}
                 fieldName="reps"
               />
               {set.rpe ? (

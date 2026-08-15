@@ -15,7 +15,7 @@ class MemoryAdapter implements SynchronousStorageAdapter {
 }
 
 describe('persistence architecture', () => {
-  describe('exact expected values', () => {
+  describe('contextual expected values', () => {
     const sessions = [
       {
         id: 'newest',
@@ -40,7 +40,7 @@ describe('persistence architecture', () => {
       },
     ];
 
-    test('uses the exact corresponding set from the latest session, never the historical best', () => {
+    test('uses the latest corresponding set when the sample is too small for a safe trend', () => {
       expect(resolveLastPerformanceSuggestion('Bench Press', 'S', 0, sessions, false, 'Paused')).toMatchObject({
         weight: '82.5', reps: '6',
       });
@@ -90,9 +90,9 @@ describe('persistence architecture', () => {
       )).toMatchObject({ weight: '80', reps: '7' });
     });
 
-    test('returns explicit zero weight and zero reps only when no matching history exists', () => {
+    test('returns a clean empty target when no matching history exists', () => {
       expect(resolveLastPerformanceSuggestion('Never Logged', 'S', 0, sessions, false)).toMatchObject({
-        weight: '0', reps: '0', leftWeight: '0', rightWeight: '0',
+        weight: '', reps: '', leftWeight: '', rightWeight: '', sourceTier: 9,
       });
     });
 
@@ -107,6 +107,87 @@ describe('persistence architecture', () => {
       expect(resolveLastPerformanceSuggestion('Single Arm Row', 'S', 0, unilateral, true)).toMatchObject({
         leftWeight: '21', leftReps: '9', rightWeight: '22', rightReps: '8',
       });
+    });
+
+    test('prefers five exact-context sessions over newer global matches without mixing tiers', () => {
+      const exactContext = Array.from({ length: 5 }, (_, index) => ({
+        datetime: new Date(Date.UTC(2026, 7, 10 - index)).toISOString(),
+        title: 'Push Day',
+        exercises: [
+          { name: 'Shoulder Press', setsDetails: [{ weight: 30, reps: 10, completed: true, category: 'S' }] },
+          { name: 'Bench Press', variation: 'Paused', setsDetails: [{ weight: 80 - index * 2.5, reps: 6, completed: true, category: 'S' }] },
+        ],
+      }));
+      const newerGlobal = {
+        datetime: new Date(Date.UTC(2026, 7, 15)).toISOString(),
+        title: 'Full Body',
+        exercises: [{ name: 'Bench Press', variation: 'Paused', setsDetails: [{ weight: 120, reps: 3, completed: true, category: 'S' }] }],
+      };
+      const suggestion = resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 0, [newerGlobal, ...exactContext], false, 'Paused', undefined,
+        { routineName: 'Push Day', exercisePosition: 1, progressiveOverloadEnabled: false }
+      );
+      expect(suggestion).toMatchObject({ weight: '80', reps: '6', sourceTier: 1, sampleSize: 5 });
+    });
+
+    test('never raises weight or reps unless progressive overload is enabled', () => {
+      const trending = Array.from({ length: 5 }, (_, index) => ({
+        datetime: new Date(Date.UTC(2026, 7, 10 - index)).toISOString(),
+        title: 'Push Day',
+        exercises: [{
+          name: 'Bench Press',
+          setsDetails: [{ weight: 100 - index * 2.5, reps: 8 - index, completed: true, category: 'S' }],
+        }],
+      }));
+      const index = buildExerciseHistoryIndex(trending);
+      const disabled = resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 0, trending, false, undefined, index,
+        { routineName: 'Push Day', exercisePosition: 0, equipment: 'Barbell', progressiveOverloadEnabled: false }
+      );
+      const enabled = resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 0, trending, false, undefined, index,
+        { routineName: 'Push Day', exercisePosition: 0, equipment: 'Barbell', progressiveOverloadEnabled: true }
+      );
+      expect(Number(disabled.weight)).toBeLessThanOrEqual(100);
+      expect(Number(disabled.reps)).toBeLessThanOrEqual(8);
+      expect(Number(enabled.weight)).toBe(102.5);
+    });
+
+    test('keeps warm-up and drop-set history isolated from working sets', () => {
+      const categoryHistory = Array.from({ length: 5 }, (_, index) => ({
+        datetime: new Date(Date.UTC(2026, 7, 10 - index)).toISOString(),
+        title: 'Push Day',
+        exercises: [{ name: 'Bench Press', setsDetails: [
+          { weight: 40, reps: 12, completed: true, category: 'W' },
+          { weight: 100, reps: 6, completed: true, category: 'S' },
+          { weight: 70, reps: 12, completed: true, category: 'D' },
+        ] }],
+      }));
+      const index = buildExerciseHistoryIndex(categoryHistory);
+      const context = { routineName: 'Push Day', exercisePosition: 0, progressiveOverloadEnabled: false };
+      expect(resolveLastPerformanceSuggestion('Bench Press', 'W', 0, categoryHistory, false, undefined, index, context).weight).toBe('40');
+      expect(resolveLastPerformanceSuggestion('Bench Press', 'S', 0, categoryHistory, false, undefined, index, context).weight).toBe('100');
+      expect(resolveLastPerformanceSuggestion('Bench Press', 'D', 0, categoryHistory, false, undefined, index, context).weight).toBe('70');
+    });
+
+    test('uses template targets only as the tier-nine cold-start fallback', () => {
+      expect(resolveLastPerformanceSuggestion(
+        'New Exercise', 'S', 0, [], false, undefined, undefined,
+        { templateSuggestion: { weight: '20', reps: '12' }, progressiveOverloadEnabled: false }
+      )).toMatchObject({ weight: '20', reps: '12', sourceTier: 9, sampleSize: 0 });
+    });
+
+    test('recognizes a repeated deload and does not forecast an immediate rebound when progression is off', () => {
+      const deloadHistory = [70, 70, 100, 97.5, 95].map((weight, index) => ({
+        datetime: new Date(Date.UTC(2026, 7, 10 - index)).toISOString(),
+        title: 'Push Day',
+        exercises: [{ name: 'Bench Press', setsDetails: [{ weight, reps: 8, completed: true, category: 'S' }] }],
+      }));
+      const suggestion = resolveLastPerformanceSuggestion(
+        'Bench Press', 'S', 0, deloadHistory, false, undefined, undefined,
+        { routineName: 'Push Day', exercisePosition: 0, progressiveOverloadEnabled: false }
+      );
+      expect(Number(suggestion.weight)).toBeLessThanOrEqual(70);
     });
   });
 

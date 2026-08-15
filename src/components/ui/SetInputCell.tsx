@@ -14,6 +14,7 @@ import { activeInputStore } from '../../utils/activeInputStore';
 
 export interface SetInputCellHandle {
   focus: () => void;
+  measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
 }
 
 interface SetInputCellProps {
@@ -28,6 +29,8 @@ interface SetInputCellProps {
   exIdx?: number;
   setIdx?: number;
   fieldName?: string;
+  exerciseId?: string;
+  setId?: string;
 }
 
 const Caret = () => {
@@ -45,7 +48,7 @@ const Caret = () => {
     return () => {
       cancelAnimation(opacity);
     };
-  }, []);
+  }, [opacity]);
 
   const animatedStyle = useAnimatedStyle(() => {
     'worklet';
@@ -77,6 +80,8 @@ const compareProps = (prevProps: SetInputCellProps, nextProps: SetInputCellProps
   if (prevProps.textStyle !== nextProps.textStyle) return false;
   if (prevProps.onPress !== nextProps.onPress) return false;
   if (prevProps.placeholder !== nextProps.placeholder) return false;
+  if (prevProps.exIdx !== nextProps.exIdx || prevProps.setIdx !== nextProps.setIdx || prevProps.fieldName !== nextProps.fieldName) return false;
+  if (prevProps.exerciseId !== nextProps.exerciseId || prevProps.setId !== nextProps.setId) return false;
 
   // If the cell is active, we bypass any changes to the 'value' prop
   // because the native ref is handling updates directly.
@@ -100,13 +105,18 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
   exIdx,
   setIdx,
   fieldName,
+  exerciseId,
+  setId,
 }, ref) => {
+  const pressableRef = useRef<View>(null);
+
   useImperativeHandle(ref, () => ({
     focus: () => {
       if (!isCompleted) {
         onPress();
       }
     },
+    measureInWindow: (callback) => pressableRef.current?.measureInWindow(callback),
   }), [onPress, isCompleted]);
 
   const textRef = useRef<any>(null);
@@ -120,20 +130,18 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
           exIdx !== undefined &&
           setIdx !== undefined &&
           fieldName !== undefined &&
-          (currentActive.exIdx !== exIdx || currentActive.setIdx !== setIdx || currentActive.fieldName !== fieldName)
+          ((currentActive.exerciseId && currentActive.setId)
+            ? currentActive.exerciseId !== exerciseId || currentActive.setId !== setId || currentActive.fieldName !== fieldName
+            : currentActive.exIdx !== exIdx || currentActive.setIdx !== setIdx || currentActive.fieldName !== fieldName)
         ) {
           return;
         }
 
         // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
         if (textRef.current) {
-          const isValEmpty = newValue === '' || newValue === '0';
-          const targetColor = isCompleted
-            ? colors.textMuted
-            : isValEmpty
-            ? colors.textSecondary
-            : colors.textPrimary;
-          const targetOpacity = isValEmpty ? 0.5 : 1.0;
+          const isValEmpty = newValue.trim() === '';
+          const targetColor = isValEmpty ? colors.textMuted : colors.textPrimary;
+          const targetOpacity = 1;
           const targetText = isValEmpty ? placeholder : newValue;
 
           // Native text inputs (Android/iOS)
@@ -179,17 +187,13 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         } catch (_) {}
       });
     }
-  }, [isActive, placeholder, exIdx, setIdx, fieldName, isCompleted]);
+  }, [isActive, placeholder, exIdx, setIdx, fieldName, exerciseId, setId, isCompleted]);
 
   useEffect(() => {
     if (textRef.current) {
-      const isValEmpty = value === '' || value === '0';
-      const targetColor = isCompleted
-        ? colors.textMuted
-        : isValEmpty
-        ? colors.textSecondary
-        : colors.textPrimary;
-      const targetOpacity = isValEmpty ? 0.5 : 1.0;
+      const isValEmpty = String(value ?? '').trim() === '';
+      const targetColor = isValEmpty ? colors.textMuted : colors.textPrimary;
+      const targetOpacity = 1;
       const targetText = isValEmpty ? placeholder : value;
 
       if (typeof (textRef.current as any).setNativeProps === 'function') {
@@ -217,11 +221,12 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
     }
   }, [isCompleted, value, placeholder, isActive]);
 
-  const showPlaceholder = value === '' || value === '0';
+  const showPlaceholder = String(value ?? '').trim() === '';
   const displayValue = !showPlaceholder ? value : placeholder;
 
   return (
     <Pressable
+      ref={pressableRef}
       testID={testID}
       style={[
         styles.cellContainer,
@@ -289,12 +294,10 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.sm,
   },
   placeholderText: {
-    color: colors.textSecondary,
-    opacity: 0.5,
+    color: colors.textMuted,
   },
   completedText: {
     textDecorationLine: 'line-through',
-    color: colors.textMuted,
   },
   caret: {
     width: 2,

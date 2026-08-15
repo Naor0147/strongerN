@@ -3,7 +3,6 @@ import { ActiveExercise, SetRecord, SetSuggestion } from '../components/layout/a
 import {
   getBestPerformanceSuggestionForSet,
   getPreviousSessionSetSuggestion,
-  sanitizeSuperSets,
 } from '../components/layout/activeWorkoutUtils';
 import { activeInputStore } from '../utils/activeInputStore';
 import { keyboardValueStore } from '../utils/keyboardValueStore';
@@ -17,10 +16,13 @@ import { safeLayoutAnim } from '../components/layout/activeWorkoutUtils';
 import { saveCrashLogSync } from '../utils/crashLogger';
 import { WorkoutSession, Exercise } from '../data/mockData';
 import { clearActiveInputPatch } from '../storage/activeInputPatch';
+import { ExpectedValuesIndex } from '../storage/expectedValues';
+import { activeExerciseStructureReducer } from '../state/activeExerciseReducer';
 
 export interface UseActiveExercisesStateParams {
   initialExercises: ActiveExercise[];
   sessions: WorkoutSession[];
+  workoutName: string;
   exerciseLibraryMap: Map<string, Exercise>;
   isProgressiveOverloadEnabled?: boolean;
   isAutoTimerEnabled?: boolean;
@@ -35,13 +37,14 @@ export interface UseActiveExercisesStateParams {
   setActiveExerciseMenuIndex: React.Dispatch<React.SetStateAction<number | null>>;
   isReplaceMode: boolean;
   onUpdateExerciseNotes?: (id: string, note?: string) => void;
-  sessionsByExerciseMap?: Map<string, WorkoutSession[]>;
+  sessionsByExerciseMap?: ExpectedValuesIndex;
   onActiveExercisesCommit?: (exercises: ActiveExercise[]) => void;
 }
 
 export function useActiveExercisesState({
   initialExercises,
   sessions,
+  workoutName,
   exerciseLibraryMap,
   isProgressiveOverloadEnabled = true,
   isAutoTimerEnabled = true,
@@ -77,6 +80,49 @@ export function useActiveExercisesState({
     activeExercisesRef.current = activeExercises;
   }, [activeExercises, activeExercisesRef]);
 
+  const recalculateSuggestions = useCallback((exercise: ActiveExercise, exercisePosition: number): ActiveExercise => {
+    if (exercise.useRoutineTargets) return exercise;
+    const libraryExercise = exerciseLibraryMap.get(exercise.name.toLowerCase());
+    const categoryOrdinals: Record<string, number> = {};
+    const sets = exercise.sets.map((set) => {
+      const category = set.category || 'S';
+      const ordinal = categoryOrdinals[category] ?? 0;
+      categoryOrdinals[category] = ordinal + 1;
+      const unilateral = Boolean(set.isUnilateral ?? libraryExercise?.isUnilateral);
+      const suggestion = getBestPerformanceSuggestionForSet(
+        exercise.name,
+        category,
+        ordinal,
+        sessions,
+        unilateral,
+        exercise.variation,
+        libraryExercise,
+        sessionsByExerciseMap,
+        {
+          routineName: workoutName,
+          exercisePosition,
+          supersetGroupId: exercise.superSetGroupId,
+          progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+          equipment: libraryExercise?.equipment,
+        }
+      );
+      return {
+        ...set,
+        suggestedWeight: suggestion.weight,
+        suggestedReps: suggestion.reps,
+        suggestedLeftWeight: unilateral ? suggestion.leftWeight : undefined,
+        suggestedLeftReps: unilateral ? suggestion.leftReps : undefined,
+        suggestedRightWeight: unilateral ? suggestion.rightWeight : undefined,
+        suggestedRightReps: unilateral ? suggestion.rightReps : undefined,
+      };
+    });
+    return { ...exercise, sets };
+  }, [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions, sessionsByExerciseMap, workoutName]);
+
+  const reindexActiveExercises = useCallback((exercises: ActiveExercise[]) => (
+    activeExerciseStructureReducer(activeExercisesRef.current, { type: 'reorder', exercises }, recalculateSuggestions)
+  ), [recalculateSuggestions]);
+
   // Update a field inside a set
   const updateSetField = useCallback(
     (
@@ -101,12 +147,15 @@ export function useActiveExercisesState({
 
         nextSets[setIdx] = currentSet;
         const nextArr = [...prev];
-        nextArr[exIdx] = { ...targetEx, sets: nextSets };
+        const changedExercise = { ...targetEx, sets: nextSets };
+        nextArr[exIdx] = fieldName === 'category'
+          ? recalculateSuggestions(changedExercise, exIdx)
+          : changedExercise;
         return nextArr;
       });
       clearActiveInputPatch();
     },
-    []
+    [recalculateSuggestions]
   );
 
   // Toggle set completion
@@ -172,16 +221,25 @@ export function useActiveExercisesState({
         const positionInCategory = currentSets.filter((s) => (s.category || 'S') === category).length;
         const unilateral = isUnilateral !== undefined ? isUnilateral : lastSet ? !!lastSet.isUnilateral : false;
 
-        const histSuggested = getPreviousSessionSetSuggestion(
-          targetEx.name,
-          category,
-          positionInCategory,
-          sessions,
-          unilateral,
-          undefined,
-          undefined,
-          sessionsByExerciseMap
-        );
+        const histSuggested = targetEx.useRoutineTargets
+          ? { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' }
+          : getPreviousSessionSetSuggestion(
+              targetEx.name,
+              category,
+              positionInCategory,
+              sessions,
+              unilateral,
+              workoutName,
+              exIdx,
+              sessionsByExerciseMap,
+              {
+                routineName: workoutName,
+                exercisePosition: exIdx,
+                supersetGroupId: targetEx.superSetGroupId,
+                progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                equipment: exerciseLibraryMap.get(targetEx.name.toLowerCase())?.equipment,
+              }
+            );
         let suggested: SetSuggestion = {
           weight: '',
           reps: '',
@@ -234,7 +292,7 @@ export function useActiveExercisesState({
         return nextArr;
       });
     },
-    [sessions, sessionsByExerciseMap]
+    [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions, sessionsByExerciseMap, workoutName]
   );
 
   // Delete a set
@@ -243,11 +301,11 @@ export function useActiveExercisesState({
       try {
         setActiveExercises((prev) => {
           if (!prev[exIdx]) return prev;
-          const targetEx = prev[exIdx];
-          const nextSets = targetEx.sets.filter((_, sIdx) => sIdx !== setIdx);
-          const nextArr = [...prev];
-          nextArr[exIdx] = { ...targetEx, sets: nextSets };
-          return nextArr;
+          return activeExerciseStructureReducer(
+            prev,
+            { type: 'delete-set', exerciseIndex: exIdx, setIndex: setIdx },
+            recalculateSuggestions,
+          );
         });
 
         const curr = activeInputRef.current;
@@ -268,15 +326,18 @@ export function useActiveExercisesState({
         console.error(msg, err);
       }
     },
-    [activeInputRef, setIsKeyboardVisible]
+    [activeInputRef, recalculateSuggestions, setIsKeyboardVisible]
   );
 
   // Delete an exercise
   const handleDeleteExercise = useCallback(
     (exIdx: number) => {
       setActiveExercises((prev) => {
-        const filtered = prev.filter((_, idx) => idx !== exIdx);
-        return sanitizeSuperSets(filtered);
+        return activeExerciseStructureReducer(
+          prev,
+          { type: 'delete-exercise', exerciseIndex: exIdx },
+          recalculateSuggestions,
+        );
       });
 
       const curr = activeInputRef.current;
@@ -292,7 +353,7 @@ export function useActiveExercisesState({
         }
       }
     },
-    [activeInputRef, setIsKeyboardVisible]
+    [activeInputRef, recalculateSuggestions, setIsKeyboardVisible]
   );
 
   // Update exercise note
@@ -341,8 +402,8 @@ export function useActiveExercisesState({
             }
           }
 
-          const defaultW = '0';
-          const defaultR = '0';
+          const defaultW = '';
+          const defaultR = '';
           let suggested: SetSuggestion = {
             weight: defaultW,
             reps: defaultR,
@@ -352,7 +413,7 @@ export function useActiveExercisesState({
             rightReps: defaultR,
           };
 
-          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+          if (sessions && sessions.length > 0) {
             try {
               const perfSuggested = getBestPerformanceSuggestionForSet(
                 targetEx.name,
@@ -361,7 +422,15 @@ export function useActiveExercisesState({
                 sessions,
                 isUnilateral,
                 newVariation,
-                libEx
+                libEx,
+                sessionsByExerciseMap,
+                {
+                  routineName: workoutName,
+                  exercisePosition: exIdx,
+                  supersetGroupId: targetEx.superSetGroupId,
+                  progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                  equipment: libEx?.equipment,
+                }
               );
               if (perfSuggested.weight || perfSuggested.reps) {
                 suggested = perfSuggested;
@@ -391,7 +460,7 @@ export function useActiveExercisesState({
         return nextArr;
       });
     },
-    [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions]
+    [exerciseLibraryMap, isProgressiveOverloadEnabled, sessions, sessionsByExerciseMap, workoutName]
   );
 
   // Confirm exercises from picker (Add or Replace)
@@ -400,7 +469,8 @@ export function useActiveExercisesState({
       if (isReplaceMode && activeExerciseMenuIndex !== null && names.length > 0) {
         const exName = names[0];
         const targetEx = activeExercises[activeExerciseMenuIndex];
-        const isUnilateral = targetEx?.sets[0]?.isUnilateral || false;
+        const replacementLibraryExercise = exerciseLibraryMap.get(exName.toLowerCase());
+        const isUnilateral = replacementLibraryExercise?.isUnilateral || false;
 
         const updatedSets = targetEx.sets.map((s, sIdx) => {
           const category = s.category || 'S';
@@ -411,8 +481,8 @@ export function useActiveExercisesState({
             }
           }
           const libEx = exerciseLibraryMap.get(exName.toLowerCase());
-          const defaultW = '0';
-          const defaultR = '0';
+          const defaultW = '';
+          const defaultR = '';
           let suggested: SetSuggestion = {
             weight: defaultW,
             reps: defaultR,
@@ -421,8 +491,24 @@ export function useActiveExercisesState({
             rightWeight: defaultW,
             rightReps: defaultR,
           };
-          if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
-            const perfSuggested = getBestPerformanceSuggestionForSet(exName, category, positionInCategory, sessions, isUnilateral);
+          if (sessions && sessions.length > 0) {
+            const perfSuggested = getBestPerformanceSuggestionForSet(
+              exName,
+              category,
+              positionInCategory,
+              sessions,
+              isUnilateral,
+              undefined,
+              replacementLibraryExercise,
+              sessionsByExerciseMap,
+              {
+                routineName: workoutName,
+                exercisePosition: activeExerciseMenuIndex,
+                supersetGroupId: targetEx.superSetGroupId,
+                progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                equipment: replacementLibraryExercise?.equipment,
+              }
+            );
             if (perfSuggested.weight || perfSuggested.reps) {
               suggested = perfSuggested;
             }
@@ -484,8 +570,8 @@ export function useActiveExercisesState({
           const sets = Array.from({ length: setsCount }).map((_, sIdx) => {
             const category = 'S';
             const positionInCategory = sIdx;
-            const defaultW = '0';
-            const defaultR = '0';
+            const defaultW = '';
+            const defaultR = '';
             let suggested: SetSuggestion = {
               weight: defaultW,
               reps: defaultR,
@@ -494,13 +580,22 @@ export function useActiveExercisesState({
               rightWeight: defaultW,
               rightReps: defaultR,
             };
-            if (isProgressiveOverloadEnabled && sessions && sessions.length > 0) {
+            if (sessions && sessions.length > 0) {
               const perfSuggested = getBestPerformanceSuggestionForSet(
                 exName,
                 category,
                 positionInCategory,
                 sessions,
-                isUnilateral
+                isUnilateral,
+                undefined,
+                libEx,
+                sessionsByExerciseMap,
+                {
+                  routineName: workoutName,
+                  exercisePosition: activeExercises.length + idx,
+                  progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                  equipment: libEx?.equipment,
+                }
               );
               if (perfSuggested.weight || perfSuggested.reps) {
                 suggested = perfSuggested;
@@ -544,6 +639,8 @@ export function useActiveExercisesState({
       exerciseLibraryMap,
       isProgressiveOverloadEnabled,
       sessions,
+      sessionsByExerciseMap,
+      workoutName,
       setActiveExerciseMenuIndex,
     ]
   );
@@ -560,5 +657,6 @@ export function useActiveExercisesState({
     onSaveLibraryNote,
     handleSelectVariation,
     handleConfirmExercisesFromPicker,
+    reindexActiveExercises,
   };
 }

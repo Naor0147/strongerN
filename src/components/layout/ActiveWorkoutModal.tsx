@@ -151,6 +151,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 }) => {
   useTrackRender('ActiveWorkoutModal');
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // Track the actual resume/edit start time (when THIS session started, not the original workout)
   const resumeStartTime = useRef(isEditing ? new Date() : (startTime || new Date()));
   // Offset in seconds from previous session duration (for edit/resume)
@@ -184,6 +185,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const activeInputRef = useRef<{
     exIdx: number;
     setIdx: number;
+    exerciseId?: string;
+    setId?: string;
     fieldName: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps';
     focusTime?: number;
   } | null>(null);
@@ -214,6 +217,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [visible]);
 
   const inputRefs = useRef<{ [key: string]: any }>({});
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const scrollOffsetRef = useRef(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(280);
 
   const {
     isTimerPickerVisible,
@@ -237,6 +243,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   }, [onUpdateActiveExercises]);
 
+  const exerciseLibraryMap = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const item of exerciseLibrary ?? EMPTY_ARRAY) {
+      if (item?.name) map.set(item.name.toLowerCase(), item);
+    }
+    return map;
+  }, [exerciseLibrary]);
+
+  const sessionsByExerciseMap = useMemo(() => {
+    try {
+      return buildExerciseHistoryIndex(sessions);
+    } catch (error) {
+      console.warn('[sessionsByExerciseMap] Error building sessions map:', error);
+      return buildExerciseHistoryIndex([]);
+    }
+  }, [sessions]);
+
   const {
     activeExercises,
     setActiveExercises,
@@ -249,21 +272,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     onSaveLibraryNote,
     handleSelectVariation,
     handleConfirmExercisesFromPicker,
+    reindexActiveExercises,
   } = useActiveExercisesState({
     initialExercises: [],
     sessions,
-    exerciseLibraryMap: useMemo(() => {
-      const map = new Map<string, any>();
-      if (exerciseLibrary) {
-        for (let i = 0; i < exerciseLibrary.length; i++) {
-          const item = exerciseLibrary[i];
-          if (item && item.name) {
-            map.set(item.name.toLowerCase(), item);
-          }
-        }
-      }
-      return map;
-    }, [exerciseLibrary]),
+    workoutName: localWorkoutName,
+    exerciseLibraryMap,
     isProgressiveOverloadEnabled,
     isAutoTimerEnabled,
     isAutoFinishSetEnabled,
@@ -277,6 +291,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setActiveExerciseMenuIndex,
     isReplaceMode,
     onUpdateExerciseNotes,
+    sessionsByExerciseMap,
     onActiveExercisesCommit: commitActiveExercisesToParent,
   });
 
@@ -293,6 +308,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     activeInputStore.setActiveInput(null);
     setIsKeyboardVisible(false);
   }, [updateSetField]);
+
+  const scrollFocusedInputIntoView = useCallback((exIdx: number, setIdx: number, fieldName: string) => {
+    const cell = inputRefs.current[`${exIdx}-${setIdx}-${fieldName}`];
+    if (!cell?.measureInWindow) return;
+    cell.measureInWindow((_x: number, y: number, _width: number, height: number) => {
+      const visibleTop = insets.top + 64;
+      const visibleBottom = windowHeight - keyboardHeight - insets.bottom;
+      const desiredCenter = visibleTop + Math.max(0, visibleBottom - visibleTop) / 2;
+      const delta = y + height / 2 - desiredCenter;
+      if (Math.abs(delta) < 4) return;
+      (scrollRef.current as any)?.scrollTo?.({
+        y: Math.max(0, scrollOffsetRef.current + delta),
+        animated: true,
+      });
+    });
+  }, [insets.bottom, insets.top, keyboardHeight, scrollRef, windowHeight]);
 
   const handleSetFocus = useCallback((ex: number, s: number, field: 'weight' | 'reps' | 'leftWeight' | 'leftReps' | 'rightWeight' | 'rightReps') => {
     try {
@@ -315,12 +346,32 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const valStr = String(currentVal);
     tempInputValueRef.current = valStr;
     
-    const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
+    const activeExercise = activeExercisesRef.current[ex];
+    const newInput = {
+      exIdx: ex,
+      setIdx: s,
+      exerciseId: activeExercise?.id,
+      setId: activeExercise?.sets[s]?.id,
+      fieldName: field,
+      focusTime: Date.now(),
+    };
     activeInputRef.current = newInput;
     activeInputStore.setActiveInput(newInput);
     keyboardValueStore.setValue(valStr);
     setIsKeyboardVisible(prev => prev ? prev : true);
-  }, [updateSetField]);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollFocusedInputIntoView(ex, s, field));
+    });
+  }, [scrollFocusedInputIntoView, updateSetField]);
+
+  const handleKeyboardHeightChange = useCallback((height: number) => {
+    const roundedHeight = Math.max(0, Math.round(height));
+    setKeyboardHeight((current) => Math.abs(current - roundedHeight) > 1 ? roundedHeight : current);
+    const active = activeInputRef.current;
+    if (active) {
+      requestAnimationFrame(() => scrollFocusedInputIntoView(active.exIdx, active.setIdx, active.fieldName));
+    }
+  }, [scrollFocusedInputIntoView]);
 
   const mountedRef = useRef(true);
 
@@ -489,8 +540,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Drag-and-drop reorder state for exercises
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  const { width: windowWidth } = useWindowDimensions();
   const [listWidth, setListWidth] = useState(windowWidth - spacing.lg * 2);
   useEffect(() => {
     mountedRef.current = true;
@@ -504,19 +553,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [windowWidth]);
 
 
-
-  const exerciseLibraryMap = useMemo(() => {
-    const map = new Map<string, any>();
-    if (exerciseLibrary) {
-      for (let i = 0; i < exerciseLibrary.length; i++) {
-        const item = exerciseLibrary[i];
-        if (item && item.name) {
-          map.set(item.name.toLowerCase(), item);
-        }
-      }
-    }
-    return map;
-  }, [exerciseLibrary]);
 
   // Plate calculator states
   const [isPlateCalcVisible, setIsPlateCalcVisible] = useState(false);
@@ -570,15 +606,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return map;
   }, [activeExercises]);
 
-  const sessionsByExerciseMap = useMemo(() => {
-    try {
-      return buildExerciseHistoryIndex(sessions);
-    } catch (e) {
-      console.warn('[sessionsByExerciseMap] Error building sessions map:', e);
-      return new Map<string, any[]>();
-    }
-  }, [sessions]);
-
   const [renderedCardLimit, setRenderedCardLimit] = useState(4);
 
   useEffect(() => {
@@ -608,6 +635,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Sync props to state when modal becomes visible
   useEffect(() => {
+    let captureInitialStateTimer: ReturnType<typeof setTimeout> | null = null;
     if (visible) {
       const validStartTime = startTime instanceof Date ? startTime : (startTime ? new Date(startTime) : new Date());
       const safeStart = isNaN(validStartTime.getTime()) ? new Date() : validStartTime;
@@ -633,6 +661,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const useRoutineTargets = (ex as any).useRoutineTargets || false;
           const existingDetails = ex.setsDetails;
           if (existingDetails && existingDetails.length > 0) {
+            const categoryOrdinals: Record<string, number> = {};
             return {
               id: (ex as any).id || `ex-${exIdx}-${Date.now()}-${Math.random()}`,
               name: ex.name,
@@ -642,6 +671,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 const isUnilateral = s.isUnilateral || false;
                 const completed = s.completed || false;
                 const category = s.category || 'S';
+                const positionInCategory = categoryOrdinals[category] ?? 0;
+                categoryOrdinals[category] = positionInCategory + 1;
 
                 let suggestedWeight = '';
                 let suggestedReps = '';
@@ -666,7 +697,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 } else {
                   let hist: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
                   try {
-                    hist = getPreviousSessionSetSuggestion(ex.name, category, sIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+                    hist = getPreviousSessionSetSuggestion(
+                      ex.name,
+                      category,
+                      positionInCategory,
+                      sessions,
+                      isUnilateral,
+                      workoutName,
+                      exIdx,
+                      sessionsByExerciseMap,
+                      {
+                        routineName: workoutName,
+                        exercisePosition: exIdx,
+                        supersetGroupId: (ex as any).superSetGroupId,
+                        progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                        equipment: exerciseLibraryMap.get(ex.name.toLowerCase())?.equipment,
+                      }
+                    );
                   } catch (err) {
                     console.warn('[ActiveWorkout] Error getting previous set suggestion:', err);
                   }
@@ -710,6 +757,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 };
               }),
               superSetGroupId: (ex as any).superSetGroupId,
+              useRoutineTargets,
             };
           }
  
@@ -723,7 +771,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                const category = 'S';
                let hist: SetSuggestion = { weight: '', reps: '', leftWeight: '', leftReps: '', rightWeight: '', rightReps: '' };
                try {
-                 hist = getPreviousSessionSetSuggestion(ex.name, category, setIdx, sessions, isUnilateral, undefined, undefined, sessionsByExerciseMap);
+                 hist = getPreviousSessionSetSuggestion(
+                   ex.name,
+                   category,
+                   setIdx,
+                   sessions,
+                   isUnilateral,
+                   workoutName,
+                   exIdx,
+                   sessionsByExerciseMap,
+                   {
+                     routineName: workoutName,
+                     exercisePosition: exIdx,
+                     supersetGroupId: (ex as any).superSetGroupId,
+                     progressiveOverloadEnabled: isProgressiveOverloadEnabled,
+                     equipment: exerciseLibraryMap.get(ex.name.toLowerCase())?.equipment,
+                   }
+                 );
                } catch (err) {
                  console.warn('[ActiveWorkout] Error getting previous set suggestion:', err);
                }
@@ -748,12 +812,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                };
              }),
              superSetGroupId: (ex as any).superSetGroupId,
+             useRoutineTargets,
            };
          }).filter((ex): ex is ActiveExercise => Boolean(ex));
         setActiveExercises(initial);
 
         // Capture initial state asynchronously to avoid un-blocking mount frame
-        setTimeout(() => {
+        captureInitialStateTimer = setTimeout(() => {
           initialStateRef.current = {
             exercises: serializeState(initial, editingComment || ''),
             note: editingComment || ''
@@ -763,7 +828,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         hasSyncedPropsRef.current = true;
       }
     }
-  }, [visible, startTime, exercises, previousDurationMin, editingComment, sessionsByExerciseMap]);
+    return () => {
+      if (captureInitialStateTimer) clearTimeout(captureInitialStateTimer);
+    };
+  }, [visible, startTime, exercises, previousDurationMin, editingComment, sessionsByExerciseMap, workoutName, isEditing, isProgressiveOverloadEnabled, exerciseLibraryMap, setActiveExercises]);
 
   const debounceSyncRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1066,21 +1134,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             style: 'destructive',
             onPress: () => {
               const targetIdx = activeExerciseMenuIndex;
-              setActiveExercises(prev => prev.filter((_, idx) => idx !== targetIdx));
+              handleDeleteExercise(targetIdx);
               setIsExMenuVisible(false);
-              // Shift or clear active input if it matches the deleted exercise
-              const curr = activeInputRef.current;
-              if (curr) {
-                if (curr.exIdx === targetIdx) {
-                  activeInputRef.current = null;
-                  activeInputStore.setActiveInput(null);
-                  setIsKeyboardVisible(false);
-                } else if (curr.exIdx > targetIdx) {
-                  const nextVal = { ...curr, exIdx: curr.exIdx - 1 };
-                  activeInputRef.current = nextVal;
-                  activeInputStore.setActiveInput(nextVal);
-                }
-              }
               setActiveExerciseMenuIndex(null);
             }
           }
@@ -1121,8 +1176,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const scrollContentStyle = useMemo(() => [
     styles.scrollContent,
     isTimerSubMenuVisible ? { paddingBottom: spacing.xxxl * 3 } : { paddingBottom: spacing.xxl },
-    isKeyboardVisible ? { paddingBottom: 280 } : null
-  ], [isTimerSubMenuVisible, isKeyboardVisible]);
+    isKeyboardVisible ? { paddingBottom: keyboardHeight } : null
+  ], [isTimerSubMenuVisible, isKeyboardVisible, keyboardHeight]);
 
   return (
     <>
@@ -1214,6 +1269,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               showsVerticalScrollIndicator={false}
               overScrollMode="never"
               keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
               onStartShouldSetResponder={() => {
                 if (activeInputRef.current !== null) {
                   handleCloseKeyboard();
@@ -1334,7 +1393,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 inactiveItemScale={1}
                 enableActiveItemSnap={true}
                 dimensionsAnimationType="worklet"
-                itemsLayoutTransitionMode="reorder"
+                itemsLayoutTransitionMode="all"
                 dropAnimationDuration={120}
                 strategy="insert"
                 reorderTriggerOrigin="center"
@@ -1345,11 +1404,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 onDragEnd={({ order }) => {
                   setScrollEnabled(true);
                   setTimeout(() => {
-                    setActiveExercises(prev => sanitizeSuperSets(order(prev) as ActiveExercise[]));
+                    const reordered = reindexActiveExercises(order(activeExercisesRef.current) as ActiveExercise[]);
+                    setActiveExercises(reordered);
+                    const active = activeInputRef.current;
+                    if (active?.exerciseId) {
+                      const exIdx = reordered.findIndex((exercise) => exercise.id === active.exerciseId);
+                      const setIdx = exIdx >= 0 && active.setId
+                        ? reordered[exIdx].sets.findIndex((set) => set.id === active.setId)
+                        : active.setIdx;
+                      if (exIdx >= 0 && setIdx >= 0) {
+                        const nextInput = { ...active, exIdx, setIdx };
+                        activeInputRef.current = nextInput;
+                        activeInputStore.setActiveInput(nextInput);
+                      }
+                    }
                   }, 120);
                 }}
                 onActiveItemDropped={() => setScrollEnabled(true)}
-                itemExiting={null}
               >
                 {activeExercises.slice(0, renderedCardLimit).map((exercise, exIdx) => {
                   const isSuperSet = !!exercise.superSetGroupId;
@@ -2020,6 +2091,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               handleNextField={handleNextField}
               handleCloseKeyboard={handleCloseKeyboard}
               tempInputValueRef={tempInputValueRef}
+              onHeightChange={handleKeyboardHeightChange}
             />
           </View>
         </View>
