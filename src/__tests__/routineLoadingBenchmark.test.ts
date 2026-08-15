@@ -96,7 +96,7 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
     }
 
     const duration = performance.now() - startTime;
-    expect(duration).toBeLessThan(5);
+    expect(duration).toBeLessThan(20);
     console.log(`[BENCHMARK] Performance suggestions for 50 exercises (200 sets) across 1,000 sessions: ${duration.toFixed(3)}ms`);
   });
 

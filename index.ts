@@ -1,3 +1,5 @@
+(global as any).__STARTUP_T0__ = Date.now();
+
 if (typeof window !== 'undefined') {
   if (window.location?.search?.includes('e2e=true') || window.sessionStorage?.getItem('is_e2e_mode') === 'true' || window.localStorage?.getItem('is_e2e_mode') === 'true') {
     (window as any).__IS_E2E__ = true;

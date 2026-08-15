@@ -21,6 +21,12 @@ export const STORAGE_KEYS = {
   MIGRATION_STATE_V2: 'strongern_migration_state_v2',
   STORAGE_HEALTH_STATE: 'strongern_health_state',
 
+  // Instant Cache (Synchronous MMKV Frame 0 Hydration)
+  INSTANT_AUTH_CACHE: 'strongern_instant_auth_v1',
+  INSTANT_APP_DATA_CACHE: 'strongern_instant_app_data_v1',
+  INSTANT_RECENT_SESSIONS: 'strongern_instant_recent_sessions_v1',
+  INSTANT_PROFILE_SUMMARIES: 'strongern_instant_profile_summaries_v1',
+
   // Database Names
   LEGACY_SQLITE_DB: 'strongern.db',
   RELATIONAL_V2_DB: 'strongern_v2.db',

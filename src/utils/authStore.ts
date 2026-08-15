@@ -3,6 +3,7 @@
 // Stores onboarding state, auth mode, local username, and Google profile info.
 
 import { saveToDb, loadFromDb } from './db';
+import { getCachedAuthState, setCachedAuthState } from '../storage/instantCache';
 
 const AUTH_KEY = 'strongern_auth_v1';
 
@@ -33,19 +34,31 @@ const DEFAULT_AUTH: AuthState = {
 };
 
 /**
- * Load saved auth state from local DB/storage.
+ * Synchronous Frame 0 check from MMKV.
+ */
+export function getInitialAuthState(): AuthState | null {
+  return getCachedAuthState();
+}
+
+/**
+ * Load saved auth state from local DB/storage (with MMKV fast-path).
  * Returns null if no state has been saved yet (first launch).
  */
 export async function loadAuthState(): Promise<AuthState | null> {
+  const cached = getCachedAuthState();
+  if (cached) return cached;
+
   try {
     const saved = await loadFromDb(AUTH_KEY);
     if (saved && typeof saved === 'object') {
-      return {
+      const state: AuthState = {
         hasCompletedOnboarding: saved.hasCompletedOnboarding ?? false,
         authMode: (saved.authMode as AuthMode) ?? 'guest',
         localUsername: saved.localUsername ?? '',
         googleProfile: saved.googleProfile ?? null,
       };
+      setCachedAuthState(state);
+      return state;
     }
     return null;
   } catch (e) {
@@ -55,10 +68,11 @@ export async function loadAuthState(): Promise<AuthState | null> {
 }
 
 /**
- * Persist auth state changes.
+ * Persist auth state changes to both MMKV (synchronous) and DB (asynchronous).
  */
 export async function saveAuthState(state: AuthState): Promise<void> {
   try {
+    setCachedAuthState(state);
     await saveToDb(AUTH_KEY, state);
   } catch (e) {
     console.warn('[authStore] Failed to save auth state:', e);

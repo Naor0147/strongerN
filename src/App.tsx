@@ -16,7 +16,18 @@ import { initDb, saveToDb, loadFromDb, deleteFromDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
 import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureStore';
 import { setAlertListener, CustomAlertConfig } from './utils/alertOverride';
-import { loadAuthState, saveAuthState, saveGoogleProfile, AuthMode, GoogleProfile } from './utils/authStore';
+import { loadAuthState, saveAuthState, saveGoogleProfile, getInitialAuthState, AuthMode, GoogleProfile } from './utils/authStore';
+import {
+  getCachedAppData,
+  setCachedAppData,
+  getCachedRecentSessions,
+  setCachedRecentSessions,
+  getCachedProfileSummaries,
+  setCachedProfileSummaries,
+  clearInstantCache,
+  InstantAppData,
+  InstantProfileSummaries,
+} from './storage/instantCache';
 import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
 import { getSessionsForExerciseVariation } from './utils/variationUtils';
 import i18n from './utils/i18n';
@@ -29,11 +40,9 @@ import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySe
 import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
-// generateWorkoutInsights import removed (completion insights feature removed)
 
 // Screens — Auth
 import LoginScreen from './screens/LoginScreen';
-
 
 // Design tokens
 import { colors, spacing, radius, font, shadow, ripple as rippleTokens, globalAnimation } from './theme';
@@ -47,7 +56,6 @@ import { initNotifications, getLastNotificationResponse, onNotificationTapped, i
 
 // Simulators
 import { WatchCompanionSimulator } from './components/ui/WatchCompanionSimulator';
-// SocialShareCard import removed (share feature removed from completion)
 
 // Screens
 import ProfileScreen   from './screens/ProfileScreen';
@@ -170,8 +178,22 @@ function MainApp() {
     Rubik_700Bold,
   });
 
+  // â”€â”€ Synchronous Frame 0 MMKV Instant Hydration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const initialAuth = React.useMemo(() => getInitialAuthState(), []);
+  const initialAppData = React.useMemo(() => getCachedAppData(), []);
+  const initialRecentSessions = React.useMemo(() => getCachedRecentSessions(), []);
+  const initialProfileSummaries = React.useMemo(() => getCachedProfileSummaries(), []);
+  const initialSettings = React.useMemo(() => loadCompactSettings(), []);
 
-  // ── Auth State ────────────────────────────────────────────────
+  // Performance telemetry marker
+  if (!(global as any).__HYDRATION_LOGGED__) {
+    (global as any).__HYDRATION_LOGGED__ = true;
+    const now = Date.now();
+    const t0 = (global as any).__STARTUP_T0__ || now;
+    console.log(`[PERF_BENCHMARK] Frame 0 Instant State Hydrated in ${now - t0}ms (cachedUser: ${Boolean(initialAppData?.user)}, cachedSessions: ${initialRecentSessions?.length ?? 0})`);
+  }
+
+  // â”€â”€ Auth State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   // null = loading from storage; false = needs onboarding; AuthState = loaded
   const [authState, setAuthState] = React.useState<{
@@ -179,21 +201,19 @@ function MainApp() {
     authMode: AuthMode;
     localUsername: string;
     googleProfile?: GoogleProfile | null;
-  } | null>(null);
+  } | null>(() => initialAuth);
 
   // Guard to prevent overwriting stored data with defaults on mount
-  const [isDataLoaded, setIsDataLoaded] = React.useState(false);
-  const [isWorkoutRestored, setIsWorkoutRestored] = React.useState(false);
+  const [isDataLoaded, setIsDataLoaded] = React.useState(() => Boolean(initialAppData));
+  const [isWorkoutRestored, setIsWorkoutRestored] = React.useState(true);
 
-  // Load auth state from DB on mount
+  // Load auth state from DB on mount (background reconciliation / first launch fallback)
   React.useEffect(() => {
     (async () => {
       await initDb();
       const saved = await loadAuthState();
       if (saved) {
         setAuthState(saved);
-        // If previously signed in with Google, pre-populate googleUser from authStore
-        // (the main DB load below will also run and may enrich it with the SecureStore token)
         if (saved.authMode === 'google' && saved.googleProfile) {
           const p = saved.googleProfile;
           setGoogleUser(prev => prev ?? {
@@ -201,7 +221,7 @@ function MainApp() {
             name: p.name,
             avatarUri: p.avatarUri,
             fileId: p.fileId,
-            accessToken: undefined, // Token loaded separately from SecureStore in loadData()
+            accessToken: undefined,
           });
           setUser(prev => ({
             ...prev,
@@ -214,20 +234,21 @@ function MainApp() {
             name: saved.localUsername,
           }));
         }
-      } else {
-        // First launch — show onboarding
+      } else if (!initialAuth) {
+        // First launch â€” show onboarding
         setAuthState({ hasCompletedOnboarding: false, authMode: 'guest', localUsername: '' });
       }
     })();
-  }, []);
+  }, [initialAuth]);
 
-  // Initialize sounds and notifications on mount
+  // Non-blocking initialization of sounds and notifications after first paint
   React.useEffect(() => {
-    initSounds();
-    initNotifications();
+    const timer = setTimeout(() => {
+      initSounds();
+      initNotifications();
+    }, 60);
+    return () => clearTimeout(timer);
   }, []);
-
-
 
   const handleAuthComplete = async (authMode: AuthMode, username: string) => {
     if (authMode !== 'google') {
@@ -249,47 +270,65 @@ function MainApp() {
   const STORAGE_KEY = 'strongern_app_data_v1';
   const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
 
-  // Dynamic States (Clean production-ready default state)
+  // Dynamic States (Clean production-ready default state populated from synchronous instant cache)
   const [user, setUser] = React.useState<{
     name: string;
     totalWorkouts: number;
     isPro: boolean;
     avatarUri?: string;
-  }>({
-    name: 'Guest User',
+  }>(() => initialAppData?.user ?? {
+    name: initialAuth?.authMode === 'local' && initialAuth.localUsername
+      ? initialAuth.localUsername
+      : initialAuth?.authMode === 'google' && initialAuth.googleProfile?.name
+      ? initialAuth.googleProfile.name
+      : 'Guest User',
     totalWorkouts: 0,
     isPro: false,
+    avatarUri: initialAuth?.authMode === 'google' ? initialAuth.googleProfile?.avatarUri : undefined,
   });
-  const [sessionsList, setSessionsList] = React.useState<any[]>([]);
-  const [templatesList, setTemplatesList] = React.useState<any[]>([]);
-  const [exercisesList, setExercisesList] = React.useState<any[]>(mockExercises);
+
+  const [sessionsList, setSessionsList] = React.useState<any[]>(() => initialRecentSessions ?? []);
+  const [templatesList, setTemplatesList] = React.useState<any[]>(() => initialAppData?.templatesList ?? []);
+  const [exercisesList, setExercisesList] = React.useState<any[]>(() => initialAppData?.exercisesList ?? mockExercises);
+  const exercisesListRef = React.useRef(exercisesList);
+
   const [primaryMetricsList, setPrimaryMetricsList] = React.useState<any[]>(() =>
-    mockPrimaryMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
+    initialAppData?.primaryMetricsList ?? mockPrimaryMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
   );
   const [bodyPartMetricsList, setBodyPartMetricsList] = React.useState<any[]>(() =>
-    mockBodyPartMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
+    initialAppData?.bodyPartMetricsList ?? mockBodyPartMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
   );
-  const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(true);
+  const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(() => initialSettings?.isAutoTimerEnabled ?? true);
   const [googleUser, setGoogleUser] = React.useState<{
     email: string;
     name: string;
     avatarUri?: string;
     accessToken?: string;
     fileId?: string;
-  } | null>(null);
-  const [animationSpeed, setAnimationSpeed] = React.useState(1);
-  const [lastSynced, setLastSynced] = React.useState<string | null>(null);
+  } | null>(() => {
+    if (initialAppData?.googleUser) return initialAppData.googleUser;
+    if (initialAuth?.authMode === 'google' && initialAuth.googleProfile) {
+      return {
+        email: initialAuth.googleProfile.email,
+        name: initialAuth.googleProfile.name,
+        avatarUri: initialAuth.googleProfile.avatarUri,
+        fileId: initialAuth.googleProfile.fileId,
+      };
+    }
+    return null;
+  });
+  const [animationSpeed, setAnimationSpeed] = React.useState(() => initialSettings?.animationSpeed ?? 1);
+  const [lastSynced, setLastSynced] = React.useState<string | null>(() => initialAppData?.lastSynced ?? null);
 
   // Program & Folder States
-  const [foldersList, setFoldersList] = React.useState<string[]>(['All', 'Bulking Splits', 'Home Workouts', 'Travel']);
-  const [activeProgramId, setActiveProgramId] = React.useState<string | null>(null);
-  const [programStartDate, setProgramStartDate] = React.useState<string | null>(null);
+  const [foldersList, setFoldersList] = React.useState<string[]>(() => initialAppData?.foldersList ?? ['All', 'Bulking Splits', 'Home Workouts', 'Travel']);
+  const [activeProgramId, setActiveProgramId] = React.useState<string | null>(() => initialAppData?.activeProgramId ?? null);
+  const [programStartDate, setProgramStartDate] = React.useState<string | null>(() => initialAppData?.programStartDate ?? null);
 
   // Smartwatch and Health States
   const [isWatchSimulatorVisible, setIsWatchSimulatorVisible] = React.useState(false);
-  const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(false);
-  const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(false);
-  // isSocialShareVisible, isInsightsVisible, insightsData states removed (completion insights/share removed)
+  const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(() => initialSettings?.isHealthSyncEnabled ?? false);
+  const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(() => initialSettings?.isLiveHeartRateEnabled ?? false);
 
   // Custom Alert Modal State
   const [activeAlert, setActiveAlert] = React.useState<CustomAlertConfig | null>(null);
@@ -315,46 +354,54 @@ function MainApp() {
   }, []);
 
   // Modular Toggles and Custom Sound Settings
-
-  const [isProgramsEnabled, setIsProgramsEnabled] = React.useState(false);
-  const [isHistoryEnabled, setIsHistoryEnabled] = React.useState(true);
-  const [isMusclesEnabled, setIsMusclesEnabled] = React.useState(true);
-  const [enableRoutineFolders, setEnableRoutineFolders] = React.useState(false);
-  const [isDeveloperModeEnabled, setIsDeveloperModeEnabled] = React.useState(false);
-  const [appTheme, setAppThemeState] = React.useState<string>('default');
-  const [customAccentColor, setCustomAccentColor] = React.useState('#4F8EF7');
+  const [isProgramsEnabled, setIsProgramsEnabled] = React.useState(() => initialSettings?.isProgramsEnabled ?? false);
+  const [isHistoryEnabled, setIsHistoryEnabled] = React.useState(() => initialSettings?.isHistoryEnabled ?? true);
+  const [isMusclesEnabled, setIsMusclesEnabled] = React.useState(() => initialSettings?.isMusclesEnabled ?? true);
+  const [enableRoutineFolders, setEnableRoutineFolders] = React.useState(() => initialSettings?.enableRoutineFolders ?? false);
+  const [isDeveloperModeEnabled, setIsDeveloperModeEnabled] = React.useState(() => initialSettings?.isDeveloperModeEnabled ?? false);
+  const [appTheme, setAppThemeState] = React.useState<string>(() => initialSettings?.appTheme ?? 'default');
+  const [customAccentColor, setCustomAccentColor] = React.useState(() => initialSettings?.customAccentColor ?? '#4F8EF7');
   const [themeVersion, setThemeVersion] = React.useState(0);
 
   const [languageVersion, setLanguageVersion] = React.useState(0); // Increment to trigger re-render on language change
 
-  const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(false);
-  const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(true);
+  const [isProgressiveOverloadEnabled, setIsProgressiveOverloadEnabled] = React.useState(() => initialSettings?.isProgressiveOverloadEnabled ?? false);
+  const [isAutoFinishSetEnabled, setIsAutoFinishSetEnabled] = React.useState(() => initialSettings?.isAutoFinishSetEnabled ?? true);
 
   const editingSessionId = useActiveWorkoutStore(state => state.editingSessionId);
   const setEditingSessionId = useActiveWorkoutStore(state => state.setEditingSessionId);
-  const [isRpeMode, setIsRpeMode] = React.useState(true); // true = RPE, false = RIR
+  const [isRpeMode, setIsRpeMode] = React.useState(() => initialSettings?.isRpeMode ?? true); // true = RPE, false = RIR
   const exerciseNameLanguage = i18n.locale.startsWith('he') ? 'he' as const : 'en' as const;
 
-
-  const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>('satisfying-click');
-  const [soundWorkoutFinished, setSoundWorkoutFinished] = React.useState<string>('fanfare');
-  const [soundTimerCompleted, setSoundTimerCompleted] = React.useState<string>('beep');
-  const [customSounds, setCustomSounds] = React.useState<{ id: string; name: string; uri: string }[]>([]);
-  const [soundVolume, setSoundVolume] = React.useState(0.8);
+  const [soundSetCompleted, setSoundSetCompleted] = React.useState<string>(() => initialSettings?.soundSetCompleted ?? 'satisfying-click');
+  const [soundWorkoutFinished, setSoundWorkoutFinished] = React.useState<string>(() => initialSettings?.soundWorkoutFinished ?? 'fanfare');
+  const [soundTimerCompleted, setSoundTimerCompleted] = React.useState<string>(() => initialSettings?.soundTimerCompleted ?? 'beep');
+  const [customSounds, setCustomSounds] = React.useState<{ id: string; name: string; uri: string }[]>(() => initialSettings?.customSounds ?? []);
+  const [soundVolume, setSoundVolume] = React.useState(() => initialSettings?.soundVolume ?? 0.8);
 
   // Rest Timer default settings & layout preferences
-  const [defaultRestDuration, setDefaultRestDuration] = React.useState(90);
-  const [showAchievementBadges, setShowAchievementBadges] = React.useState(false);
-  const [showSummaryWidgets, setShowSummaryWidgets] = React.useState(false);
-  const [showWeeklyTonnage, setShowWeeklyTonnage] = React.useState(false);
-  const [showWorkoutsChart, setShowWorkoutsChart] = React.useState(true);
-  const [showHighlights, setShowHighlights] = React.useState(false);
-  const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(false);
+  const [defaultRestDuration, setDefaultRestDuration] = React.useState(() => initialSettings?.defaultRestDuration ?? 90);
+  const [showAchievementBadges, setShowAchievementBadges] = React.useState(() => initialSettings?.showAchievementBadges ?? false);
+  const [showSummaryWidgets, setShowSummaryWidgets] = React.useState(() => initialSettings?.showSummaryWidgets ?? false);
+  const [showWeeklyTonnage, setShowWeeklyTonnage] = React.useState(() => initialSettings?.showWeeklyTonnage ?? false);
+  const [showWorkoutsChart, setShowWorkoutsChart] = React.useState(() => initialSettings?.showWorkoutsChart ?? true);
+  const [showHighlights, setShowHighlights] = React.useState(() => initialSettings?.showHighlights ?? false);
+  const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(() => initialSettings?.showHypertrophyGoal ?? false);
   const historyRepositoryReadyRef = React.useRef(false);
 
+  // Apply initial theme immediately to eliminate theme flash
+  React.useEffect(() => {
+    if (initialSettings?.appTheme) {
+      const { applyTheme } = require('./theme');
+      applyTheme(initialSettings.appTheme, initialSettings.customAccentColor || '#4F8EF7');
+    }
+  }, [initialSettings]);
 
-  // Dynamically calculate weekly chart data based on sessionsList (Monday start to match getWeeklyStreak)
+  // Dynamically calculate weekly chart data based on sessionsList (with fast pre-cached fallback)
   const dynamicWeeklyChartData = React.useMemo(() => {
+    if (sessionsList.length === 0 && initialProfileSummaries?.dynamicWeeklyChartData) {
+      return initialProfileSummaries.dynamicWeeklyChartData;
+    }
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
     const oneDay = 24 * 60 * 60 * 1000;
     
@@ -384,9 +431,9 @@ function MainApp() {
     });
     
     return weeks.map(w => ({ weekLabel: w.label, count: w.count }));
-  }, [sessionsList]);
+  }, [sessionsList, initialProfileSummaries]);
 
-  // Load from database on mount
+  // Background Database & History Synchronization (non-blocking)
   React.useEffect(() => {
     async function loadData() {
       try {
@@ -470,12 +517,16 @@ function MainApp() {
           }
 
           if (persistence.historyReady) {
-            setSessionsList(persistence.sessions.map(sessionV2ToLegacy));
+            const mapped = persistence.sessions.map(sessionV2ToLegacy);
+            setSessionsList(mapped);
+            setCachedRecentSessions(mapped);
           } else if (parsed?.sessionsList) {
-            setSessionsList(parsed.sessionsList.map((s: any) => ({
+            const mapped = parsed.sessionsList.map((s: any) => ({
               ...s,
               datetime: new Date(s.datetime)
-            })));
+            }));
+            setSessionsList(mapped);
+            setCachedRecentSessions(mapped);
           }
 
           // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
@@ -521,6 +572,10 @@ function MainApp() {
           useActiveWorkoutStore.getState().hydrate(persistence.activeDraft);
           activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
           setIsWorkoutRestored(true);
+
+          const now = Date.now();
+          const t0 = (global as any).__STARTUP_T0__ || now;
+          console.log(`[PERF_BENCHMARK] Background SQLite & History Sync Complete in ${now - t0}ms`);
         }
       } catch (e) {
         console.warn('Error loading persisted state', e);
@@ -620,8 +675,8 @@ function MainApp() {
     customAccentColor,
   ]);
 
-  // Save core user app data (templates, custom exercises, metrics, profile, routines) to database
-  // Note: sessionsList is decoupled into relational SQLite v2 (strongern_v2.db) and omitted here
+  // Save core user app data (templates, custom exercises, metrics, profile, routines) to database & MMKV instant cache
+  // Note: sessionsList is decoupled into relational SQLite v2 (strongern_v2.db) and cached in MMKV
   React.useEffect(() => {
     if (!isDataLoaded) return;
     try {
@@ -638,6 +693,11 @@ function MainApp() {
         activeProgramId,
         programStartDate,
       };
+      // Synchronous MMKV Instant Cache update (Frame 0 zero-delay startup)
+      setCachedAppData(data);
+      if (sessionsList.length > 0) {
+        setCachedRecentSessions(sessionsList);
+      }
       latestAppDataRef.current = data;
       if (rootSaveTimeoutRef.current) {
         clearTimeout(rootSaveTimeoutRef.current);
@@ -658,11 +718,6 @@ function MainApp() {
       }
     };
   }, [
-    user,
-    templatesList,
-    exercisesList,
-    primaryMetricsList,
-    bodyPartMetricsList,
     googleUser,
     lastSynced,
     foldersList,
@@ -1056,6 +1111,7 @@ function MainApp() {
     }
     const { resetAuthState } = await import('./utils/authStore');
     await resetAuthState();
+    clearInstantCache();
     setAuthState({
       hasCompletedOnboarding: false,
       authMode: 'guest',
@@ -1475,6 +1531,7 @@ function MainApp() {
     setGoogleUser(null);
     setLastSynced(null);
     deleteSecureItem('google_oauth_token');
+    clearInstantCache();
     if (historyRepositoryReadyRef.current) {
       reconcileSessions([]).catch((err) => {
         console.error('[HistoryRepository] Clear all sessions failed:', err);
@@ -1509,8 +1566,11 @@ function MainApp() {
     setThemeVersion(v => v + 1);
   }, [appTheme]);
 
-  // Compute weekly muscle sets from sessions in the last 7 days
+  // Compute weekly muscle sets from sessions in the last 7 days (with instant precomputed cache)
   const weeklyMuscleSets = React.useMemo(() => {
+    if (sessionsList.length === 0 && initialProfileSummaries?.weeklyMuscleSets) {
+      return initialProfileSummaries.weeklyMuscleSets;
+    }
     const exerciseMuscleMap: Record<string, string> = {};
     exercisesList.forEach(ex => {
       if (ex && ex.name) {
@@ -1552,7 +1612,14 @@ function MainApp() {
       }
     });
     return sets;
-  }, [sessionsList, exercisesList]);
+  }, [sessionsList, exercisesList, initialProfileSummaries]);
+
+  // Persist precomputed profile summaries (charts, muscle sets) to MMKV for Frame 0 zero-delay rendering
+  React.useEffect(() => {
+    if (dynamicWeeklyChartData.length > 0 || (weeklyMuscleSets && Object.keys(weeklyMuscleSets).length > 0)) {
+      setCachedProfileSummaries({ dynamicWeeklyChartData, weeklyMuscleSets });
+    }
+  }, [dynamicWeeklyChartData, weeklyMuscleSets]);
 
 
 
@@ -1601,7 +1668,6 @@ function MainApp() {
 
   // Stable refs for state stabilization
   const templatesListRef = React.useRef(templatesList);
-  const exercisesListRef = React.useRef(exercisesList);
   const sessionsListRef = React.useRef(sessionsList);
   const userRef = React.useRef(user);
   const editingSessionIdRef = React.useRef(editingSessionId);
