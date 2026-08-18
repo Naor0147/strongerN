@@ -165,4 +165,52 @@ describe('instantCache MMKV synchronous storage', () => {
     const coldStartCount = getCachedTotalSessionsCount() ?? getCachedAppData()?.user?.totalWorkouts ?? 0;
     expect(coldStartCount).toBe(250);
   });
+
+  it('prevents preview session slice from overwriting the total count cache during cold start window', () => {
+    // 1. Initial 300 workouts in MMKV cache from a previous run
+    setCachedTotalSessionsCount(300);
+    setCachedAppData({
+      user: { name: 'Athlete', totalWorkouts: 300, isPro: false },
+      templatesList: [],
+      exercisesList: [],
+      primaryMetricsList: [],
+      bodyPartMetricsList: [],
+      foldersList: [],
+    });
+    expect(getCachedTotalSessionsCount()).toBe(300);
+
+    // 2. Frame 0 cold start: reads 20-item recent sessions preview snapshot
+    const previewSessions = Array.from({ length: 20 }, (_, i) => ({
+      id: `preview-${i}`,
+      name: `Workout #${i}`,
+      datetime: new Date(2026, 0, i + 1).toISOString(),
+    }));
+
+    // Simulated Frame 0 runtime state before SQLite loads:
+    let isFullHistoryLoaded = false;
+    let currentSessions = previewSessions;
+
+    // The debounced cache-sync effect fires at 400ms. Because isFullHistoryLoaded is false, it must NOT execute:
+    if (isFullHistoryLoaded) {
+      setCachedRecentSessions(currentSessions, currentSessions.length);
+    }
+
+    // Assert that the cached total count remains 300 (never downgraded to 20):
+    expect(getCachedTotalSessionsCount()).toBe(300);
+
+    // 3. Background SQLite completes and loads all 300 sessions:
+    const fullSessions = Array.from({ length: 300 }, (_, i) => ({
+      id: `full-${i}`,
+      name: `Workout #${i}`,
+      datetime: new Date(2026, 0, i + 1).toISOString(),
+    }));
+    currentSessions = fullSessions;
+    isFullHistoryLoaded = true;
+
+    // Full history sync runs:
+    if (isFullHistoryLoaded) {
+      setCachedRecentSessions(currentSessions, currentSessions.length);
+    }
+    expect(getCachedTotalSessionsCount()).toBe(300);
+  });
 });

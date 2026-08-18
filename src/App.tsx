@@ -239,7 +239,7 @@ function MainApp() {
   const initialSettings = React.useMemo(() => loadCompactSettings(), []);
 
   // Performance telemetry marker
-  if (!(global as any).__HYDRATION_LOGGED__) {
+  if (__DEV__ && !(global as any).__HYDRATION_LOGGED__) {
     (global as any).__HYDRATION_LOGGED__ = true;
     const now = Date.now();
     const t0 = (global as any).__STARTUP_T0__ || now;
@@ -593,6 +593,7 @@ function MainApp() {
             setSessionsList(loadedSessionsMapped);
             setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
             setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
+            setIsFullHistoryLoaded(true);
           }
 
           // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
@@ -654,13 +655,13 @@ function MainApp() {
             setSessionsList(mapped);
             setCachedRecentSessions(mapped, mapped.length);
             setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
+            setIsFullHistoryLoaded(true);
           }
         } catch (fallbackErr) {
           if (__DEV__) console.warn('Fallback loadAllSessions failed', fallbackErr);
         }
       } finally {
         setIsDataLoaded(true);
-        setIsFullHistoryLoaded(true);
       }
     }
     loadData();
@@ -810,12 +811,12 @@ function MainApp() {
 
   // Reconcile and refresh recent sessions cache and total count on session updates
   React.useEffect(() => {
-    if (!isDataLoaded) return;
+    if (!isFullHistoryLoaded) return;
     const timer = setTimeout(() => {
-      setCachedRecentSessions(sessionsList);
+      setCachedRecentSessions(sessionsList, sessionsList.length);
     }, 400);
     return () => clearTimeout(timer);
-  }, [sessionsList, isDataLoaded]);
+  }, [sessionsList, isFullHistoryLoaded]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);

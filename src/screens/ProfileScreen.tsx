@@ -858,7 +858,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     );
   }
 
-  if (!(global as any).__PROFILE_RENDERED_LOGGED__) {
+  if (__DEV__ && !(global as any).__PROFILE_RENDERED_LOGGED__) {
     (global as any).__PROFILE_RENDERED_LOGGED__ = true;
     const now = Date.now();
     const t0 = (global as any).__STARTUP_T0__ || now;
