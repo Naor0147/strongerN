@@ -1,66 +1,79 @@
-# Project: StrongerN Performance & Cold Start Optimization
+# Project: StrongerN Workout History Recovery & Sync Hardening
 
 ## Architecture
-StrongerN is an offline-first, AMOLED React Native / Expo workout tracker.
-- **Storage Tier 1 (Hot Path / In-Flight)**: MMKV (`strongern-hot-path`) for active workout snapshots (Slot A/B journaling with checksum and monotonic sequence) and compact settings (`strongern_settings_v2`).
-- **Storage Tier 2 (Relational Database)**: SQLite `strongern_v2.db` with WAL mode, foreign keys, and normalized schema (`persistence_meta`, `workout_sessions`, `session_exercises`, `set_logs`) with multi-column indices for high-speed indexing and incremental delta writes.
-- **Storage Tier 3 (Legacy & Web Fallback)**: SQLite `strongern.db` KV store (`strongern_kv_store`) and `window.localStorage` for web compatibility and one-time migration of legacy user records.
+- **Storage Layer**:
+  - `src/storage/dbSingleton.ts`: Native SQLite database connection (`strongern_v2.db`) with WAL mode, foreign keys, and busy timeout.
+  - `src/storage/history/schema.ts`: Relational schema (`workout_sessions`, `session_exercises`, `set_logs`) with `deleted_at_ms`.
+  - `src/storage/history/repository.ts`: SQLite transaction repository for session loading, querying, upserting, soft-deleting, untombstoning, and diagnostics.
+  - `src/storage/instantCache.ts`: Synchronous MMKV cache for Frame 0 instant UI hydration (capped at 20 preview sessions).
+  - `src/storage/persistenceBootstrap.ts`: Fastpath migration and startup orchestration with automatic tombstone recovery.
+- **Application State & Sync Layer**:
+  - `src/App.tsx`: Top-level state (`sessionsList`, `isDataLoaded`, `isFullHistoryLoaded`), Google Drive auto-sync effect (gated), Google Drive manual sync (`handleCloudSync`), backup export/import (`handleExportBackup`, `applyBackupData`), and error handling (`loadData`).
+  - `src/services/googleDrive.ts`: Google Drive REST API integration.
+  - `src/utils/crashLogger.ts`: SQLite & FileSystem persistent crash and error logger.
+- **Presentation Layer**:
+  - `src/screens/ProfileScreen.tsx`: Profile & settings screen with Developer Options routing to diagnostics.
+  - `src/components/DeveloperDiagnosticsView.tsx`: Developer diagnostic & repair panel displaying live SQLite and MMKV stats and 1-tap repair action.
+  - `src/theme.ts`: AMOLED dark design system tokens (`colors.bg = #0D0F14`, `colors.surface = #161B24`, `colors.accent = #4F8EF7`).
+  - `src/utils/i18n.ts`: English and Hebrew localization dictionaries.
 
-```
-Cold Start Flow (Optimized):
-[App Launch]
-    │
-    ├── [1] Load Compact Settings (MMKV / strongern_settings_v2) ──── < 2ms
-    ├── [2] Restore In-Flight Active Draft (MMKV Slot A/B) ────────── < 2ms
-    ├── [3] Initialize SQLite v2 Singleton (WAL + Pragmas) ─────────── < 15ms
-    ├── [4] Fast-Path Hydration from SQLite v2 (300+ sessions) ──────── < 60ms
-    │       (Bypass monolithic JSON.parse & redundant checksumming)
-    └── [5] Root State Ready ──────────────────────────────────────── Total < 100ms (Target < 150ms)
-```
+## Code Layout
+- `src/storage/history/repository.ts` — SQLite session CRUD, diagnostic counting, and untombstoning
+- `src/storage/persistenceBootstrap.ts` — Startup bootstrap & self-healing
+- `src/App.tsx` — History hydration, cloud sync gating, safe backup restore, and error telemetry
+- `src/components/DeveloperDiagnosticsView.tsx` — Diagnostic & repair UI component
+- `src/screens/ProfileScreen.tsx` — Settings view routing for diagnostics panel
+- `src/utils/i18n.ts` — Translation strings for diagnostics and versioning
+- `app.json` — App version bump (`1.0.1.78`, `versionCode: 133`)
+- `src/__tests__/historyRecoveryRegression.test.ts` — Automated regression test suite
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Automated Benchmarking Suite | `scripts/benchmark-startup.js` simulating 0, 50, 300+ workouts measuring storage, SQLite query, heap delta, and startup time | M1 | Survey (Explorer 3) |
-| 2 | Baseline Performance Measurement | Capture pre-optimization baseline metrics across 0, 50, 300+ sessions | M1 | Survey (Explorer 3) |
-| 3 | Fast-Path Database Hydration | Streamline `bootstrapPersistence` and `loadAllSessions` to bypass monolithic legacy JSON stringify/parse cycles | M2 | Survey (Explorer 1) |
-| 4 | Query & Index Optimization | Ensure optimized indexes and batch query hydration for `workout_sessions`, `session_exercises`, `set_logs` (<150ms for 300+ sessions) | M2 | Survey (Explorer 1 & 3) |
-| 5 | Compact Settings Partitioning | Decouple 35+ settings/toggles into MMKV compact store (`strongern_settings_v2`) | M3 | Survey (Explorer 2) |
-| 6 | Eliminate Monolithic Root Save | Remove full `sessionsList` serialization from `App.tsx` state update effect | M3 | Survey (Explorer 2) |
-| 7 | Incremental Delta Session Writes | Replace destructive 8,700-query `reconcileSessions` loop with single-session `upsertSession` & `softDeleteSession` | M3 | Survey (Explorer 2 & 3) |
-| 8 | Active Draft Isolation | Keep active workout drafts strictly on MMKV A/B slots without secondary SQLite KV thrashing | M3 | Survey (Explorer 2) |
-| 9 | Regression & Type Safety Verification | Verify `npm run typecheck` (0 errors) and `npm test` (100% pass) | M4 | Survey (Explorer 1, 2, 3) |
-| 10 | Post-Optimization Benchmark Validation | Validate cold start data hydration <150ms for 300+ workouts | M4 | Survey (Explorer 3) |
-| 11 | Version Bump & Release APK | Bump version in `app.json` & `src/utils/i18n.ts`, update graphify, compile release APK via `build-apk.bat --auto`, commit & push to master | M4 | Project Rules |
+| 1 | SQLite Diagnostics & Untombstone API | Add `countTombstonedSessions()`, `restoreAllTombstonedSessions()`, and `getDatabaseDiagnostics()` to repository | M1 | Survey (E1, E2, E3) [DONE] |
+| 2 | Safe Merge-Only Import | Enhance `insertMissingSessionsOnly()` to restore tombstoned sessions if imported actively | M1 | Survey (E1, E2) [DONE] |
+| 3 | Startup Self-Healing | Automatically detect and restore tombstoned sessions during `bootstrapPersistence` | M1 | Survey (E1, E2) [DONE] |
+| 4 | Un-gated Error Telemetry | Log persistence and hydration failures to `console.error` and `saveCrashLogSync` | M1 | Survey (E1) [DONE] |
+| 5 | Cloud Auto-Sync Gating | Block Google Drive auto-sync uploads until `isFullHistoryLoaded` is true | M2 | Survey (E1, E2) [DONE] |
+| 6 | Cloud Manual Sync & Export Gating | Block or warn on manual sync/export if full history is not yet loaded | M2 | Survey (E2) [DONE] |
+| 7 | Safe Restore Replacement | Replace destructive `reconcileSessions` with `insertMissingSessionsOnly` in `applyBackupData` and `handleGoogleLogin` | M2 | Survey (E1, E2) [DONE] |
+| 8 | Developer Diagnostic Panel | Implement `<DeveloperDiagnosticsView>` showing SQLite active/tombstoned/raw rows and MMKV cache count | M3 | Survey (E3) |
+| 9 | 1-Tap Workout History Repair | Add interactive repair action in UI to untombstone sessions, rehydrate state, and update cache | M3 | Survey (E1, E3) |
+| 10 | AMOLED UI/UX & i18n | Style diagnostic UI with AMOLED dark tokens and add EN/HE translations in `i18n.ts` | M3 | Survey (E3) |
+| 11 | Automated Regression Suite | Regression tests for sync gating, safe restore, and untombstoning repair in `historyRecoveryRegression.test.ts` | M4 | Survey (E3) |
+| 12 | Version Bump & Release APK | Bump version to `1.0.1.78` (code 133), update graphify, run typecheck, test suite, and build release APK via `build-apk.bat --auto` | M4 | Survey (E3) |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Benchmarking Suite (R3) | Implement `scripts/benchmark-startup.js` and record baseline cold-start metrics for 0, 50, 300+ sessions | None | DONE |
-| M2 | Cold Start & SQLite Hydration (R1) | Optimize `persistenceBootstrap.ts`, query batching, fast-path bypass of monolithic legacy JSON parsing, and sub-150ms 300+ session hydration | M1 | DONE |
-| M3 | State Save Decoupling & Delta Writes (R2) | Decouple settings into MMKV `strongern_settings_v2`, eliminate monolithic `sessionsList` JSON stringify in `App.tsx`, remove full `reconcileSessions` thrashing, enforce incremental delta writes | M2 | DONE |
-| M4 | Comprehensive Verification, APK & Master Push (R4) | Run full test suite, typechecks, benchmark verification, app version bump, graphify update, release APK build, and git push to master | M3 | DONE |
+| 1 | History Load & Recovery Engine | Implement repository recovery functions (`countTombstonedSessions`, `restoreAllTombstonedSessions`, `getDatabaseDiagnostics`), enhance `insertMissingSessionsOnly`, un-gate error logging, and add bootstrap self-healing | none | DONE |
+| 2 | Cloud Sync & Reconcile Hardening | Gate auto-sync, manual sync, and backup export with `isFullHistoryLoaded`. Replace `reconcileSessions` with `insertMissingSessionsOnly` in `handleGoogleLogin` and `applyBackupData` | M1 | DONE |
+| 3 | Diagnostic & Repair UI Panel | Create `DeveloperDiagnosticsView.tsx`, wire into `ProfileScreen.tsx`, implement 1-tap repair, apply AMOLED design tokens, and add i18n strings | M1 | IN_PROGRESS |
+| 4 | Regression Testing & Release Verification | Add `historyRecoveryRegression.test.ts`, increment version, run graphify update, verify typecheck & tests, build standalone APK, and commit to master | M1, M2, M3 | PLANNED |
 
 ## Interface Contracts
-### Compact Settings Store (`src/storage/adapters/mmkvAdapter.ts` & `src/storage/keys.ts`)
-- Key: `SETTINGS_COMPACT_V2` (`'strongern_settings_v2'`)
-- API:
-  - `saveCompactSettings(settings: Partial<AppSettings>): void`
-  - `loadCompactSettings(): AppSettings | null`
+### `src/storage/history/repository.ts` ↔ Application & UI
+```ts
+export interface DatabaseDiagnostics {
+  isReady: boolean;
+  activeSessionsCount: number;
+  tombstonedSessionsCount: number;
+  rawTotalSessionsCount: number;
+  cachedRecentCount: number;
+  cachedTotalCount: number;
+}
 
-### Relational History Repository (`src/storage/history/repository.ts`)
-- Single Session Upsert: `upsertSession(session: WorkoutSessionV2): Promise<void>`
-- Single Session Delete: `softDeleteSession(sessionId: string): Promise<void>`
-- Bulk Import (Explicit CSV / Cloud Restore only): `bulkImportSessions(sessions: WorkoutSessionV2[]): Promise<void>`
-- Fast Hydration: `loadAllSessions(): Promise<WorkoutSessionV2[]>`
+export function countTombstonedSessions(): Promise<number>;
+export function restoreAllTombstonedSessions(): Promise<number>;
+export function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics>;
+export function insertMissingSessionsOnly(sessions: WorkoutSessionV2[]): Promise<void>;
+```
 
-### Persistence Bootstrap (`src/storage/persistenceBootstrap.ts`)
-- `bootstrapPersistence(legacyData, legacyActiveWorkout)`: Fast-path bypass when `strongern_v2.db` is initialized and verified. Return `{ sessions: WorkoutSessionV2[], activeWorkout, settings }`.
-
-## Code Layout
-- `src/App.tsx`: Root component, bootstrap lifecycle, UI state, decoupled settings and session handlers.
-- `src/storage/persistenceBootstrap.ts`: Fast-path persistence bootstrapping and migration verification.
-- `src/storage/history/`: Relational SQLite V2 schema, repository, queries, and migrations.
-- `src/storage/adapters/`: MMKV and localStorage adapters.
-- `src/utils/db.ts`: Legacy KV store utilities and backward compatibility layer.
-- `scripts/benchmark-startup.js`: Node 22 native SQLite startup and hydration benchmark script.
+### `src/components/DeveloperDiagnosticsView.tsx` ↔ `src/screens/ProfileScreen.tsx`
+```ts
+interface DeveloperDiagnosticsViewProps {
+  onBack: () => void;
+  onRefreshSessions?: () => Promise<void> | void;
+  isHebrew?: boolean;
+}
+```

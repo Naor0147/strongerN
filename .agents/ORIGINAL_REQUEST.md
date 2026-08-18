@@ -1,41 +1,42 @@
 # Original User Request
 
-## 2026-08-14T05:42:11Z
+## Initial Request — 2026-08-18T19:42:18Z
 
-Optimize StrongerN cold start loading time and data hydration performance, specifically accelerating startup when 300+ workouts are logged, while preserving 100% data integrity, UI responsiveness, and existing functionality.
+Fix the silent workout history load failure in StrongerN, recover soft-deleted or truncated local workouts (restoring full 300+ workout history), harden cloud sync against data poisoning, and add a developer diagnostic/repair panel.
 
-Working directory: C:\Antigravity\strongerN
+Working directory: c:\Antigravity\strongerN
 Integrity mode: development
 
 ## Requirements
 
-### R1. Cold Start & Database Hydration Optimization
-Optimize `bootstrapPersistence`, SQLite queries, and root state initialization so that loading 300+ workout sessions happens instantaneously. Eliminate N+1 query bottlenecks, avoid redundant full-table deserialization on every app launch, and utilize indexed SQLite / MMKV storage efficiently.
+### R1. Root Cause Diagnosis & History Recovery
+- Ensure full workout history (300+ sessions) is reliably loaded from local SQLite storage upon startup, surfacing un-gated error logs if initialization fails.
+- Provide automatic or one-click recovery for soft-deleted/tombstoned sessions (`deleted_at_ms`) caused by previous sync or reconcile bugs.
 
-### R2. Monolithic State Save & Dual-Write De-bottlenecking
-Eliminate the lag caused by serializing the entire 300-session workout history as a massive monolithic JSON payload to SQLite/localStorage on every root state update. Decouple active workout and settings persistence from heavy historical session logs.
+### R2. Cloud Sync & Reconcile Hardening
+- Prevent Google Drive auto-sync from uploading preview/partial workout state before full history is confirmed loaded (`isFullHistoryLoaded`).
+- Replace destructive reconcile logic (`reconcileSessions`) in backup restore flows with safe merge-only logic (`insertMissingSessionsOnly`) so stale/partial backups cannot delete local workouts.
 
-### R3. Comprehensive Benchmarking Suite
-Provide an automated, repeatable benchmark script (`scripts/benchmark-startup.ts` or `.js`) that simulates cold start with 0, 50, and 300+ full workout sessions, measuring:
-- Storage load / parse execution time (ms)
-- SQLite query & hydration duration (ms)
-- Memory allocation / heap delta (MB)
-- Component mount-to-ready time
+### R3. Diagnostic & Repair UI Panel
+- Provide a developer diagnostic panel showing active vs raw session counts, MMKV cache count, and database health status, with a one-tap repair action to restore tombstoned workouts.
+- Comply with AMOLED dark theme tokens and design system.
 
-### R4. Zero Regressions & Type Safety
-Ensure full backward compatibility with existing legacy JSON migrations, active workout draft restoration, SQLite relational tables, statistics/analytics computations, and offline-first persistence. All TypeScript checks (`npm run typecheck`) and unit tests (`npm test`) must pass cleanly.
+### R4. Automated Testing & Release Verification
+- Add automated regression tests covering: (1) sync upload prevention before full load, (2) merge-only restore safety against stale backups, (3) soft-delete repair execution.
+- Maintain app version increment in `app.json` and `src/utils/i18n.ts`, typecheck (`npm run typecheck`), test suite (`npm test`), and standalone release APK build (`build-apk.bat --auto`).
 
 ## Acceptance Criteria
 
-### Startup Performance
-- [ ] Cold start data hydration for 300+ workouts executes in under 150ms on benchmark testing (massive speedup from current synchronous monolithic load).
-- [ ] Eliminates blocking JSON.stringify / JSON.parse cycles of the full history on standard app interactions.
+### Data Safety & Recovery
+- [ ] User's full workout history (300+ sessions) displays in the history list and stats after launch/repair.
+- [ ] No local workouts are deleted or tombstoned when restoring a partial or empty backup.
+- [ ] Auto-sync upload never triggers when only 20 preview sessions are loaded in memory.
 
-### Benchmarks & Telemetry
-- [ ] Benchmark script executes cleanly via `node` / `npm run` and reports detailed before/after breakdown of load time and memory usage.
+### UI & Diagnostics
+- [ ] Developer Options panel displays accurate SQLite row counts (active, deleted, total) and MMKV cached counts.
+- [ ] Tapping "Repair workout history" cleanses tombstones and reloads active sessions without data corruption.
 
-### Quality & Regression Verification
-- [ ] `npm run typecheck` passes with 0 errors.
-- [ ] `npm test` passes 100% of unit tests.
-- [ ] Release APK compiles cleanly with `build-apk.bat --auto`.
-- [ ] App version incremented in `app.json` and `src/utils/i18n.ts`.
+### Verification & Release
+- [ ] `npm run typecheck` passes with zero errors.
+- [ ] `npm test` passes all unit and regression tests.
+- [ ] Standalone release APK builds cleanly via `build-apk.bat --auto`.

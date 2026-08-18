@@ -11,10 +11,12 @@ import { legacyActiveWorkoutToRuntime, runtimeStateToDraft } from './activeWorko
 import { setStorageHealthState } from './healthState';
 import {
   countAllRawSessions,
+  countTombstonedSessions,
   getPersistenceMeta,
   initHistoryRepository,
   insertMissingSessionsOnly,
   loadAllSessions,
+  restoreAllTombstonedSessions,
   setPersistenceMeta,
   upsertSession,
 } from './history/repository';
@@ -109,6 +111,17 @@ export async function bootstrapPersistence(
         // Bypass legacy JSON stringify & DJB2 character checksumming routine on cold start.
         sessions = await loadAllSessions();
 
+        // Tombstone self-healing: automatically recover any soft-deleted sessions
+        try {
+          const tombstonedCount = await countTombstonedSessions();
+          if (tombstonedCount > 0) {
+            await restoreAllTombstonedSessions();
+            sessions = await loadAllSessions();
+          }
+        } catch (err) {
+          console.warn('[PersistenceBootstrap] Auto-healing check warning:', err);
+        }
+
         // Self-healing (only when legacy payload has more sessions than active sessions, and raw rows mismatch)
         const rawLegacySessions = (legacyAppRaw && typeof legacyAppRaw === 'object')
           ? (legacyAppRaw as any).sessionsList
@@ -157,6 +170,16 @@ export async function bootstrapPersistence(
         }
 
         sessions = await loadAllSessions();
+        try {
+          const tombstonedCount = await countTombstonedSessions();
+          if (tombstonedCount > 0) {
+            await restoreAllTombstonedSessions();
+            sessions = await loadAllSessions();
+          }
+        } catch (err) {
+          console.warn('[PersistenceBootstrap] Auto-healing check warning:', err);
+        }
+
         const ids = new Set(sessions.map((session) => session.id));
         const missing = legacySessions
           .map((session, index) => legacySessionToV2(session, index).id)

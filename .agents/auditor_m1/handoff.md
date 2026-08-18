@@ -1,66 +1,78 @@
-# Handoff Report: Milestone 1 Forensic Audit
+# Handoff Report — Forensic Audit: Milestone 1
 
-**Target Work Products**: `scripts/benchmark-startup.js`, `package.json`  
-**Auditor**: Forensic Auditor (`auditor_m1`)  
-**Verdict**: **CLEAN**
+**Agent**: Forensic Auditor (`auditor_m1`)  
+**Target**: Milestone 1 (Workout History Recovery & Tombstone Self-Healing)  
+**Status**: COMPLETE (Hard Handoff)  
+**Date**: 2026-08-18  
 
 ---
 
 ## 1. Observation
-
-- **Files Checked**:
-  - `scripts/benchmark-startup.js` (1,178 lines, 48,992 bytes)
-  - `package.json` (line 70 added: `"benchmark:startup": "node scripts/benchmark-startup.js"`)
-- **Code Patterns**:
-  - Static AST and literal search revealed no hardcoded test metrics, no mocked outcome arrays, and no artificial delays (`setTimeout`, `sleep`).
-  - Implements Mulberry32 PRNG (`createPrng`), DJB2 checksum hashing (`calculateChecksum`), schema DDL, relational insertions, and four architectural simulation strategies (Legacy KV, Relational V2 3-Table Chunked, Optimized Fast-Path, and Top-50 Viewport Instant Hydration).
-- **Execution & Tracing**:
-  - Executed `scripts/benchmark-startup.js` on Node.js v22.22.3 (`node:sqlite` DatabaseSync).
-  - An independent forensic tracing harness (`.agents/auditor_m1/forensic_verifier.js`) hooked `DatabaseSync.prototype.exec`, `prepare`, `stmt.run`, `stmt.all`, `stmt.get`. It tracked 4 DDL calls, 240 INSERT executions for 10 sessions, exact matching row counts (10 sessions, 49 exercises, 178 sets in SQLite), and 474 rows fetched during strategy queries.
-  - Benchmarked scaling across 0, 10, 25, 50, 300, and 350 workout sessions.
-  - Executed `npm test` (12 test suites, 94 tests passed) and `npm run typecheck` (`tsc --noEmit` exited 0).
+1. **Audited Work Products**:
+   - `src/storage/history/repository.ts`
+   - `src/storage/persistenceBootstrap.ts`
+   - `src/App.tsx`
+   - `src/__tests__/historyRepositoryRecovery.test.ts`
+2. **Static & Behavioral Findings**:
+   - `countTombstonedSessions()` runs `SELECT COUNT(*) AS count FROM workout_sessions WHERE deleted_at_ms IS NOT NULL;`.
+   - `restoreAllTombstonedSessions()` runs `UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE deleted_at_ms IS NOT NULL;` in a queued transaction and returns actual row changes.
+   - `getDatabaseDiagnostics()` queries SQLite active, tombstoned, and total counts, combining MMKV cache stats.
+   - `insertMissingSessionsOnly()` untombstones existing matching soft-deleted records without touching active rows or child exercises/sets.
+   - `bootstrapPersistence()` initiates self-healing upon startup whenever `countTombstonedSessions() > 0`.
+   - `App.tsx` records persistence errors into SQLite crash telemetry via `saveCrashLogSync`.
+   - Zero hardcoded mock returns or facade shortcuts detected.
+3. **Execution Commands & Results**:
+   - Independent verification harness (`.agents/auditor_m1/forensic_verifier.js`): 23/23 tests passed on native `DatabaseSync` SQLite engine.
+   - Typecheck (`tsc --noEmit`): Code 0 (0 type errors).
+   - Jest Unit Tests (`historyRepositoryRecovery.test.ts`): 10/10 tests passed.
+   - Full Test Suite: 19/19 test suites passed (160/160 tests).
 
 ---
 
 ## 2. Logic Chain
-
-1. **Absence of Artificial Artifacts**: Because the codebase lacks `sleep`, `setTimeout`, or pre-computed constant dictionaries, timing measurements must originate from physical CPU instructions and memory operations.
-2. **Empirical SQLite Interaction**: Because runtime method interception proved that SQLite tables are populated and queried with parameterized statements, measurements represent real database execution.
-3. **Monotonic Scaling**: Because elapsed durations and payload sizes scale directly with session volume (3.1 KB / 0.05ms at 0 sessions vs. 803.1 KB / 36.17ms at 350 sessions), the benchmarking logic is authentic and dynamic.
-4. **Zero Codebase Regressions**: Because `npm test` and `npm run typecheck` pass completely without errors, integrating this script did not disrupt existing contracts.
+1. **Relational Integrity Proof**:
+   - Soft-deleted workouts retain their child rows in `session_exercises` and `set_logs`.
+   - Setting `deleted_at_ms = NULL` re-exposes the full session graph with complete volume, exercise, and set details without data loss.
+2. **Safe Import & Re-activation**:
+   - Distinguishing missing vs. tombstoned vs. active sessions prevents destructive overwrite of active data while successfully reviving soft-deleted workouts upon backup import or sync.
+3. **Self-Healing Verification**:
+   - Placing tombstone detection in `bootstrapPersistence` guarantees automatic recovery on cold start without requiring user intervention.
+4. **Authenticity Assessment**:
+   - Tracing queries and running live SQLite simulations confirms that all recovery operations execute genuine SQLite operations with atomic transaction boundaries and write queue synchronization.
 
 ---
 
 ## 3. Caveats
-
-- Node.js native `node:sqlite` operates in-memory with WAL pragmas for headless deterministic execution on Node 22+. While mobile devices utilize React Native SQLite / op-sqlite / nitro modules, the benchmark accurately models the relational query overhead, JSON parse bottlenecks, and memory allocation patterns of the target architecture.
-- No caveats regarding integrity or authenticity.
+- No caveats. All forensic checks, static scans, runtime traces, and test executions passed unconditionally.
 
 ---
 
 ## 4. Conclusion
-
-**Verdict: CLEAN**
-
-Milestone 1 satisfies all R3 requirements. The benchmark suite is authentic, robust, zero-regression compliant, and provides reliable telemetry for subsequent milestones.
+- **Verdict**: **CLEAN**
+- The Milestone 1 implementation is genuine, robust, and free of integrity violations or shortcuts. It is fully approved for Milestone 2 progression.
 
 ---
 
 ## 5. Verification Method
+To independently reproduce and verify this audit:
 
-To independently reproduce the forensic verification:
-
-1. **Run Full Benchmark Suite**:
+1. **Run Forensic Verifier**:
    ```powershell
-   $env:PATH = "F:\.fnm\node-versions\v22.22.3\installation;" + $env:PATH
-   npm run benchmark:startup
-   ```
-2. **Run Independent Forensic Tracing Harness**:
-   ```powershell
+   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
    node .agents/auditor_m1/forensic_verifier.js
    ```
-3. **Run Regression & Typecheck Suite**:
+   *Expected Result*: 23/23 checks PASS, Verdict: CLEAN.
+
+2. **Run TypeScript Typecheck**:
    ```powershell
-   npm test
-   npm run typecheck
+   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
+   node node_modules/typescript/bin/tsc --noEmit
    ```
+   *Expected Result*: Exits with code 0.
+
+3. **Run Milestone 1 Unit Tests**:
+   ```powershell
+   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
+   node node_modules/jest/bin/jest.js src/__tests__/historyRepositoryRecovery.test.ts
+   ```
+   *Expected Result*: 10/10 tests pass.

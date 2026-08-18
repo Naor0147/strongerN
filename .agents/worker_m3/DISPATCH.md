@@ -1,25 +1,51 @@
-## 2026-08-14T06:04:48Z
+## 2026-08-18T20:05:00Z
+You are Worker 3 for Milestone 3 of the StrongerN workout history recovery project.
+Read ORIGINAL_REQUEST.md at: c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md
+Read PROJECT.md at: c:\Antigravity\strongerN\PROJECT.md
+Read survey findings at: c:\Antigravity\strongerN\.agents\explorer_3_survey\survey_report.md
 
-Task: Milestone 3 (State Save Decoupling & Delta Writes - R2) of StrongerN performance optimization.
-Working directory: C:\Antigravity\strongerN\.agents\worker_m3
+Your working directory is: c:\Antigravity\strongerN\.agents\worker_m3\
 
-1. Decouple Root State & Settings Persistence in `src/App.tsx`:
-   - Eliminate the monolithic full-history stringification in `App.tsx` lines 545–602. Remove `sessionsList` from the root JSON payload `strongern_app_data_v1`.
-   - Save user preferences, toggles, themes, and sound settings into MMKV `strongern_settings_v2` (`SETTINGS_COMPACT_V2`) via `saveCompactSettings` / MMKV adapter.
-   - On boot in `App.tsx` and `persistenceBootstrap.ts`, hydrate settings from `strongern_settings_v2` (falling back to legacy payload on first run).
-2. Eliminate Destructive Full-History Reconcile in `src/App.tsx`:
-   - Remove the automated `useEffect` that calls `reconcileSessions(normalized)` on every `sessionsList` change.
-   - Ensure all workout mutations operate via single-session delta operations:
-     - Finish workout: calls `upsertSession(legacySessionToV2(session))` to `strongern_v2.db`.
-     - Update / edit workout: calls `upsertSession(legacySessionToV2(session))`.
-     - Delete workout: calls `softDeleteSession(sessionId)`.
-   - Keep bulk reconciliation / bulk import available strictly for explicit bulk events (e.g. CSV import or cloud backup restore).
-3. Active Workout & Draft Persistence:
-   - Ensure in-flight active workout state relies on MMKV Slot A/B journaling (`strongern_active_draft_slot_a`/`_b`) without synchronous blocking SQLite KV double-writes.
-4. Backward Compatibility & Cloud Backup:
-   - Ensure Google Drive and manual backup exports (`backupManager.ts`) can still assemble the full `BackupManifestV3` / `BackupData` containing all sessions on-demand when user initiates an export.
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+
+Scope & Exclusively Owned Files:
+1. `src/components/DeveloperDiagnosticsView.tsx` (create new component)
+2. `src/screens/ProfileScreen.tsx` (wire diagnostics view under Developer Options)
+3. `src/utils/i18n.ts` (add diagnostic panel & repair translations for EN and HE)
+4. `src/App.tsx` (pass `handleRefreshSessions` / reload callback if needed to ProfileScreen)
+
+Task Instructions:
+1. In `src/utils/i18n.ts`:
+   - Add translation keys under `developer.diagnostics` in both English and Hebrew:
+     - title: 'Database & Sync Diagnostics' / 'אבחון מסד נתונים וסנכרון'
+     - sqliteStatus: 'SQLite Status' / 'סטטוס SQLite'
+     - activeWorkouts: 'Active Workouts' / 'אימונים פעילים'
+     - tombstonedWorkouts: 'Tombstoned Workouts' / 'אימונים מסומנים למחיקה'
+     - rawTotalRows: 'Total SQLite Rows' / 'סה"כ שורות ב-SQLite'
+     - mmkvCacheCount: 'MMKV Instant Cache' / 'מטמון מהיר MMKV'
+     - isFullHistoryLoaded: 'Full History Hydrated' / 'היסטוריה מלאה נטענה'
+     - repairButton: 'Repair Workout History' / 'שחזר היסטוריית אימונים'
+     - repairing: 'Repairing...' / 'משחזר...'
+     - repairSuccess: 'Repaired {count} workouts successfully' / 'שוחזרו {count} אימונים בהצלחה'
+     - refresh: 'Refresh' / 'רענן'
+     - noTombstones: 'All workouts are active. No repair needed.' / 'כל האימונים פעילים. אין צורך בשחזור.'
+2. In `src/components/DeveloperDiagnosticsView.tsx`:
+   - Build a diagnostic panel component displaying:
+     - Real-time SQLite statistics from `getDatabaseDiagnostics()`.
+     - Active vs Tombstoned vs Raw Total counts with visual color indicators.
+     - MMKV cache count and status.
+     - One-tap "Repair Workout History" button that:
+       - Calls `restoreAllTombstonedSessions()`
+       - Triggers history reload callback
+       - Shows feedback alert with the count of recovered workouts
+     - AMOLED-compliant styling using `src/theme.ts` (`colors.bg = #0D0F14`, `colors.surface = #161B24`, `colors.accent = #4F8EF7`, `colors.success = #22C55E`, `colors.error = #EF4444`, `ripple.surface`, typography, haptics).
+3. In `src/screens/ProfileScreen.tsx`:
+   - Wire `<DeveloperDiagnosticsView>` when `settingsView === 'diagnostics'`.
+   - Add a menu entry "Database & Diagnostics" in the Developer Options section of ProfileScreen.
+4. In `src/App.tsx`:
+   - Pass a session reload callback to `ProfileScreen` if needed, so repair immediately re-populates `sessionsList` and updates MMKV cache.
 5. Verification:
-   - Run `npm run benchmark:startup` and observe the interactive state save benchmark numbers.
-   - Run `npm run typecheck` and `npm test` ensuring 100% passing tests and 0 errors.
-   - Update knowledge graph with `graphify update .` if relevant.
-6. Write detailed reports to `C:\Antigravity\strongerN\.agents\worker_m3\report.md` and `C:\Antigravity\strongerN\.agents\worker_m3\handoff.md`.
+   - Run `npm run typecheck` (0 errors).
+   - Run `npm test` (all tests pass).
+
+Write your changes report to c:\Antigravity\strongerN\.agents\worker_m3\changes.md and create handoff.md. Send a message to parent when done with test results.

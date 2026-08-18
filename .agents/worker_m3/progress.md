@@ -1,25 +1,14 @@
-# Progress — Worker 3 (Milestone 3: State Save Decoupling & Delta Writes - R2)
+# Progress — Milestone 3: Developer Diagnostics & Workout History Repair
 
-Last visited: 2026-08-14T06:15:00Z
+Last visited: 2026-08-18T20:10:10Z
 
 ## Status
-- Task: Complete (100%)
-
-## Completed Steps
-1. [x] Read DISPATCH.md and project contracts.
-2. [x] Implemented `AppSettingsCompactV2` schema in `src/storage/contracts/types.ts`.
-3. [x] Created `src/storage/compactSettings.ts` for synchronous MMKV persistence of user preferences (`strongern_settings_v2`).
-4. [x] Added `bulkImportSessions` to `src/storage/history/repository.ts`.
-5. [x] Updated `src/storage/persistenceBootstrap.ts` to hydrate settings and migrate legacy settings on first run.
-6. [x] Updated `src/App.tsx`:
-   - Decoupled settings persistence to MMKV `saveCompactSettings`.
-   - Removed `sessionsList` from root state save payload `saveToDb(STORAGE_KEY, data)`.
-   - Eliminated automated background reconciliation `useEffect` loop.
-   - Converted finish, update, and delete workout handlers to atomic single-session delta operations (`upsertSession`, `softDeleteSession`).
-   - Isolated active workout draft persistence to MMKV Slot A/B without SQLite KV double-writes.
-   - Updated CSV import, Drive sync, and backup restore to call bulk operations explicitly.
-7. [x] Created comprehensive unit tests in `src/__tests__/stateSaveDecoupling.test.ts`.
-8. [x] Verified `npm run typecheck` (0 errors), `npm test` (15/15 suites, 123 tests passing), and `npm run benchmark:startup` (637x state save speedup).
-9. [x] Incremented version to `1.0.1.70` (versionCode `125`) in `app.json` and `src/utils/i18n.ts`.
-10. [x] Executed `graphify update .` to update knowledge graph.
-11. [x] Generated `report.md` and `handoff.md`.
+- [x] 1. Read ORIGINAL_REQUEST.md, PROJECT.md, survey_report.md
+- [x] 2. Investigate codebase (ProfileScreen.tsx, App.tsx, i18n.ts, database diagnostics API, storage/sync utils)
+- [x] 3. Update i18n.ts with developer.diagnostics keys in EN and HE
+- [x] 4. Create src/components/DeveloperDiagnosticsView.tsx
+- [x] 5. Update src/screens/ProfileScreen.tsx with diagnostics entry and view
+- [x] 6. Update src/App.tsx with session reload callback passed to ProfileScreen
+- [x] 7. Add unit tests for DeveloperDiagnosticsView
+- [x] 8. Verify typecheck and tests (`npm run typecheck`, `npm test`)
+- [x] 9. Create changes.md and handoff.md

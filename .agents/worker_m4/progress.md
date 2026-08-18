@@ -1,11 +1,21 @@
 # Progress — Worker 4 (Milestone 4)
-Last visited: 2026-08-14T06:38:55Z
 
-- [x] Initialized DISPATCH.md and BRIEFING.md
-- [x] Read ORIGINAL_REQUEST.md, PROJECT.md, and Handoffs M1, M2, M3
-- [x] Run verification checks (typecheck: 0 errors, tests: 16 suites / 134 passed, benchmark:startup: 25.31ms < 150ms)
-- [x] Increment app version (app.json to 1.0.1.71 & 126, src/utils/i18n.ts en & he)
-- [x] Run graphify update . (6,158 nodes, 8,151 edges, 492 communities)
-- [x] Build release APK (`cmd /c build-apk.bat --auto` -> `apk/strongerN.apk`)
-- [ ] Git commit and push to master
-- [x] Write handoff.md and report to parent
+Last visited: 2026-08-18T23:11:25+03:00
+
+## Status: In Progress
+
+### Checklist
+- [x] Create worker_m4 DISPATCH.md, BRIEFING.md, and progress.md
+- [ ] Inspect existing test architecture & mock setups (`src/__tests__/`)
+- [ ] Inspect `src/storage/history/repository.ts`, `src/App.tsx`, and related components
+- [ ] Author `src/__tests__/historyRecoveryRegression.test.ts` covering:
+  - [ ] (1) Sync upload prevention before full load (`isFullHistoryLoaded` / `isDataLoaded` gating)
+  - [ ] (2) Safe merge-only restore safety against stale/partial backups (`insertMissingSessionsOnly`)
+  - [ ] (3) Soft-delete repair execution (`restoreAllTombstonedSessions` & `getDatabaseDiagnostics`)
+- [ ] Verify version synchronization in `app.json` and `src/utils/i18n.ts`
+- [ ] Run `npm run typecheck` and ensure 0 errors
+- [ ] Run `npm test` and ensure all test suites pass
+- [ ] Run `graphify update .`
+- [ ] Run `build-apk.bat --auto`
+- [ ] Stage, commit, and push to `master` branch
+- [ ] Write `handoff.md` and notify orchestrator

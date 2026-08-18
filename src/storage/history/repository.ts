@@ -4,6 +4,16 @@ import { validateWorkoutSessionV2 } from '../contracts/validators';
 import { getV2Database } from '../dbSingleton';
 import { ensureHistorySchema } from './schema';
 import { normalizeLookupKey } from './legacySessionMapper';
+import { getCachedRecentSessions, getCachedTotalSessionsCount } from '../instantCache';
+
+export interface DatabaseDiagnostics {
+  isReady: boolean;
+  activeSessionsCount: number;
+  tombstonedSessionsCount: number;
+  rawTotalSessionsCount: number;
+  cachedRecentCount: number;
+  cachedTotalCount: number;
+}
 
 let initialized = false;
 let writeQueue: Promise<void> = Promise.resolve();
@@ -335,10 +345,79 @@ export async function countSessions(): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+export async function countTombstonedSessions(): Promise<number> {
+  try {
+    const db = await requireDb();
+    const row: any = await db.getFirstAsync(
+      'SELECT COUNT(*) AS count FROM workout_sessions WHERE deleted_at_ms IS NOT NULL;'
+    );
+    return Number(row?.count ?? 0);
+  } catch (error) {
+    return 0;
+  }
+}
+
 export async function countAllRawSessions(): Promise<number> {
   const db = await requireDb();
   const row: any = await db.getFirstAsync('SELECT COUNT(*) AS count FROM workout_sessions;');
   return Number(row?.count ?? 0);
+}
+
+export function restoreAllTombstonedSessions(): Promise<number> {
+  return enqueueWrite(async () => {
+    const db = await requireDb();
+    const now = Date.now();
+    const result: any = await db.runAsync(
+      'UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE deleted_at_ms IS NOT NULL;',
+      [now]
+    );
+    return Number(result?.changes ?? 0);
+  });
+}
+
+export const recoverTombstonedSessions = restoreAllTombstonedSessions;
+
+export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
+  let isReady = false;
+  let activeSessionsCount = 0;
+  let tombstonedSessionsCount = 0;
+  let rawTotalSessionsCount = 0;
+
+  try {
+    const db = await getV2Database();
+    if (db) {
+      if (!initialized) {
+        await ensureHistorySchema(db);
+        initialized = true;
+      }
+      isReady = true;
+      const [activeRow, tombstonedRow, rawRow]: [any, any, any] = await Promise.all([
+        db.getFirstAsync('SELECT COUNT(*) AS count FROM workout_sessions WHERE deleted_at_ms IS NULL;'),
+        db.getFirstAsync('SELECT COUNT(*) AS count FROM workout_sessions WHERE deleted_at_ms IS NOT NULL;'),
+        db.getFirstAsync('SELECT COUNT(*) AS count FROM workout_sessions;'),
+      ]);
+      activeSessionsCount = Number(activeRow?.count ?? 0);
+      tombstonedSessionsCount = Number(tombstonedRow?.count ?? 0);
+      rawTotalSessionsCount = Number(rawRow?.count ?? 0);
+    }
+  } catch (error) {
+    console.error('[HistoryRepository] getDatabaseDiagnostics failed:', error);
+    isReady = false;
+  }
+
+  const cachedRecent = getCachedRecentSessions();
+  const cachedRecentCount = Array.isArray(cachedRecent) ? cachedRecent.length : 0;
+  const cachedTotal = getCachedTotalSessionsCount();
+  const cachedTotalCount = typeof cachedTotal === 'number' ? cachedTotal : cachedRecentCount;
+
+  return {
+    isReady,
+    activeSessionsCount,
+    tombstonedSessionsCount,
+    rawTotalSessionsCount,
+    cachedRecentCount,
+    cachedTotalCount,
+  };
 }
 
 export async function getAllSessionIds(): Promise<Set<string>> {
@@ -351,10 +430,24 @@ export function insertMissingSessionsOnly(sessions: WorkoutSessionV2[]): Promise
   return enqueueWrite(async () => {
     const db = await requireDb();
     await transaction(db, async () => {
-      const existingIds = await getAllSessionIds();
+      const rows: any[] = await db.getAllAsync('SELECT id, deleted_at_ms FROM workout_sessions;');
+      const existingStatus = new Map<string, boolean>();
+      for (const r of rows) {
+        existingStatus.set(String(r.id), r.deleted_at_ms !== null);
+      }
+
+      const now = Date.now();
       for (const session of sessions) {
-        if (!existingIds.has(session.id)) {
-          await writeSession(db, session);
+        const isTombstoned = existingStatus.get(session.id);
+        if (isTombstoned === undefined) {
+          await writeSession(db, { ...session, deletedAtMs: null });
+          existingStatus.set(session.id, false);
+        } else if (isTombstoned === true) {
+          await db.runAsync(
+            'UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE id = ?;',
+            [now, session.id]
+          );
+          existingStatus.set(session.id, false);
         }
       }
     });

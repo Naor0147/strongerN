@@ -77,19 +77,15 @@ import { VolumeSlider, VolumeSliderProps } from '../components/ui/VolumeSlider';
 import { AnimationSpeedSlider, AnimationSpeedSliderProps } from '../components/ui/AnimationSpeedSlider';
 import { ThemeOverrideInput, ThemeOverrideInputProps } from '../components/ui/ThemeOverrideInput';
 import { DeveloperCrashLogsView, DeveloperCrashLogsViewProps } from './DeveloperCrashLogsView';
+import { DeveloperDiagnosticsView } from '../components/DeveloperDiagnosticsView';
 import { useProfileStats } from '../hooks/useProfileStats';
-
-
-
-
-
-
 
 interface ProfileScreenProps {
   isHydrating?:          boolean;
   user:                  User;
   weeklyChartData:       ChartDataPoint[];
   sessions:              any[];
+  onRefreshSessions?:    () => Promise<void> | void;
   isAutoTimerEnabled:    boolean;
   setIsAutoTimerEnabled: (val: boolean) => void;
   onMeasurePress:        () => void;
@@ -174,6 +170,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   user, 
   weeklyChartData, 
   sessions,
+  onRefreshSessions,
   isAutoTimerEnabled, 
   setIsAutoTimerEnabled,
   onMeasurePress,
@@ -275,7 +272,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [isBackupPanelVisible, setIsBackupPanelVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-  const [settingsView, setSettingsView] = useState<'menu' | 'account' | 'data' | 'workout' | 'sounds' | 'appearance' | 'about' | 'developer'>('menu');
+  const [settingsView, setSettingsView] = useState<'menu' | 'account' | 'data' | 'workout' | 'sounds' | 'appearance' | 'about' | 'developer' | 'diagnostics'>('menu');
 
   // Form inputs
   const [tempName, setTempName] = useState(user?.name || '');
@@ -1361,7 +1358,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         onRequestClose={() => {
           if (settingsView === 'menu') {
             setIsSettingsVisible(false);
-          } else if (settingsView === 'developer') {
+          } else if (settingsView === 'developer' || settingsView === 'diagnostics') {
             setSettingsView('about');
           } else {
             setSettingsView('menu');
@@ -1375,7 +1372,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               onPress={() => {
                 if (settingsView === 'menu') {
                   setIsSettingsVisible(false);
-                } else if (settingsView === 'developer') {
+                } else if (settingsView === 'developer' || settingsView === 'diagnostics') {
                   setSettingsView('about');
                 } else {
                   setSettingsView('menu');
@@ -1394,6 +1391,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                settingsView === 'workout' ? i18n.t('profile.settingsMenuWorkout') :
                settingsView === 'appearance' ? i18n.t('profile.settingsMenuAppearance') :
                settingsView === 'developer' ? i18n.t('profile.crashLogsTitle') :
+               settingsView === 'diagnostics' ? i18n.t('developer.diagnostics.title') :
                i18n.t('profile.settingsMenuAbout')}
             </Text>
             <View style={{ width: 36 }} />
@@ -2268,6 +2266,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
                 </Card>
               </>
+            ) : settingsView === 'diagnostics' ? (
+              /* ═══════════════════════════════════════════════════
+                 DIAGNOSTICS DEVELOPER SUBVIEW
+                 ═══════════════════════════════════════════════════ */
+              <DeveloperDiagnosticsView
+                onBack={() => setSettingsView('about')}
+                onRefreshSessions={onRefreshSessions}
+              />
             ) : settingsView === 'developer' ? (
               /* ═══════════════════════════════════════════════════
                  CRASH LOGS DEVELOPER SUBVIEW
@@ -2648,6 +2654,27 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                 </Text>
                               </View>
                             </View>
+                          </Pressable>
+
+                          {/* Database & Diagnostics */}
+                          <Pressable
+                            style={styles.settingRow}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setSettingsView('diagnostics');
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <View style={styles.settingInfo}>
+                              <Ionicons name="hardware-chip-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.settingTitle}>{i18n.t('developer.diagnostics.title')}</Text>
+                                <Text style={styles.settingSubtitle}>
+                                  {i18n.t('profile.diagnosticsMenuDesc')}
+                                </Text>
+                              </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                           </Pressable>
 
                           <View style={styles.settingDivider} />

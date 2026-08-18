@@ -1,29 +1,30 @@
-## 2026-08-14T05:47:45Z
-You are Worker 1 for Milestone 1 (Benchmarking Suite - R3) of StrongerN performance optimization.
-Your working directory is: C:\Antigravity\strongerN\.agents\worker_m1
+## 2026-08-18T19:47:01Z
+You are Worker 1 for Milestone 1 of the StrongerN workout history recovery project.
+Read ORIGINAL_REQUEST.md at: c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md
+Read PROJECT.md at: c:\Antigravity\strongerN\PROJECT.md
+Read survey findings at: c:\Antigravity\strongerN\.agents\explorer_1_survey\survey_report.md
 
-Read the user requirements at:
-C:\Antigravity\strongerN\ORIGINAL_REQUEST.md
-and project scope at:
-C:\Antigravity\strongerN\PROJECT.md
+Your working directory is: c:\Antigravity\strongerN\.agents\worker_m1\
 
-MANDATORY INTEGRITY WARNING:
-DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
 
-Task:
-1. Implement a comprehensive, standalone, repeatable benchmark script at `scripts/benchmark-startup.js` using Node.js 22 built-in `node:sqlite` (DatabaseSync) and high-resolution timers (`performance.now()`, `process.memoryUsage()`).
-2. The benchmark script must simulate cold start with 0, 50, and 300+ realistic workout sessions (each session with 4–6 exercises, 3–4 sets each, volume, RPE, timestamps matching StrongerN schema).
-3. The benchmark must measure:
-   - Storage load / parse execution time (ms)
-   - SQLite query & hydration duration (ms)
-   - Memory allocation / heap delta (MB)
-   - Component mount-to-ready / total data hydration time (ms)
-4. Compare and measure:
-   - Legacy monolithic KV store + full checksumming
-   - Relational SQLite v2 3-table hydration
-   - Optimized fast-path hydration
-5. Add `"benchmark:startup": "node scripts/benchmark-startup.js"` to `package.json`.
-6. Run the benchmark script, run `npm run typecheck`, and run `npm test`.
-7. Document baseline numbers and findings in `C:\Antigravity\strongerN\.agents\worker_m1\benchmark_baseline.md` and `C:\Antigravity\strongerN\.agents\worker_m1\handoff.md`.
+Scope & Exclusively Owned Files:
+1. `src/storage/history/repository.ts`
+2. `src/storage/persistenceBootstrap.ts`
+3. `src/App.tsx` (persistence error logging in `loadData()`)
 
-Send a message when completed with your handoff report path.
+Task Instructions:
+1. In `src/storage/history/repository.ts`:
+   - Implement and export `countTombstonedSessions(): Promise<number>` (counts rows WHERE deleted_at_ms IS NOT NULL).
+   - Implement and export `restoreAllTombstonedSessions(): Promise<number>` (or `recoverTombstonedSessions(): Promise<number>`) running transactional `UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE deleted_at_ms IS NOT NULL;` returning number of rows affected.
+   - Implement and export `getDatabaseDiagnostics(): Promise<DatabaseDiagnostics>` returning `{ isReady, activeSessionsCount, tombstonedSessionsCount, rawTotalSessionsCount, cachedRecentCount, cachedTotalCount }`.
+   - Update `insertMissingSessionsOnly(sessions: WorkoutSessionV2[])`: When inserting missing sessions, if a session with that ID already exists but is tombstoned (`deleted_at_ms IS NOT NULL`), restore it (`deleted_at_ms = NULL`).
+2. In `src/storage/persistenceBootstrap.ts`:
+   - In `bootstrapPersistence()`: After SQLite database check / migration, check if tombstoned sessions exist (`countTombstonedSessions() > 0`). If tombstoned sessions are detected, execute `restoreAllTombstonedSessions()` to self-heal and re-load sessions so that on startup, the full 300+ session history is instantly recovered.
+3. In `src/App.tsx`:
+   - In `loadData()`: Ensure errors during `bootstrapPersistence()` or `loadAllSessions()` are logged via `console.error` and `saveCrashLogSync('Persistence Load Failure: ' + (e?.message || e), e?.stack || '', false)`, removing the silencing `if (__DEV__) console.warn`.
+4. Verification:
+   - Run `npm test` to ensure all unit tests pass.
+   - Run `npm run typecheck` to ensure 0 TypeScript errors.
+
+Write your changes report to c:\Antigravity\strongerN\.agents\worker_m1\changes.md and create handoff.md. Send a message to parent when done with test results.

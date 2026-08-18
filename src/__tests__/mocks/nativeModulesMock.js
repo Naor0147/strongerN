@@ -131,6 +131,14 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true }),
 }));
 
+// Mock expo-application
+jest.mock('expo-application', () => ({
+  nativeApplicationVersion: '1.0.0',
+  nativeBuildVersion: '1',
+  applicationName: 'StrongerN',
+  applicationId: 'com.strongern',
+}));
+
 
 
 

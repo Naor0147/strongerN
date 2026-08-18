@@ -36,10 +36,11 @@ import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { saveCrashLogSync } from './utils/crashLogger';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, insertMissingSessionsOnly } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 
@@ -646,8 +647,9 @@ function MainApp() {
             console.log(`[PERF_BENCHMARK] Background SQLite & History Sync Complete in ${now - t0}ms`);
           }
         }
-      } catch (e) {
-        if (__DEV__) console.warn('Error loading persisted state', e);
+      } catch (e: any) {
+        console.error('[Persistence] Error loading persisted state:', e);
+        saveCrashLogSync('Persistence Load Failure: ' + (e?.message || e), e?.stack || '', false);
         try {
           const fallbackSessions = await loadAllSessions();
           if (fallbackSessions) {
@@ -657,8 +659,9 @@ function MainApp() {
             setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
             setIsFullHistoryLoaded(true);
           }
-        } catch (fallbackErr) {
-          if (__DEV__) console.warn('Fallback loadAllSessions failed', fallbackErr);
+        } catch (fallbackErr: any) {
+          console.error('[Persistence] Fallback loadAllSessions failed:', fallbackErr);
+          saveCrashLogSync('Persistence Fallback Failure: ' + (fallbackErr?.message || fallbackErr), fallbackErr?.stack || '', false);
         }
       } finally {
         setIsDataLoaded(true);
@@ -834,7 +837,7 @@ function MainApp() {
   }, []);
 
   React.useEffect(() => {
-    if (!isDataLoaded) return;
+    if (!isDataLoaded || !isFullHistoryLoaded) return;
     
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
@@ -842,6 +845,11 @@ function MainApp() {
     }
 
     if (!googleUser || !googleUser.accessToken) return;
+
+    if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) {
+      console.warn('[Auto-Sync] Blocked upload: sessionsList is empty but totalWorkouts > 0');
+      return;
+    }
 
     const delayDebounceFn = setTimeout(async () => {
       console.log('[Auto-Sync] Commencing automatic Google Drive backup update...');
@@ -905,7 +913,7 @@ function MainApp() {
     }, 2000);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser]);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded]);
 
   // Synchronize audio preferences to soundConfig helper
   React.useEffect(() => {
@@ -985,11 +993,26 @@ function MainApp() {
             }
           });
           mergedSessions.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-          setSessionsList(mergedSessions);
+
+          let fullLoadedSessions = mergedSessions;
           if (historyRepositoryReadyRef.current) {
-            reconcileSessions(mergedSessions.map((s: any, idx: number) => legacySessionToV2(s, idx))).catch((err) => {
-              console.error('[HistoryRepository] Google Drive sync reconciliation failed:', err);
-            });
+            try {
+              await insertMissingSessionsOnly(mergedSessions.map((s: any, idx: number) => legacySessionToV2(s, idx)));
+              const fullSessions = await loadAllSessions();
+              fullLoadedSessions = fullSessions.map(sessionV2ToLegacy);
+              setSessionsList(fullLoadedSessions);
+              setCachedRecentSessions(fullLoadedSessions, fullLoadedSessions.length);
+              setIsFullHistoryLoaded(true);
+            } catch (err) {
+              console.error('[HistoryRepository] Google Drive sync merge failed:', err);
+              setSessionsList(mergedSessions);
+              setCachedRecentSessions(mergedSessions, mergedSessions.length);
+              setIsFullHistoryLoaded(true);
+            }
+          } else {
+            setSessionsList(mergedSessions);
+            setCachedRecentSessions(mergedSessions, mergedSessions.length);
+            setIsFullHistoryLoaded(true);
           }
 
           // 2. Merge User Profile details
@@ -997,7 +1020,7 @@ function MainApp() {
             ...user,
             name: name || user.name,
             avatarUri: avatarUri || user.avatarUri,
-            totalWorkouts: mergedSessions.length,
+            totalWorkouts: fullLoadedSessions.length,
             isPro: user.isPro || backupData.user?.isPro || false,
           };
           setUser(mergedUser);
@@ -1044,7 +1067,7 @@ function MainApp() {
           // Prepare merged data to write back to Google Drive
           mergedDataToUpload = {
             user: mergedUser,
-            sessionsList: mergedSessions,
+            sessionsList: fullLoadedSessions,
             templatesList: mergedTemplates,
             exercisesList: mergedExercises,
             primaryMetricsList: mergedPrimaryMetrics,
@@ -1071,14 +1094,30 @@ function MainApp() {
     // Immediately upload the merged data to Google Drive so the cloud is up to date
     if (accessToken) {
       try {
+        let sessionsToUpload = sessionsList;
+        if (!isFullHistoryLoaded && historyRepositoryReadyRef.current) {
+          try {
+            const loaded = await loadAllSessions();
+            if (loaded) {
+              sessionsToUpload = loaded.map(sessionV2ToLegacy);
+              setSessionsList(sessionsToUpload);
+              setCachedRecentSessions(sessionsToUpload, sessionsToUpload.length);
+              setIsFullHistoryLoaded(true);
+            }
+          } catch (e) {
+            console.error('[App] Failed to load full sessions before Google login upload:', e);
+          }
+        }
+
         const nowStr = new Date().toISOString();
         const finalBackupData = mergedDataToUpload || {
           user: {
             ...user,
             name: name || user.name,
             avatarUri: avatarUri || user.avatarUri,
+            totalWorkouts: sessionsToUpload.length,
           },
-          sessionsList,
+          sessionsList: sessionsToUpload,
           templatesList,
           exercisesList,
           primaryMetricsList,
@@ -1196,7 +1235,6 @@ function MainApp() {
     setGoogleUser(null);
     await deleteSecureItem('google_oauth_token');
   };
-
   const handleAppLogout = async () => {
     if (googleUser) {
       await handleGoogleLogout();
@@ -1219,11 +1257,38 @@ function MainApp() {
 
   const handleCloudSync = async () => {
     if (!googleUser || !googleUser.accessToken) return false;
+    let currentSessions = sessionsList;
+    if (!isFullHistoryLoaded) {
+      if (historyRepositoryReadyRef.current) {
+        try {
+          const fullSessions = await loadAllSessions();
+          if (fullSessions) {
+            const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+            setSessionsList(fullLegacy);
+            setCachedRecentSessions(fullLegacy, fullLegacy.length);
+            setIsFullHistoryLoaded(true);
+            currentSessions = fullLegacy;
+          } else {
+            console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
+            return false;
+          }
+        } catch (err) {
+          console.error('[CloudSync] Failed to load full history for sync:', err);
+          return false;
+        }
+      } else {
+        console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
+        return false;
+      }
+    }
     try {
       const nowStr = new Date().toISOString();
       const backupData = {
-        user,
-        sessionsList,
+        user: {
+          ...user,
+          totalWorkouts: currentSessions.length,
+        },
+        sessionsList: currentSessions,
         templatesList,
         exercisesList,
         primaryMetricsList,
@@ -1234,10 +1299,12 @@ function MainApp() {
       };
 
       let fileId = googleUser.fileId;
+      let fileIdUpdated = false;
       if (!fileId) {
         const foundId = await googleDrive.findBackupFile(googleUser.accessToken);
         if (foundId) {
           fileId = foundId;
+          fileIdUpdated = true;
         }
       }
 
@@ -1245,7 +1312,20 @@ function MainApp() {
         await googleDrive.updateBackupFile(googleUser.accessToken, fileId, backupData);
       } else {
         const newFileId = await googleDrive.createBackupFile(googleUser.accessToken, backupData);
-        setGoogleUser(prev => prev ? { ...prev, fileId: newFileId } : null);
+        fileId = newFileId;
+        fileIdUpdated = true;
+      }
+
+      if (fileIdUpdated && fileId) {
+        const updatedFileId = fileId;
+        setGoogleUser(prev => prev ? { ...prev, fileId: updatedFileId } : null);
+        const currentAuth = await loadAuthState();
+        if (currentAuth && currentAuth.googleProfile) {
+          await saveGoogleProfile({
+            ...currentAuth.googleProfile,
+            fileId: updatedFileId,
+          });
+        }
       }
 
       setLastSynced(nowStr);
@@ -1258,6 +1338,23 @@ function MainApp() {
 
   // Export/Import backups
   const handleExportBackup = async (): Promise<boolean> => {
+    let currentSessions = sessionsList;
+    if (!isFullHistoryLoaded) {
+      if (historyRepositoryReadyRef.current) {
+        try {
+          const fullSessions = await loadAllSessions();
+          if (fullSessions) {
+            const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+            setSessionsList(fullLegacy);
+            setCachedRecentSessions(fullLegacy, fullLegacy.length);
+            setIsFullHistoryLoaded(true);
+            currentSessions = fullLegacy;
+          }
+        } catch (err) {
+          console.error('[BackupExport] Failed to load full history for backup export:', err);
+        }
+      }
+    }
     const settings = {
       isAutoTimerEnabled,
       defaultRestDuration,
@@ -1284,8 +1381,11 @@ function MainApp() {
     };
     const backupData = buildBackupData({
       username: user.name,
-      user,
-      sessionsList,
+      user: {
+        ...user,
+        totalWorkouts: currentSessions.length,
+      },
+      sessionsList: currentSessions,
       templatesList,
       exercisesList,
       primaryMetricsList,
@@ -1335,11 +1435,39 @@ function MainApp() {
           ...s,
           datetime: new Date(s.datetime)
         }));
-        setSessionsList(restoredSessions);
         if (historyRepositoryReadyRef.current) {
-          reconcileSessions(restoredSessions.map((s: any, idx: number) => legacySessionToV2(s, idx))).catch((err) => {
-            console.error('[HistoryRepository] Backup restore reconciliation failed:', err);
+          const v2Restored = restoredSessions.map((s: any, idx: number) => legacySessionToV2(s, idx));
+          insertMissingSessionsOnly(v2Restored)
+            .then(async () => {
+              const fullSessions = await loadAllSessions();
+              const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+              setSessionsList(fullLegacy);
+              setCachedRecentSessions(fullLegacy, fullLegacy.length);
+              setIsFullHistoryLoaded(true);
+              setUser(prev => ({ ...prev, totalWorkouts: fullLegacy.length }));
+            })
+            .catch((err) => {
+              console.error('[HistoryRepository] Backup restore merge failed:', err);
+              const local = sessionsList || [];
+              const merged = [...local];
+              restoredSessions.forEach((rs: any) => {
+                if (!merged.some(ls => ls.id === rs.id)) merged.push(rs);
+              });
+              merged.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+              setSessionsList(merged);
+              setCachedRecentSessions(merged, merged.length);
+              setIsFullHistoryLoaded(true);
+            });
+        } else {
+          const local = sessionsList || [];
+          const merged = [...local];
+          restoredSessions.forEach((rs: any) => {
+            if (!merged.some(ls => ls.id === rs.id)) merged.push(rs);
           });
+          merged.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+          setSessionsList(merged);
+          setCachedRecentSessions(merged, merged.length);
+          setIsFullHistoryLoaded(true);
         }
       }
       if (parsed.templatesList) {
@@ -1637,6 +1765,21 @@ function MainApp() {
       console.warn(e);
     }
   };
+
+  const handleRefreshSessions = React.useCallback(async () => {
+    try {
+      const loadedSessions = await loadAllSessions();
+      if (loadedSessions) {
+        const mapped = loadedSessions.map(sessionV2ToLegacy);
+        setSessionsList(mapped);
+        setCachedRecentSessions(mapped, mapped.length);
+        setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
+        setIsFullHistoryLoaded(true);
+      }
+    } catch (error) {
+      console.error('[App] Failed to refresh sessions:', error);
+    }
+  }, []);
 
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
@@ -2446,6 +2589,7 @@ function MainApp() {
                   user={user}
                   weeklyChartData={dynamicWeeklyChartData}
                   sessions={sessionsList}
+                  onRefreshSessions={handleRefreshSessions}
                   isAutoTimerEnabled={isAutoTimerEnabled}
                   setIsAutoTimerEnabled={setIsAutoTimerEnabled}
                   onMeasurePress={handleMeasurePress}

@@ -1,73 +1,65 @@
-# BRIEFING — 2026-08-14T06:15:00Z
+# BRIEFING — 2026-08-18T20:10:00Z
 
 ## Mission
-Decouple root state & settings persistence, eliminate monolithic full-history stringification and full-history reconciliation in App.tsx, implement incremental delta writes to SQLite v2, and isolate active draft persistence to MMKV Slot A/B.
+Build DeveloperDiagnosticsView, wire it in ProfileScreen and App.tsx, and add translation keys in i18n.ts for database/sync diagnostics and workout history repair. [COMPLETED]
 
 ## 🔒 My Identity
 - Archetype: implementer
 - Roles: implementer, qa, specialist
-- Working directory: C:\Antigravity\strongerN\.agents\worker_m3
-- Original parent: e501394b-c3e5-462e-971f-3cb8db49351e
-- Milestone: M3 (State Save Decoupling & Delta Writes - R2)
+- Working directory: c:\Antigravity\strongerN\.agents\worker_m3\
+- Original parent: b5551d07-52c4-4055-8613-600492c7c86c
+- Milestone: Milestone 3 - Developer Diagnostics & Workout History Repair
 
 ## 🔒 Key Constraints
-- Follow minimal change principle and zero regressions.
-- No dummy/facade implementations, genuine logic only.
-- Increment app version in `app.json` and `src/utils/i18n.ts` if modifying.
-- Run typecheck and unit tests cleanly (100% pass, 0 errors).
-- Do NOT run `npm run e2e` tests unless user explicitly asks.
-- Update graphify if code changes.
+- Scope & Exclusively Owned Files:
+  1. `src/components/DeveloperDiagnosticsView.tsx` (create new component)
+  2. `src/screens/ProfileScreen.tsx` (wire diagnostics view under Developer Options)
+  3. `src/utils/i18n.ts` (add diagnostic panel & repair translations for EN and HE)
+  4. `src/App.tsx` (pass `handleRefreshSessions` / reload callback if needed to ProfileScreen)
+- Do NOT cheat. Genuine logic, real state and behavior.
+- AMOLED black core (`#0D0F14`), token compliance, haptic feedback, ripple.surface.
+- Run `npm run typecheck` and `npm test` to verify.
 
 ## Current Parent
-- Conversation ID: e501394b-c3e5-462e-971f-3cb8db49351e
-- Updated: 2026-08-14T06:15:00Z
+- Conversation ID: b5551d07-52c4-4055-8613-600492c7c86c
+- Updated: 2026-08-18T20:10:00Z
 
 ## Task Summary
-- **What to build**:
-  1. Decoupled settings from `strongern_app_data_v1` into MMKV `strongern_settings_v2` (`SETTINGS_COMPACT_V2`).
-  2. Removed full `sessionsList` serialization from `App.tsx` state update effect.
-  3. Eliminated automated `useEffect` that calls `reconcileSessions(normalized)` on every `sessionsList` change.
-  4. Ensured workout finish/update/delete operate via single-session delta operations (`upsertSession`, `softDeleteSession`).
-  5. Isolated active workout draft persistence to MMKV Slot A/B journaling without blocking SQLite KV double-writes.
-  6. Verified backup manager / cloud export assembles complete manifests on-demand.
-- **Success criteria**:
-  - `npm run benchmark:startup` runs and shows 637x state save speedup and <25ms fast-path hydration for 350 sessions.
-  - `npm run typecheck` passes with 0 errors.
-  - `npm test` passes 100% (15 suites, 123 tests).
-- **Interface contracts**: `PROJECT.md` § Interface Contracts
-- **Code layout**: `PROJECT.md` § Code Layout
+- **What to build**: Developer diagnostics view displaying SQLite diagnostics, active vs tombstoned vs raw counts, MMKV cache count, and a one-tap repair button that calls `restoreAllTombstonedSessions` and refreshes workout history.
+- **Success criteria**: TypeScript check passes with 0 errors, unit tests pass, UI adheres to AMOLED design system.
+- **Interface contracts**: PROJECT.md, i18n.ts, getDatabaseDiagnostics, restoreAllTombstonedSessions.
 
 ## Key Decisions Made
-- Created `src/storage/compactSettings.ts` for fast synchronous MMKV persistence of 25 user preference properties.
-- Decoupled `sessionsList` and settings properties from `saveToDb(STORAGE_KEY, data)` in `App.tsx`.
-- Removed automated `useEffect` reconcile loop from `App.tsx`, preserving `bulkImportSessions` / `reconcileSessions` strictly for explicit bulk events (CSV import, cloud restore).
-- Removed redundant `saveToDb('strongern_active_workout_state')` SQLite double-writes.
-- Created `src/__tests__/stateSaveDecoupling.test.ts` for unit test coverage.
-- Bumped app version to `1.0.1.70` (versionCode `125`).
+- Implemented `DeveloperDiagnosticsView` using AMOLED theme tokens (`colors.bg = #0D0F14`, `colors.surface = #161B24`, `colors.accent = #4F8EF7`, `ripple.surface`, `Haptics`).
+- Added full `developer.diagnostics` dictionary in both English and Hebrew in `src/utils/i18n.ts`.
+- Integrated `handleRefreshSessions` callback in `src/App.tsx` and passed it down to `ProfileScreen` -> `DeveloperDiagnosticsView`.
+- Bumped app version to `1.0.1.78` (versionCode 133).
+
+## Artifact Index
+- `.agents/worker_m3/DISPATCH.md` — Assignment instructions
+- `.agents/worker_m3/progress.md` — Progress tracker and heartbeat
+- `.agents/worker_m3/changes.md` — Detailed changes summary
+- `.agents/worker_m3/handoff.md` — 5-component handoff report
+- `src/components/DeveloperDiagnosticsView.tsx` — Diagnostic and repair panel
+- `src/__tests__/DeveloperDiagnosticsView.test.tsx` — Automated unit tests
 
 ## Change Tracker
 - **Files modified**:
-  - `src/storage/contracts/types.ts`: added `AppSettingsCompactV2` and `AppSettings` type definitions.
-  - `src/storage/compactSettings.ts`: MMKV compact settings persistence module.
-  - `src/storage/adapters/mmkvAdapter.ts`: re-exported compact settings functions.
-  - `src/storage/history/repository.ts`: added `bulkImportSessions`.
-  - `src/storage/persistenceBootstrap.ts`: hydrated settings and added legacy settings migration.
-  - `src/App.tsx`: decoupled settings and root state save, eliminated full reconcile loop, isolated draft persistence.
-  - `src/__tests__/mocks/nativeModulesMock.js`: added file-system and document-picker mocks.
-  - `src/__tests__/stateSaveDecoupling.test.ts`: comprehensive unit test suite for M3.
-  - `app.json`: incremented version to `1.0.1.70` and versionCode to `125`.
-  - `src/utils/i18n.ts`: updated version strings in EN and HE.
-- **Build status**: Pass (`tsc --noEmit` 0 errors, `npm test` 15/15 passed).
-- **Pending issues**: None.
+  - `src/components/DeveloperDiagnosticsView.tsx` — Created diagnostic and repair panel component
+  - `src/screens/ProfileScreen.tsx` — Added diagnostics routing & developer menu item
+  - `src/utils/i18n.ts` — Added EN & HE translation keys, updated version string
+  - `src/App.tsx` — Added handleRefreshSessions callback & passed to ProfileScreen
+  - `app.json` — Bumped version to 1.0.1.78 / 133
+  - `src/__tests__/DeveloperDiagnosticsView.test.tsx` — Added unit test suite
+- **Build status**: PASS (23 suites, 196 tests passing; 0 typecheck errors)
+- **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: Pass (15 suites, 123 tests).
-- **Lint status**: 0 errors.
-- **Tests added/modified**: 13 new test cases in `src/__tests__/stateSaveDecoupling.test.ts`.
+- **Build/test result**: PASS (196/196 tests)
+- **Lint status**: Clean (tsc --noEmit 0 errors)
+- **Tests added/modified**: `src/__tests__/DeveloperDiagnosticsView.test.tsx` (4 tests)
 
-## Artifact Index
-- `C:\Antigravity\strongerN\.agents\worker_m3\DISPATCH.md` — Assignment instructions
-- `C:\Antigravity\strongerN\.agents\worker_m3\BRIEFING.md` — Agent briefing and situational awareness
-- `C:\Antigravity\strongerN\.agents\worker_m3\progress.md` — Liveness heartbeat and step tracking
-- `C:\Antigravity\strongerN\.agents\worker_m3\report.md` — Detailed Milestone 3 report
-- `C:\Antigravity\strongerN\.agents\worker_m3\handoff.md` — 5-component handoff report
+## Loaded Skills
+- **Source**: c:\Antigravity\strongerN\.agents\rules\ui-ux-design-pro-max.md
+  - **Local copy**: N/A
+  - **Core methodology**: AMOLED dark design, token compliance, ripple feedback, haptic feedback.
