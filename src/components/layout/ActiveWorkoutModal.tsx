@@ -161,6 +161,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [workoutNote, setWorkoutNote] = useState(editingComment || '');
   const [isWorkoutNoteActive, setIsWorkoutNoteActive] = useState<boolean>(() => !!(editingComment && editingComment.trim().length > 0));
   const [isWorkoutNoteLocked, setIsWorkoutNoteLocked] = useState<boolean>(false);
+
+  // Transparent dark modal slide animation
+  const [modalRendered, setModalRendered] = useState(visible);
+  const slideAnim = useRef(new RN.Animated.Value(visible ? 0 : (windowHeight || 800))).current;
+
+  useEffect(() => {
+    if (visible) {
+      setModalRendered(true);
+      RN.Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 280,
+        easing: RN.Easing.out(RN.Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else if (modalRendered) {
+      RN.Animated.timing(slideAnim, {
+        toValue: windowHeight || 800,
+        duration: 240,
+        easing: RN.Easing.in(RN.Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setModalRendered(false);
+        }
+      });
+    }
+  }, [visible, windowHeight, slideAnim, modalRendered]);
   const {
     isWorkoutMenuVisible,
     setIsWorkoutMenuVisible,
@@ -1182,12 +1209,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   return (
     <>
     <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={false}
+      visible={modalRendered}
+      animationType="none"
+      transparent
+      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+      <RN.Animated.View
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          transform: [{ translateY: slideAnim }],
+        }}
+      >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
@@ -2096,6 +2131,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+      </RN.Animated.View>
       </GestureHandlerRootView>
     </Modal>
     {isLibraryVisible && (

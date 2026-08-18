@@ -135,12 +135,34 @@ export function getCachedRecentSessions(): any[] | null {
 }
 
 /**
+ * Synchronously retrieves cached total sessions count on Frame 0.
+ */
+export function getCachedTotalSessionsCount(): number | null {
+  const raw = safeMmkvGet(STORAGE_KEYS.INSTANT_TOTAL_SESSIONS_COUNT);
+  if (!raw) return null;
+  const parsed = parseInt(raw, 10);
+  return isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Synchronously saves cached total sessions count in MMKV.
+ */
+export function setCachedTotalSessionsCount(count: number): void {
+  try {
+    safeMmkvSet(STORAGE_KEYS.INSTANT_TOTAL_SESSIONS_COUNT, String(Math.max(0, Math.round(count))));
+  } catch {}
+}
+
+/**
  * Synchronously saves snapshot of recent sessions in MMKV.
+ * Also persists total session count to ensure Profile/Home counter is correct on Frame 0.
  */
 export function setCachedRecentSessions(sessions: any[]): void {
   try {
-    const snapshot = (sessions || []).slice(0, 20);
+    const list = sessions || [];
+    const snapshot = list.slice(0, 20);
     safeMmkvSet(STORAGE_KEYS.INSTANT_RECENT_SESSIONS, JSON.stringify(snapshot));
+    setCachedTotalSessionsCount(list.length);
   } catch {}
 }
 
@@ -171,5 +193,6 @@ export function clearInstantCache(): void {
   safeMmkvRemove(STORAGE_KEYS.INSTANT_AUTH_CACHE);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_APP_DATA_CACHE);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_RECENT_SESSIONS);
+  safeMmkvRemove(STORAGE_KEYS.INSTANT_TOTAL_SESSIONS_COUNT);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_PROFILE_SUMMARIES);
 }

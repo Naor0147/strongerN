@@ -5,6 +5,8 @@ import {
   setCachedAppData,
   getCachedRecentSessions,
   setCachedRecentSessions,
+  getCachedTotalSessionsCount,
+  setCachedTotalSessionsCount,
   getCachedProfileSummaries,
   setCachedProfileSummaries,
   clearInstantCache,
@@ -56,14 +58,18 @@ describe('instantCache MMKV synchronous storage', () => {
     const appData = {
       user: { name: 'Champion', totalWorkouts: 42, isPro: true },
       templatesList: [{ id: 't1', name: 'Chest Day', exercises: [] }],
+      exercisesList: [],
+      primaryMetricsList: [],
+      bodyPartMetricsList: [],
       foldersList: ['All', 'Bulking'],
     };
     setCachedAppData(appData);
     expect(getCachedAppData()).toEqual(appData);
   });
 
-  it('correctly limits and retrieves recent sessions snapshot', () => {
+  it('correctly limits and retrieves recent sessions snapshot and preserves total count', () => {
     expect(getCachedRecentSessions()).toBeNull();
+    expect(getCachedTotalSessionsCount()).toBeNull();
 
     const sessions = Array.from({ length: 30 }, (_, i) => ({
       id: `s-${i}`,
@@ -76,6 +82,13 @@ describe('instantCache MMKV synchronous storage', () => {
     expect(cached).not.toBeNull();
     expect(cached?.length).toBe(20); // capped at MAX_RECENT_SESSIONS_CACHE = 20
     expect(cached?.[0].id).toBe('s-0');
+    expect(getCachedTotalSessionsCount()).toBe(30); // full total count preserved
+  });
+
+  it('correctly gets and sets total sessions count explicitly', () => {
+    expect(getCachedTotalSessionsCount()).toBeNull();
+    setCachedTotalSessionsCount(312);
+    expect(getCachedTotalSessionsCount()).toBe(312);
   });
 
   it('correctly persists and retrieves profile summaries snapshot', () => {
@@ -91,8 +104,16 @@ describe('instantCache MMKV synchronous storage', () => {
 
   it('clears all cached data on clearInstantCache', () => {
     setCachedAuthState({ hasCompletedOnboarding: true, authMode: 'guest', localUsername: '' });
-    setCachedAppData({ user: { name: 'User', totalWorkouts: 1, isPro: false } });
+    setCachedAppData({
+      user: { name: 'User', totalWorkouts: 1, isPro: false },
+      templatesList: [],
+      exercisesList: [],
+      primaryMetricsList: [],
+      bodyPartMetricsList: [],
+      foldersList: [],
+    });
     setCachedRecentSessions([{ id: '1', name: 'W1', datetime: new Date().toISOString() }]);
+    setCachedTotalSessionsCount(100);
     setCachedProfileSummaries({ dynamicWeeklyChartData: [], weeklyMuscleSets: {} });
 
     clearInstantCache();
@@ -100,6 +121,7 @@ describe('instantCache MMKV synchronous storage', () => {
     expect(getCachedAuthState()).toBeNull();
     expect(getCachedAppData()).toBeNull();
     expect(getCachedRecentSessions()).toBeNull();
+    expect(getCachedTotalSessionsCount()).toBeNull();
     expect(getCachedProfileSummaries()).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, StyleSheet, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView, Platform } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
-import { NavigationContainer }      from '@react-navigation/native';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 
 enableFreeze(true);
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -22,6 +22,8 @@ import {
   setCachedAppData,
   getCachedRecentSessions,
   setCachedRecentSessions,
+  getCachedTotalSessionsCount,
+  setCachedTotalSessionsCount,
   getCachedProfileSummaries,
   setCachedProfileSummaries,
   clearInstantCache,
@@ -37,7 +39,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 
@@ -271,20 +273,29 @@ function MainApp() {
   const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
 
   // Dynamic States (Clean production-ready default state populated from synchronous instant cache)
+  const initialTotalCount = getCachedTotalSessionsCount() ?? initialAppData?.user?.totalWorkouts ?? 0;
   const [user, setUser] = React.useState<{
     name: string;
     totalWorkouts: number;
     isPro: boolean;
     avatarUri?: string;
-  }>(() => initialAppData?.user ?? {
-    name: initialAuth?.authMode === 'local' && initialAuth.localUsername
-      ? initialAuth.localUsername
-      : initialAuth?.authMode === 'google' && initialAuth.googleProfile?.name
-      ? initialAuth.googleProfile.name
-      : 'Guest User',
-    totalWorkouts: 0,
-    isPro: false,
-    avatarUri: initialAuth?.authMode === 'google' ? initialAuth.googleProfile?.avatarUri : undefined,
+  }>(() => {
+    if (initialAppData?.user) {
+      return {
+        ...initialAppData.user,
+        totalWorkouts: initialTotalCount,
+      };
+    }
+    return {
+      name: initialAuth?.authMode === 'local' && initialAuth.localUsername
+        ? initialAuth.localUsername
+        : initialAuth?.authMode === 'google' && initialAuth.googleProfile?.name
+        ? initialAuth.googleProfile.name
+        : 'Guest User',
+      totalWorkouts: initialTotalCount,
+      isPro: false,
+      avatarUri: initialAuth?.authMode === 'google' ? initialAuth.googleProfile?.avatarUri : undefined,
+    };
   });
 
   const [sessionsList, setSessionsList] = React.useState<any[]>(() => initialRecentSessions ?? []);
@@ -579,6 +590,16 @@ function MainApp() {
         }
       } catch (e) {
         console.warn('Error loading persisted state', e);
+        try {
+          const fallbackSessions = await loadAllSessions();
+          if (fallbackSessions?.length) {
+            const mapped = fallbackSessions.map(sessionV2ToLegacy);
+            setSessionsList(mapped);
+            setCachedRecentSessions(mapped);
+          }
+        } catch (fallbackErr) {
+          console.warn('Fallback loadAllSessions failed', fallbackErr);
+        }
       } finally {
         setIsDataLoaded(true);
       }
@@ -695,9 +716,6 @@ function MainApp() {
       };
       // Synchronous MMKV Instant Cache update (Frame 0 zero-delay startup)
       setCachedAppData(data);
-      if (sessionsList.length > 0) {
-        setCachedRecentSessions(sessionsList);
-      }
       latestAppDataRef.current = data;
       if (rootSaveTimeoutRef.current) {
         clearTimeout(rootSaveTimeoutRef.current);
@@ -718,6 +736,11 @@ function MainApp() {
       }
     };
   }, [
+    user,
+    templatesList,
+    exercisesList,
+    primaryMetricsList,
+    bodyPartMetricsList,
     googleUser,
     lastSynced,
     foldersList,
@@ -725,6 +748,15 @@ function MainApp() {
     programStartDate,
     isDataLoaded,
   ]);
+
+  // Reconcile and refresh recent sessions cache and total count on session updates
+  React.useEffect(() => {
+    if (!isDataLoaded) return;
+    const timer = setTimeout(() => {
+      setCachedRecentSessions(sessionsList);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [sessionsList, isDataLoaded]);
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
@@ -2071,11 +2103,13 @@ function MainApp() {
   }, []);
 
   // Keep totalWorkouts derived from sessionsList length (avoids nested setState crash)
+  // Guard with isDataLoaded so Frame 0 preview doesn't overwrite cached total with 20 preview sessions
   React.useEffect(() => {
+    if (!isDataLoaded) return;
     setUser(prev => prev.totalWorkouts === sessionsList.length
       ? prev
       : { ...prev, totalWorkouts: sessionsList.length });
-  }, [sessionsList]);
+  }, [sessionsList, isDataLoaded]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
 
@@ -2310,9 +2344,22 @@ function MainApp() {
     activeWorkoutStateSavedRef.current = false;
   }, [endActiveWorkout]);
 
+  const navigationTheme = React.useMemo(() => ({
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      primary: colors.accent,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.textPrimary,
+      border: colors.border,
+      notification: colors.accent,
+    },
+  }), []);
+
   // Show login/onboarding if not yet completed
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
       {authState === null ? null : !authState.hasCompletedOnboarding ? (
@@ -2322,7 +2369,7 @@ function MainApp() {
           onRestoreBackup={handleRestoreBackup}
         />
       ) : (
-        <NavigationContainer key={languageVersion}>
+        <NavigationContainer key={languageVersion} theme={navigationTheme}>
         <View style={styles.root}>
           <Tab.Navigator
             initialRouteName="Profile"
@@ -2486,7 +2533,8 @@ function MainApp() {
           <Modal
             visible={isMeasureModalVisible}
             animationType="slide"
-            transparent={false}
+            transparent
+            statusBarTranslucent
             onRequestClose={() => setIsMeasureModalVisible(false)}
           >
             <View style={styles.measureModalContainer}>

@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   INSTANT_AUTH_CACHE: 'strongern_instant_auth_v1',
   INSTANT_APP_DATA_CACHE: 'strongern_instant_app_data_v1',
   INSTANT_RECENT_SESSIONS: 'strongern_instant_recent_sessions_v1',
+  INSTANT_TOTAL_SESSIONS_COUNT: 'strongern_instant_total_sessions_count_v1',
   INSTANT_PROFILE_SUMMARIES: 'strongern_instant_profile_summaries_v1',
 
   // Database Names

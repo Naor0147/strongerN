@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { create } from 'zustand';
 import { ActiveWorkoutDraftV2 } from '../storage/contracts/types';
 import { clearActiveWorkoutDraft, saveActiveWorkoutDraft } from '../storage/activeWorkoutSnapshot';
@@ -46,13 +47,58 @@ function runtimeFromStore(state: ActiveWorkoutStoreState, patch: Partial<Runtime
   };
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingDraftToSave: ActiveWorkoutDraftV2 | null = null;
+
+export function flushActiveWorkoutDraftSync(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (pendingDraftToSave && mmkvStorageAdapter.isAvailable()) {
+    try {
+      saveActiveWorkoutDraft(pendingDraftToSave);
+      pendingDraftToSave = null;
+    } catch (error: any) {
+      console.warn('[activeWorkoutStore] Error flushing active workout draft:', error);
+    }
+  }
+}
+
+function scheduleDraftSave(draft: ActiveWorkoutDraftV2, delayMs = 400): void {
+  pendingDraftToSave = draft;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (pendingDraftToSave && mmkvStorageAdapter.isAvailable()) {
+      try {
+        saveActiveWorkoutDraft(pendingDraftToSave);
+        pendingDraftToSave = null;
+      } catch (error: any) {
+        console.warn('[activeWorkoutStore] Error saving active workout draft:', error);
+      }
+    }
+  }, delayMs);
+}
+
+// Flush immediately when app moves to background or becomes inactive
+if (typeof AppState !== 'undefined' && AppState.addEventListener) {
+  AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      flushActiveWorkoutDraftSync();
+    }
+  });
+}
+
 export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>((set, get) => {
   const commitPatch = (patch: Partial<RuntimeActiveWorkoutState>) => {
     const current = get();
     const next = runtimeFromStore(current, patch);
     if (current.isHydrated && next.isWorkoutActive && mmkvStorageAdapter.isAvailable()) {
       try {
-        saveActiveWorkoutDraft(runtimeStateToDraft(next));
+        scheduleDraftSave(runtimeStateToDraft(next), 400);
       } catch (error: any) {
         const message = error?.message ?? String(error);
         set({ persistenceError: message });
@@ -67,10 +113,20 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>((set, get) 
     isHydrated: false,
     persistenceError: null,
     hydrate: (draft) => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      pendingDraftToSave = null;
       const runtime = draft ? draftToRuntimeState(draft) : initialRuntimeState;
       set({ ...runtime, isHydrated: true, persistenceError: null });
     },
     beginWorkout: (state) => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      pendingDraftToSave = null;
       const next: RuntimeActiveWorkoutState = { ...state, isWorkoutActive: true };
       if (mmkvStorageAdapter.isAvailable()) {
         saveActiveWorkoutDraft(runtimeStateToDraft(next));
@@ -78,6 +134,11 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>((set, get) 
       set({ ...next, isHydrated: true, persistenceError: null });
     },
     endWorkout: () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      pendingDraftToSave = null;
       if (mmkvStorageAdapter.isAvailable()) {
         clearActiveWorkoutDraft();
       }
@@ -86,7 +147,10 @@ export const useActiveWorkoutStore = create<ActiveWorkoutStoreState>((set, get) 
     setWorkoutName: (value) => commitPatch({ workoutName: resolveAction(value, get().workoutName) }),
     setStartTime: (value) => commitPatch({ startTime: resolveAction(value, get().startTime) }),
     setWorkoutExercises: (value) => commitPatch({ workoutExercises: resolveAction(value, get().workoutExercises) }),
-    setWorkoutModalVisible: (value) => commitPatch({ isWorkoutModalVisible: resolveAction(value, get().isWorkoutModalVisible) }),
+    setWorkoutModalVisible: (value) => {
+      const nextVisible = resolveAction(value, get().isWorkoutModalVisible);
+      set({ isWorkoutModalVisible: nextVisible });
+    },
     setActiveWorkoutComment: (value) => commitPatch({ activeWorkoutComment: resolveAction(value, get().activeWorkoutComment) }),
     setEditingSessionId: (value) => commitPatch({ editingSessionId: resolveAction(value, get().editingSessionId) }),
   };
