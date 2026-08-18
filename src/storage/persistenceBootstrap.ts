@@ -68,8 +68,10 @@ export async function bootstrapPersistence(
   legacyAppRaw: unknown,
   legacyActiveRaw: unknown
 ): Promise<PersistenceBootstrapResult> {
+  console.log('[Bootstrap] Initializing adapters...');
   const mmkvReady = initMMKVAdapter();
   const historyReady = await initHistoryRepository();
+  console.log('[Bootstrap] Adapters ready - MMKV:', mmkvReady, 'History DB:', historyReady);
   const now = Date.now();
 
   let sessions: WorkoutSessionV2[] = [];
@@ -87,6 +89,7 @@ export async function bootstrapPersistence(
     if (historyReady) {
       // Check if relational SQLite V2 has already completed initial migration
       const previousRaw = await getPersistenceMeta(MIGRATION_META_KEY);
+      console.log('[Bootstrap] Previous migration meta:', previousRaw);
       let isAlreadyMigrated = false;
       let previousFingerprint = '';
 
@@ -106,6 +109,17 @@ export async function bootstrapPersistence(
         // FAST-PATH HYDRATION: Relational SQLite V2 is verified and marked ready.
         // Bypass legacy JSON stringify & DJB2 character checksumming routine on cold start.
         sessions = await loadAllSessions();
+        // Self-healing: If legacy source has more sessions than SQLite V2 (e.g. from an earlier partial migration)
+        const legacyAppValidation = validateLegacyAppDataV1(legacyAppRaw ?? {});
+        const legacyApp: LegacyAppDataV1 = legacyAppValidation.success ? legacyAppValidation.data : {};
+        const legacySessions = Array.isArray(legacyApp.sessionsList) ? legacyApp.sessionsList : [];
+        if (legacySessions.length > sessions.length) {
+          console.warn(`[Bootstrap] Self-healing migration: Legacy has ${legacySessions.length} sessions vs SQLite ${sessions.length}. Migrating missing sessions...`);
+          for (let index = 0; index < legacySessions.length; index += 1) {
+            await upsertSession(legacySessionToV2(legacySessions[index], index));
+          }
+          sessions = await loadAllSessions();
+        }
         migration = {
           status: 'verified',
           version: 2,

@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 
 let db: any = null;
+let initDbPromise: Promise<boolean> | null = null;
 const TABLE_NAME = 'strongern_kv_store';
 const isWeb = Platform.OS === 'web';
 
@@ -18,23 +19,30 @@ export async function initDb(): Promise<boolean> {
 
   // ── Native: open SQLite database ──────────────────────────────────────────
   if (db) return true; // Already initialized
+  if (initDbPromise) return initDbPromise;
 
-  try {
-    const openedDb = await SQLite.openDatabaseAsync('strongern.db');
-    await openedDb.execAsync(`
-      CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      );
-    `);
-    db = openedDb;
-    console.log('[DB] SQLite initialized successfully.');
-    return true;
-  } catch (err) {
-    console.warn('[DB] SQLite initialization failed, falling back to localStorage.', err);
-    db = null;
-    return true; // Still return true so the app can use localStorage fallback
-  }
+  initDbPromise = (async () => {
+    try {
+      const openedDb = await SQLite.openDatabaseAsync('strongern.db');
+      await openedDb.execAsync(`
+        CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        );
+      `);
+      db = openedDb;
+      console.log('[DB] SQLite initialized successfully.');
+      return true;
+    } catch (err) {
+      console.warn('[DB] SQLite initialization failed, falling back to localStorage.', err);
+      db = null;
+      return true; // Still return true so the app can use localStorage fallback
+    } finally {
+      initDbPromise = null;
+    }
+  })();
+
+  return initDbPromise;
 }
 
 export async function saveToDb(key: string, value: any): Promise<boolean> {

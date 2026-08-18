@@ -16,14 +16,19 @@ export async function getV2Database(): Promise<SQLite.SQLiteDatabase | null> {
   if (!initPromise) {
     initPromise = (async () => {
       try {
+        console.log('[DBSingleton] Opening V2 SQLite DB:', STORAGE_KEYS.RELATIONAL_V2_DB);
         const openedDb = await SQLite.openDatabaseAsync(STORAGE_KEYS.RELATIONAL_V2_DB);
-        await openedDb.execAsync(`
-          PRAGMA journal_mode = WAL;
-          PRAGMA foreign_keys = ON;
-          PRAGMA busy_timeout = 5000;
-        `);
+        try {
+          await openedDb.execAsync(`
+            PRAGMA journal_mode = WAL;
+            PRAGMA foreign_keys = ON;
+            PRAGMA busy_timeout = 5000;
+          `);
+        } catch (pragmaErr) {
+          console.warn('[DBSingleton] PRAGMA config warning (continuing):', pragmaErr);
+        }
         v2DbInstance = openedDb;
-        console.log('[DBSingleton] V2 SQLite database connection established with WAL enabled.');
+        console.log('[DBSingleton] V2 SQLite database connection established successfully.');
         return v2DbInstance;
       } catch (err) {
         console.error('[DBSingleton] Failed to initialize V2 SQLite database connection:', err);

@@ -114,6 +114,12 @@ export function getCachedAppData(): InstantAppData | null {
  */
 export function setCachedAppData(data: InstantAppData): void {
   safeMmkvSet(STORAGE_KEYS.INSTANT_APP_DATA_CACHE, JSON.stringify(data));
+  if (data.user?.totalWorkouts && data.user.totalWorkouts > 0) {
+    const currentTotal = getCachedTotalSessionsCount() ?? 0;
+    if (data.user.totalWorkouts >= currentTotal) {
+      setCachedTotalSessionsCount(data.user.totalWorkouts);
+    }
+  }
 }
 
 /**
@@ -162,7 +168,10 @@ export function setCachedRecentSessions(sessions: any[]): void {
     const list = sessions || [];
     const snapshot = list.slice(0, 20);
     safeMmkvSet(STORAGE_KEYS.INSTANT_RECENT_SESSIONS, JSON.stringify(snapshot));
-    setCachedTotalSessionsCount(list.length);
+    const currentTotal = getCachedTotalSessionsCount() ?? 0;
+    if (list.length >= currentTotal) {
+      setCachedTotalSessionsCount(list.length);
+    }
   } catch {}
 }
 

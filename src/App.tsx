@@ -465,7 +465,11 @@ function MainApp() {
             loadFromDb(STORAGE_KEY),
             loadFromDb('strongern_active_workout_state'),
           ]);
+          console.log('[DEBUG_BOOTSTRAP] Raw legacy parsed keys:', parsed ? Object.keys(parsed) : 'null');
+          console.log('[DEBUG_BOOTSTRAP] Legacy sessionsList count:', parsed?.sessionsList ? parsed.sessionsList.length : 'none');
+          console.log('[DEBUG_BOOTSTRAP] Legacy user totalWorkouts:', parsed?.user?.totalWorkouts);
           const persistence = await bootstrapPersistence(parsed, legacyActiveWorkout);
+          console.log('[DEBUG_BOOTSTRAP] Persistence historyReady:', persistence.historyReady, 'Sessions count:', persistence.sessions?.length);
           historyRepositoryReadyRef.current = persistence.historyReady;
 
           if (parsed) {
@@ -477,6 +481,7 @@ function MainApp() {
               
               setUser(prev => ({
                 ...parsed.user,
+                totalWorkouts: (parsed.user.totalWorkouts && parsed.user.totalWorkouts > prev.totalWorkouts) ? parsed.user.totalWorkouts : prev.totalWorkouts,
                 name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
                 avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
               }));
@@ -527,11 +532,11 @@ function MainApp() {
             if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
           }
 
-          if (persistence.historyReady) {
+          if (persistence.historyReady && persistence.sessions && persistence.sessions.length > 0) {
             const mapped = persistence.sessions.map(sessionV2ToLegacy);
             setSessionsList(mapped);
             setCachedRecentSessions(mapped);
-          } else if (parsed?.sessionsList) {
+          } else if (parsed?.sessionsList && parsed.sessionsList.length > 0) {
             const mapped = parsed.sessionsList.map((s: any) => ({
               ...s,
               datetime: new Date(s.datetime)
@@ -2106,9 +2111,13 @@ function MainApp() {
   // Guard with isDataLoaded so Frame 0 preview doesn't overwrite cached total with 20 preview sessions
   React.useEffect(() => {
     if (!isDataLoaded) return;
-    setUser(prev => prev.totalWorkouts === sessionsList.length
-      ? prev
-      : { ...prev, totalWorkouts: sessionsList.length });
+    if (sessionsList.length === 0) return;
+    setUser(prev => {
+      const nextTotal = Math.max(prev.totalWorkouts, sessionsList.length);
+      return prev.totalWorkouts === nextTotal
+        ? prev
+        : { ...prev, totalWorkouts: nextTotal };
+    });
   }, [sessionsList, isDataLoaded]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
