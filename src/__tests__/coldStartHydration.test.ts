@@ -257,5 +257,62 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
       expect(roundTrip.totalVolumeMilliKg).toBe(v2Session.totalVolumeMilliKg);
       expect(roundTrip.exercises[0].sets[1].weightMilliKg).toBe(34000);
     });
+
+    test('self-healing fast-path does NOT resurrect soft-deleted sessions when raw table already contains them', async () => {
+      jest.spyOn(repository, 'initHistoryRepository').mockResolvedValue(true);
+      jest.spyOn(repository, 'getPersistenceMeta').mockResolvedValue(JSON.stringify({
+        version: 2,
+        sourceFingerprint: 'migrated-fp',
+        sourceCount: 2,
+        verifiedAtMs: 1786687000000,
+      }));
+
+      // 1 active session in SQLite V2 (the 2nd session was soft-deleted)
+      const activeV2Sessions = [
+        {
+          id: 'sess-active-1',
+          userId: null,
+          routineId: null,
+          title: 'Active Workout',
+          titleNorm: 'active workout',
+          startedAtMs: 1786686000000,
+          endedAtMs: 1786689600000,
+          durationSec: 3600,
+          totalVolumeMilliKg: 4000000,
+          prs: 0,
+          prCount: 0,
+          comment: '',
+          createdAtMs: 1786686000000,
+          updatedAtMs: 1786686000000,
+          revision: 1,
+          deletedAtMs: null,
+          exercises: [],
+        },
+      ];
+      jest.spyOn(repository, 'loadAllSessions').mockResolvedValue(activeV2Sessions as any);
+
+      // Raw SQLite count is 2 (1 active + 1 soft-deleted)
+      const rawCountSpy = jest.spyOn(repository, 'countAllRawSessions').mockResolvedValue(2);
+      const insertMissingSpy = jest.spyOn(repository, 'insertMissingSessionsOnly').mockResolvedValue();
+
+      // Legacy payload still has 2 sessions (including the one the user soft-deleted)
+      const legacyRaw = {
+        user: { name: 'Test User' },
+        sessionsList: [
+          { id: 'sess-active-1', title: 'Active Workout', datetime: '2026-08-01T10:00:00Z', exercises: [] },
+          { id: 'sess-deleted-2', title: 'Deleted Workout', datetime: '2026-08-02T10:00:00Z', exercises: [] },
+        ],
+      };
+
+      const result = await bootstrapPersistence(legacyRaw, null);
+
+      expect(result.historyReady).toBe(true);
+      expect(result.migration.status).toBe('verified');
+      // Because rawCount (2) >= legacyRaw.sessionsList.length (2), no missing sessions are inserted!
+      expect(rawCountSpy).toHaveBeenCalled();
+      expect(insertMissingSpy).not.toHaveBeenCalled();
+      expect(result.sessions).toEqual(activeV2Sessions);
+      expect(result.sessions.length).toBe(1); // Deleted workout remains deleted
+    });
   });
 });

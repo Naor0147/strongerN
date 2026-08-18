@@ -25,7 +25,7 @@ export function runtimeStateToDraft(state: RuntimeActiveWorkoutState): ActiveWor
     workoutName: state.workoutName || 'Active Workout',
     startedAtMs: safeStartedAtMs,
     comment: state.activeWorkoutComment || '',
-    isWorkoutModalVisible: state.isWorkoutModalVisible,
+    isWorkoutModalVisible: false,
     editingSessionId: state.editingSessionId,
     restTimerDeadlineMs: null,
     restTimerDurationSec: null,
@@ -110,7 +110,7 @@ export function draftToRuntimeState(draft: ActiveWorkoutDraftV2): RuntimeActiveW
         })),
       };
     }),
-    isWorkoutModalVisible: draft.isWorkoutModalVisible,
+    isWorkoutModalVisible: false,
     activeWorkoutComment: draft.comment,
     editingSessionId: draft.editingSessionId,
   };
@@ -123,7 +123,7 @@ export function legacyActiveWorkoutToRuntime(raw: LegacyActiveWorkoutV1): Runtim
     workoutName: raw.workoutName || 'Active Workout',
     startTime: Number.isFinite(startTime.getTime()) ? startTime : new Date(),
     workoutExercises: Array.isArray(raw.workoutExercises) ? raw.workoutExercises : [],
-    isWorkoutModalVisible: raw.isWorkoutModalVisible !== false,
+    isWorkoutModalVisible: false,
     activeWorkoutComment: raw.comment || '',
     editingSessionId: null,
   };
@@ -135,7 +135,7 @@ export function runtimeToLegacyActiveWorkout(state: RuntimeActiveWorkoutState): 
     workoutName: state.workoutName,
     startTime: state.startTime.toISOString(),
     workoutExercises: state.workoutExercises,
-    isWorkoutModalVisible: state.isWorkoutModalVisible,
+    isWorkoutModalVisible: false,
     comment: state.activeWorkoutComment,
   };
 }

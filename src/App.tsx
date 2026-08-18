@@ -6,7 +6,7 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 
 enableFreeze(true);
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { Rubik_400Regular, Rubik_500Medium, Rubik_600SemiBold, Rubik_700Bold } from '@expo-google-fonts/rubik';
@@ -140,6 +140,57 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
   return merged;
 }
 
+interface MeasureModalSheetProps {
+  visible: boolean;
+  onClose: () => void;
+  primaryMetricsList: any[];
+  bodyPartMetricsList: any[];
+  onRecordMetric?: (id: string, newValue: string) => void;
+  onAddMetric?: (label: string, isPrimary: boolean) => void;
+  onDeleteMetricLog?: (id: string, date: string) => void;
+}
+
+const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
+  visible,
+  onClose,
+  primaryMetricsList,
+  bodyPartMetricsList,
+  onRecordMetric,
+  onAddMetric,
+  onDeleteMetricLog,
+}) => {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={[styles.measureModalContainer, { paddingTop: insets.top }]}>
+        <View style={styles.measureModalHeader}>
+          <Pressable
+            onPress={onClose}
+            style={styles.measureModalClose}
+            android_ripple={rippleTokens.borderless}
+            accessibilityLabel="Close measurements"
+          >
+            <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+        <MeasureScreen
+          primaryMetrics={primaryMetricsList}
+          bodyPartMetrics={bodyPartMetricsList}
+          onRecordMetric={onRecordMetric}
+          onAddMetric={onAddMetric}
+          onDeleteMetricLog={onDeleteMetricLog}
+        />
+      </View>
+    </Modal>
+  );
+});
+
 function App() {
   const isE2E = Platform.OS === 'web' && (
     process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
@@ -207,6 +258,7 @@ function MainApp() {
 
   // Guard to prevent overwriting stored data with defaults on mount
   const [isDataLoaded, setIsDataLoaded] = React.useState(() => Boolean(initialAppData));
+  const [isFullHistoryLoaded, setIsFullHistoryLoaded] = React.useState(false);
   const [isWorkoutRestored, setIsWorkoutRestored] = React.useState(true);
 
   // Load auth state from DB on mount (background reconciliation / first launch fallback)
@@ -273,7 +325,7 @@ function MainApp() {
   const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
 
   // Dynamic States (Clean production-ready default state populated from synchronous instant cache)
-  const initialTotalCount = getCachedTotalSessionsCount() ?? initialAppData?.user?.totalWorkouts ?? 0;
+  const initialTotalCount = React.useMemo(() => getCachedTotalSessionsCount() ?? initialAppData?.user?.totalWorkouts ?? 0, []);
   const [user, setUser] = React.useState<{
     name: string;
     totalWorkouts: number;
@@ -465,11 +517,7 @@ function MainApp() {
             loadFromDb(STORAGE_KEY),
             loadFromDb('strongern_active_workout_state'),
           ]);
-          console.log('[DEBUG_BOOTSTRAP] Raw legacy parsed keys:', parsed ? Object.keys(parsed) : 'null');
-          console.log('[DEBUG_BOOTSTRAP] Legacy sessionsList count:', parsed?.sessionsList ? parsed.sessionsList.length : 'none');
-          console.log('[DEBUG_BOOTSTRAP] Legacy user totalWorkouts:', parsed?.user?.totalWorkouts);
           const persistence = await bootstrapPersistence(parsed, legacyActiveWorkout);
-          console.log('[DEBUG_BOOTSTRAP] Persistence historyReady:', persistence.historyReady, 'Sessions count:', persistence.sessions?.length);
           historyRepositoryReadyRef.current = persistence.historyReady;
 
           if (parsed) {
@@ -481,7 +529,6 @@ function MainApp() {
               
               setUser(prev => ({
                 ...parsed.user,
-                totalWorkouts: (parsed.user.totalWorkouts && parsed.user.totalWorkouts > prev.totalWorkouts) ? parsed.user.totalWorkouts : prev.totalWorkouts,
                 name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
                 avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
               }));
@@ -532,17 +579,20 @@ function MainApp() {
             if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
           }
 
-          if (persistence.historyReady && persistence.sessions && persistence.sessions.length > 0) {
-            const mapped = persistence.sessions.map(sessionV2ToLegacy);
-            setSessionsList(mapped);
-            setCachedRecentSessions(mapped);
-          } else if (parsed?.sessionsList && parsed.sessionsList.length > 0) {
-            const mapped = parsed.sessionsList.map((s: any) => ({
+          let loadedSessionsMapped: any[] | null = null;
+          if (persistence.historyReady && persistence.sessions) {
+            loadedSessionsMapped = persistence.sessions.map(sessionV2ToLegacy);
+          } else if (parsed?.sessionsList && Array.isArray(parsed.sessionsList)) {
+            loadedSessionsMapped = parsed.sessionsList.map((s: any) => ({
               ...s,
               datetime: new Date(s.datetime)
             }));
-            setSessionsList(mapped);
-            setCachedRecentSessions(mapped);
+          }
+
+          if (loadedSessionsMapped !== null) {
+            setSessionsList(loadedSessionsMapped);
+            setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
+            setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
           }
 
           // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
@@ -589,24 +639,28 @@ function MainApp() {
           activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
           setIsWorkoutRestored(true);
 
-          const now = Date.now();
-          const t0 = (global as any).__STARTUP_T0__ || now;
-          console.log(`[PERF_BENCHMARK] Background SQLite & History Sync Complete in ${now - t0}ms`);
+          if (__DEV__) {
+            const now = Date.now();
+            const t0 = (global as any).__STARTUP_T0__ || now;
+            console.log(`[PERF_BENCHMARK] Background SQLite & History Sync Complete in ${now - t0}ms`);
+          }
         }
       } catch (e) {
-        console.warn('Error loading persisted state', e);
+        if (__DEV__) console.warn('Error loading persisted state', e);
         try {
           const fallbackSessions = await loadAllSessions();
-          if (fallbackSessions?.length) {
+          if (fallbackSessions) {
             const mapped = fallbackSessions.map(sessionV2ToLegacy);
             setSessionsList(mapped);
-            setCachedRecentSessions(mapped);
+            setCachedRecentSessions(mapped, mapped.length);
+            setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
           }
         } catch (fallbackErr) {
-          console.warn('Fallback loadAllSessions failed', fallbackErr);
+          if (__DEV__) console.warn('Fallback loadAllSessions failed', fallbackErr);
         }
       } finally {
         setIsDataLoaded(true);
+        setIsFullHistoryLoaded(true);
       }
     }
     loadData();
@@ -629,7 +683,7 @@ function MainApp() {
       rootSaveTimeoutRef.current = null;
     }
     if (latestAppDataRef.current) {
-      console.log('[SAVE] Flushing main app data immediately');
+      if (__DEV__) console.log('[SAVE] Flushing main app data immediately');
       saveToDb(STORAGE_KEY, latestAppDataRef.current).catch(e => {
         console.error('[SAVE] Error flushing main app data:', e);
       });
@@ -2108,17 +2162,16 @@ function MainApp() {
   }, []);
 
   // Keep totalWorkouts derived from sessionsList length (avoids nested setState crash)
-  // Guard with isDataLoaded so Frame 0 preview doesn't overwrite cached total with 20 preview sessions
+  // When isFullHistoryLoaded is true, sync exact length (covers additions and deletions).
+  // While false (Frame 0 preview), keep the cached count.
   React.useEffect(() => {
-    if (!isDataLoaded) return;
-    if (sessionsList.length === 0) return;
+    if (!isFullHistoryLoaded) return;
     setUser(prev => {
-      const nextTotal = Math.max(prev.totalWorkouts, sessionsList.length);
-      return prev.totalWorkouts === nextTotal
-        ? prev
-        : { ...prev, totalWorkouts: nextTotal };
+      if (prev.totalWorkouts === sessionsList.length) return prev;
+      return { ...prev, totalWorkouts: sessionsList.length };
     });
-  }, [sessionsList, isDataLoaded]);
+    setCachedTotalSessionsCount(sessionsList.length);
+  }, [sessionsList, isFullHistoryLoaded]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
 
@@ -2133,7 +2186,7 @@ function MainApp() {
   }, [isWorkoutActive, isWorkoutModalVisible, activeWorkoutComment, workoutExercises]);
 
   const flushSave = React.useCallback(() => {
-    console.log('[SAVE] AppState change/flush save triggered');
+    if (__DEV__) console.log('[SAVE] AppState change/flush save triggered');
     try {
       flushMainAppData();
     } catch (e) {
@@ -2539,33 +2592,15 @@ function MainApp() {
           </ErrorBoundary>
 
           {/* Measure Modal Sheet (accessible from Profile) */}
-          <Modal
+          <MeasureModalSheet
             visible={isMeasureModalVisible}
-            animationType="slide"
-            transparent
-            statusBarTranslucent
-            onRequestClose={() => setIsMeasureModalVisible(false)}
-          >
-            <View style={styles.measureModalContainer}>
-              <View style={styles.measureModalHeader}>
-                <Pressable
-                  onPress={() => setIsMeasureModalVisible(false)}
-                  style={styles.measureModalClose}
-                  android_ripple={rippleTokens.borderless}
-                  accessibilityLabel="Close measurements"
-                >
-                  <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
-                </Pressable>
-              </View>
-              <MeasureScreen
-                primaryMetrics={primaryMetricsList}
-                bodyPartMetrics={bodyPartMetricsList}
-                onRecordMetric={handleRecordMetric}
-                onAddMetric={handleAddMetric}
-                onDeleteMetricLog={handleDeleteMetricLog}
-              />
-            </View>
-          </Modal>
+            onClose={() => setIsMeasureModalVisible(false)}
+            primaryMetricsList={primaryMetricsList}
+            bodyPartMetricsList={bodyPartMetricsList}
+            onRecordMetric={handleRecordMetric}
+            onAddMetric={handleAddMetric}
+            onDeleteMetricLog={handleDeleteMetricLog}
+          />
 
           {/* Premium Congratulations Modal Overlay */}
           {completionData && (

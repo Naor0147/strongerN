@@ -932,7 +932,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <View style={styles.heroMeta}>
                   <Ionicons name="trophy-outline" size={13} color={colors.accent} />
                   <Text style={styles.heroMetaText}>
-                    {(user?.totalWorkouts && user.totalWorkouts > (sessions?.length ?? 0)) ? user.totalWorkouts : (sessions?.length ?? 0)} {i18n.t('profile.workoutsCompleted')}
+                    {user?.totalWorkouts ?? sessions?.length ?? 0} {i18n.t('profile.workoutsCompleted')}
                   </Text>
                 </View>
               </View>
@@ -2604,7 +2604,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                 `[Active Profile State]\n` +
                                 `• Name: ${user?.name || 'N/A'}\n` +
                                 `• Avatar: ${user?.avatarUri ? 'Present' : 'N/A'}\n` +
-                                `• Total Workouts: ${(user?.totalWorkouts && user.totalWorkouts > (sessions?.length ?? 0)) ? user.totalWorkouts : (sessions?.length ?? 0)}\n\n` +
+                                `• Total Workouts: ${user?.totalWorkouts ?? sessions?.length ?? 0}\n\n` +
                                 `[Active Google User]\n` +
                                 `• Name: ${googleUser?.name || 'N/A'}\n` +
                                 `• Email: ${googleUser?.email || 'N/A'}\n` +

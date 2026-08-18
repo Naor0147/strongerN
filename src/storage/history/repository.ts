@@ -335,6 +335,32 @@ export async function countSessions(): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+export async function countAllRawSessions(): Promise<number> {
+  const db = await requireDb();
+  const row: any = await db.getFirstAsync('SELECT COUNT(*) AS count FROM workout_sessions;');
+  return Number(row?.count ?? 0);
+}
+
+export async function getAllSessionIds(): Promise<Set<string>> {
+  const db = await requireDb();
+  const rows: any[] = await db.getAllAsync('SELECT id FROM workout_sessions;');
+  return new Set(rows.map((r) => String(r.id)));
+}
+
+export function insertMissingSessionsOnly(sessions: WorkoutSessionV2[]): Promise<void> {
+  return enqueueWrite(async () => {
+    const db = await requireDb();
+    await transaction(db, async () => {
+      const existingIds = await getAllSessionIds();
+      for (const session of sessions) {
+        if (!existingIds.has(session.id)) {
+          await writeSession(db, session);
+        }
+      }
+    });
+  });
+}
+
 export async function findLastPerformance(
   exerciseName: string,
   variationKey = '',

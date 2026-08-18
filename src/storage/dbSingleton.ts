@@ -16,7 +16,7 @@ export async function getV2Database(): Promise<SQLite.SQLiteDatabase | null> {
   if (!initPromise) {
     initPromise = (async () => {
       try {
-        console.log('[DBSingleton] Opening V2 SQLite DB:', STORAGE_KEYS.RELATIONAL_V2_DB);
+        if (__DEV__) console.log('[DBSingleton] Opening V2 SQLite DB:', STORAGE_KEYS.RELATIONAL_V2_DB);
         const openedDb = await SQLite.openDatabaseAsync(STORAGE_KEYS.RELATIONAL_V2_DB);
         try {
           await openedDb.execAsync(`
@@ -25,10 +25,10 @@ export async function getV2Database(): Promise<SQLite.SQLiteDatabase | null> {
             PRAGMA busy_timeout = 5000;
           `);
         } catch (pragmaErr) {
-          console.warn('[DBSingleton] PRAGMA config warning (continuing):', pragmaErr);
+          if (__DEV__) console.warn('[DBSingleton] PRAGMA config warning (continuing):', pragmaErr);
         }
         v2DbInstance = openedDb;
-        console.log('[DBSingleton] V2 SQLite database connection established successfully.');
+        if (__DEV__) console.log('[DBSingleton] V2 SQLite database connection established successfully.');
         return v2DbInstance;
       } catch (err) {
         console.error('[DBSingleton] Failed to initialize V2 SQLite database connection:', err);

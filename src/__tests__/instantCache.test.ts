@@ -124,4 +124,45 @@ describe('instantCache MMKV synchronous storage', () => {
     expect(getCachedTotalSessionsCount()).toBeNull();
     expect(getCachedProfileSummaries()).toBeNull();
   });
+
+  it('allows total session count to decrease on deletion and preserves decremented count across restart', () => {
+    // 1. Initial 300 workouts
+    const sessions = Array.from({ length: 300 }, (_, i) => ({
+      id: `s-${i}`,
+      name: `Workout #${i}`,
+      datetime: new Date(2026, 0, i + 1).toISOString(),
+    }));
+    setCachedRecentSessions(sessions, 300);
+    setCachedAppData({
+      user: { name: 'Athlete', totalWorkouts: 300, isPro: false },
+      templatesList: [],
+      exercisesList: [],
+      primaryMetricsList: [],
+      bodyPartMetricsList: [],
+      foldersList: [],
+    });
+    expect(getCachedTotalSessionsCount()).toBe(300);
+
+    // 2. User deletes 50 workouts -> 250
+    const reducedSessions = sessions.slice(50);
+    expect(reducedSessions.length).toBe(250);
+
+    setCachedRecentSessions(reducedSessions, reducedSessions.length);
+    setCachedAppData({
+      user: { name: 'Athlete', totalWorkouts: 250, isPro: false },
+      templatesList: [],
+      exercisesList: [],
+      primaryMetricsList: [],
+      bodyPartMetricsList: [],
+      foldersList: [],
+    });
+
+    // 3. Count in MMKV cache decreases immediately
+    expect(getCachedTotalSessionsCount()).toBe(250);
+    expect(getCachedAppData()?.user?.totalWorkouts).toBe(250);
+
+    // 4. Simulated restart (reading from MMKV cold start)
+    const coldStartCount = getCachedTotalSessionsCount() ?? getCachedAppData()?.user?.totalWorkouts ?? 0;
+    expect(coldStartCount).toBe(250);
+  });
 });
