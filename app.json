@@ -6,7 +6,7 @@
       "strongern",
       "com.googleusercontent.apps.81738149264-q7gqeu0nvksebi02nrce68blhfqlhe1q"
     ],
-    "version": "1.0.1.87",
+    "version": "1.0.1.88",
     "jsEngine": "hermes",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.naor.strongern",
-      "versionCode": 142,
+      "versionCode": 143,
       "adaptiveIcon": {
         "backgroundColor": "#0D0F14",
         "foregroundImage": "./assets/android-icon-foreground.png",

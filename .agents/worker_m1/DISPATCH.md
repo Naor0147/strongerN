@@ -1,30 +1,34 @@
-## 2026-08-18T19:47:01Z
-You are Worker 1 for Milestone 1 of the StrongerN workout history recovery project.
-Read ORIGINAL_REQUEST.md at: c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md
-Read PROJECT.md at: c:\Antigravity\strongerN\PROJECT.md
-Read survey findings at: c:\Antigravity\strongerN\.agents\explorer_1_survey\survey_report.md
+## 2026-08-19T18:09:03Z
 
-Your working directory is: c:\Antigravity\strongerN\.agents\worker_m1\
+You are Worker M1 focusing on Milestone 1 (R5: Exercise History Breakdown & Virtualization).
+Working directory: c:\Antigravity\strongerN\.agents\worker_m1
 
-DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+MANDATORY INTEGRITY WARNING:
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
 
-Scope & Exclusively Owned Files:
-1. `src/storage/history/repository.ts`
-2. `src/storage/persistenceBootstrap.ts`
-3. `src/App.tsx` (persistence error logging in `loadData()`)
+Read:
+- c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md
+- c:\Antigravity\strongerN\.agents\orchestrator_3\PROJECT.md
+- c:\Antigravity\strongerN\.agents\explorer_m1\handoff.md
+- c:\Antigravity\strongerN\src\utils\exerciseHistory.ts
+- c:\Antigravity\strongerN\src\screens\ExerciseInsightsModal.tsx
 
-Task Instructions:
-1. In `src/storage/history/repository.ts`:
-   - Implement and export `countTombstonedSessions(): Promise<number>` (counts rows WHERE deleted_at_ms IS NOT NULL).
-   - Implement and export `restoreAllTombstonedSessions(): Promise<number>` (or `recoverTombstonedSessions(): Promise<number>`) running transactional `UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE deleted_at_ms IS NOT NULL;` returning number of rows affected.
-   - Implement and export `getDatabaseDiagnostics(): Promise<DatabaseDiagnostics>` returning `{ isReady, activeSessionsCount, tombstonedSessionsCount, rawTotalSessionsCount, cachedRecentCount, cachedTotalCount }`.
-   - Update `insertMissingSessionsOnly(sessions: WorkoutSessionV2[])`: When inserting missing sessions, if a session with that ID already exists but is tombstoned (`deleted_at_ms IS NOT NULL`), restore it (`deleted_at_ms = NULL`).
-2. In `src/storage/persistenceBootstrap.ts`:
-   - In `bootstrapPersistence()`: After SQLite database check / migration, check if tombstoned sessions exist (`countTombstonedSessions() > 0`). If tombstoned sessions are detected, execute `restoreAllTombstonedSessions()` to self-heal and re-load sessions so that on startup, the full 300+ session history is instantly recovered.
-3. In `src/App.tsx`:
-   - In `loadData()`: Ensure errors during `bootstrapPersistence()` or `loadAllSessions()` are logged via `console.error` and `saveCrashLogSync('Persistence Load Failure: ' + (e?.message || e), e?.stack || '', false)`, removing the silencing `if (__DEV__) console.warn`.
-4. Verification:
-   - Run `npm test` to ensure all unit tests pass.
-   - Run `npm run typecheck` to ensure 0 TypeScript errors.
+Your File Ownership (Exclusive):
+- `src/utils/exerciseHistory.ts`
+- `src/screens/ExerciseInsightsModal.tsx`
+- `src/__tests__/r5_exerciseHistory.test.ts`
 
-Write your changes report to c:\Antigravity\strongerN\.agents\worker_m1\changes.md and create handoff.md. Send a message to parent when done with test results.
+Tasks:
+1. In `src/utils/exerciseHistory.ts`, fix category fallback on line 89 from `'W'` to `'S'`.
+2. In `src/screens/ExerciseInsightsModal.tsx`:
+   - Import `buildExerciseSessionHistory, ExerciseHistorySession, ExerciseHistorySet` from `../utils/exerciseHistory`.
+   - Replace inline history reducer with `useMemo(() => buildExerciseSessionHistory(exerciseName, sessions), [exerciseName, sessions])`.
+   - Separate the tab containers: Render `<ScrollView>` for `'info'` and `'data'` tabs, and top-level virtualized `<FlatList>` for `'history'` tab.
+   - Render session cards with Workout Title, Date, PR badges (`PR 1RM` in `colors.highlight`, `MAX WT` in `colors.gold`), Stat Summary (Best Set, Est 1RM, completed count / total sets), and collapsible set details accordion.
+   - Clean up any raw hex colors to use tokens from `src/theme.ts` (`colors.bg`, `colors.surface`, `colors.border`, `colors.accentGlow`, etc.).
+3. Create `src/__tests__/r5_exerciseHistory.test.ts` with comprehensive unit and component test suites based on Explorer M1's blueprint.
+4. Run tests and typecheck using:
+   `fnm env --shell powershell | Out-String | Invoke-Expression; npm test -- --testPathPattern=r5_exerciseHistory`
+   `fnm env --shell powershell | Out-String | Invoke-Expression; npm run typecheck`
+5. Document all changes and verification results in `c:\Antigravity\strongerN\.agents\worker_m1\handoff.md` and `progress.md`.
+6. Send a message to parent when completed.

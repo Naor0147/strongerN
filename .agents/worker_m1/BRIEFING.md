@@ -1,63 +1,54 @@
-# BRIEFING — 2026-08-18T19:51:55Z
+# BRIEFING — 2026-08-19T21:13:30Z
 
 ## Mission
-Milestone 1: Workout History Recovery & Tombstone Self-Healing in StrongerN.
+Implement Milestone 1 (R5: Exercise History Breakdown & Virtualization) in ExerciseInsightsModal.tsx and exerciseHistory.ts, and add comprehensive tests in r5_exerciseHistory.test.ts.
 
 ## 🔒 My Identity
 - Archetype: worker
 - Roles: implementer, qa, specialist
-- Working directory: c:\Antigravity\strongerN\.agents\worker_m1\
-- Original parent: b5551d07-52c4-4055-8613-600492c7c86c
-- Milestone: Milestone 1 - History Recovery & Tombstone Self-Healing
+- Working directory: c:\Antigravity\strongerN\.agents\worker_m1
+- Original parent: ae7dfce5-809d-4f8a-ba5f-b874d1e6ae57
+- Milestone: Milestone 1 (R5: Exercise History Breakdown & Virtualization)
 
 ## 🔒 Key Constraints
-- Exclusively owned files:
-  1. `src/storage/history/repository.ts`
-  2. `src/storage/persistenceBootstrap.ts`
-  3. `src/App.tsx` (persistence error logging in `loadData()`)
-- Genuine implementations only, no cheating or facades.
-- All tests and typechecks must pass.
+- File ownership exclusive to src/utils/exerciseHistory.ts, src/screens/ExerciseInsightsModal.tsx, src/__tests__/r5_exerciseHistory.test.ts
+- Genuine implementation, no hardcoding, no facades
+- AMOLED-first UI/UX with theme tokens
+- Virtualized FlatList for history tab, ScrollView for info and data tabs
 
 ## Current Parent
-- Conversation ID: b5551d07-52c4-4055-8613-600492c7c86c
-- Updated: 2026-08-18T19:51:55Z
+- Conversation ID: ae7dfce5-809d-4f8a-ba5f-b874d1e6ae57
+- Updated: 2026-08-19T21:13:30Z
 
 ## Task Summary
-- **What to build**:
-  - Implement `countTombstonedSessions()`, `restoreAllTombstonedSessions()`, `getDatabaseDiagnostics()` in repository.
-  - Update `insertMissingSessionsOnly()` to restore tombstoned sessions if ID exists with deleted_at_ms IS NOT NULL.
-  - In `bootstrapPersistence()`, check for tombstoned sessions and restore them so 300+ session history is self-healed and reloaded on startup.
-  - In `src/App.tsx`, log persistence load errors via `console.error` and `saveCrashLogSync`, removing silent warn.
-- **Success criteria**:
-  - Unit tests passing (`npm test`) -> 19 suites, 160 tests passing
-  - Typecheck passing (`npm run typecheck`) -> 0 errors
-- **Interface contracts**: PROJECT.md
+- **What to build**: Fix category fallback in exerciseHistory.ts ('S' instead of 'W') and gate PR calculation by completedCount, integrate buildExerciseSessionHistory into ExerciseInsightsModal.tsx with virtualized FlatList, PR badges, stat summary, collapsible set accordion, theme tokens, and write comprehensive unit/component tests in r5_exerciseHistory.test.ts.
+- **Success criteria**: All tests pass (10/10 passed), zero type errors in M1 owned files, clean virtualization & design token compliance.
+- **Interface contracts**: PROJECT.md / explorer_m1 handoff.md
+- **Code layout**: src/utils/exerciseHistory.ts, src/screens/ExerciseInsightsModal.tsx, src/__tests__/r5_exerciseHistory.test.ts
+
+## Key Decisions Made
+- Used `buildExerciseSessionHistory` from `exerciseHistory.ts` wrapped in `useMemo`.
+- Separated tab containers: top-level `<FlatList>` for history tab, `<ScrollView>` for info and data tabs to avoid nested virtualization warnings.
+- Integrated PR badges: `PR 1RM` in `colors.highlight` with `colors.highlightGlow`, `MAX WT` in `colors.gold` with `colors.goldGlow`.
+- Cleaned up raw RGBA / hex color values to use theme tokens (`colors.accentGlow`, `colors.errorGlow`).
+
+## Artifact Index
+- DISPATCH.md — Assignment instructions
+- progress.md — Heartbeat progress
+- handoff.md — Final handoff
 
 ## Change Tracker
 - **Files modified**:
-  - `src/storage/history/repository.ts`: Added tombstone recovery & diagnostics API, safe untombstoning in insertMissingSessionsOnly.
-  - `src/storage/persistenceBootstrap.ts`: Added startup self-healing for tombstoned sessions.
-  - `src/App.tsx`: Replaced silenced warn with console.error and saveCrashLogSync.
-  - `src/__tests__/historyRepositoryRecovery.test.ts`: Added 10 tests for recovery and diagnostics.
-- **Build status**: PASS (160 tests, 0 type errors)
+  - `src/utils/exerciseHistory.ts`: Set category default to 'S', gated PR tracking to completedCount > 0
+  - `src/screens/ExerciseInsightsModal.tsx`: Virtualized FlatList in History tab, PR badges, set breakdown accordion, separated tab scroll containers, theme token cleanup
+  - `src/__tests__/r5_exerciseHistory.test.ts`: Created 10 comprehensive unit and component tests
+- **Build status**: Pass (10/10 tests in `r5_exerciseHistory.test.ts` pass, 0 type errors in owned files)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: 19/19 suites passed, 160/160 tests passed.
-- **Lint status**: 0 violations.
-- **Tests added/modified**: `src/__tests__/historyRepositoryRecovery.test.ts` (10 tests).
+- **Build/test result**: Pass (10/10 tests pass)
+- **Lint status**: 0 violations
+- **Tests added/modified**: `src/__tests__/r5_exerciseHistory.test.ts` (10 unit/integration tests)
 
 ## Loaded Skills
 - None
-
-## Key Decisions Made
-- `countTombstonedSessions` returns 0 if DB connection is unavailable.
-- `restoreAllTombstonedSessions` updates `deleted_at_ms = NULL`, sets `updated_at_ms`, increments `revision`, and returns affected row count.
-- `insertMissingSessionsOnly` sets `deleted_at_ms = NULL` if session exists and was tombstoned.
-
-## Artifact Index
-- `c:\Antigravity\strongerN\.agents\worker_m1\DISPATCH.md` — Assignment
-- `c:\Antigravity\strongerN\.agents\worker_m1\BRIEFING.md` — Agent memory
-- `c:\Antigravity\strongerN\.agents\worker_m1\progress.md` — Progress tracker
-- `c:\Antigravity\strongerN\.agents\worker_m1\changes.md` — Changes report
-- `c:\Antigravity\strongerN\.agents\worker_m1\handoff.md` — Handoff report

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
+  FlatList,
   Pressable,
   TextInput,
   useWindowDimensions,
@@ -27,11 +28,42 @@ import {
   avgRepsPerWorkout,
 } from '../utils/exerciseStats';
 import { getExercisePercentile } from '../utils/strengthDistributionEngine';
+import {
+  buildExerciseSessionHistory,
+  ExerciseHistorySession,
+  ExerciseHistorySet,
+} from '../utils/exerciseHistory';
 
 import i18n from '../utils/i18n';
 import { getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 import { addVariationToExercise, removeVariationFromExercise, isValidTag } from '../utils/variationUtils';
 import { countCompletedSetsInExercise } from '../utils/setCounting';
+
+const getCategoryPillStyle = (category: string) => {
+  switch (category) {
+    case 'W':
+      return { backgroundColor: colors.surfaceHigh, borderColor: colors.border };
+    case 'D':
+      return { backgroundColor: colors.highlightGlow, borderColor: colors.highlight };
+    case 'F':
+      return { backgroundColor: colors.errorGlow, borderColor: colors.error };
+    default:
+      return { backgroundColor: colors.accentGlow, borderColor: colors.accent };
+  }
+};
+
+const getCategoryTextStyle = (category: string) => {
+  switch (category) {
+    case 'W':
+      return { color: colors.textMuted };
+    case 'D':
+      return { color: colors.highlight };
+    case 'F':
+      return { color: colors.error };
+    default:
+      return { color: colors.accent };
+  }
+};
 
 class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -248,6 +280,11 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     return count;
   }, [exerciseName, sessions]);
 
+  const historyData = useMemo(
+    () => buildExerciseSessionHistory(exerciseName, sessions),
+    [exerciseName, sessions]
+  );
+
   const handleClose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onClose();
@@ -261,6 +298,145 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
       setTimeout(() => setSavedJustNow(false), 2000);
     }
   }, [exerciseLibraryEntry, notes, onUpdateExerciseInsightsNotes]);
+
+  const renderEmptyHistory = useCallback(() => (
+    <View style={styles.emptyHistoryContainer}>
+      <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+      <Text style={styles.emptyHistoryText}>
+        {i18n.t('exerciseInsights.noHistoryFound')}
+      </Text>
+    </View>
+  ), []);
+
+  const renderHistoryCard = useCallback(({ item }: { item: ExerciseHistorySession }) => {
+    const isExpanded = !!expandedSessions[item.id];
+    const day = String(item.date.getDate()).padStart(2, '0');
+    const month = String(item.date.getMonth() + 1).padStart(2, '0');
+    const year = item.date.getFullYear();
+    const dateString = `${day}.${month}.${year}`;
+
+    return (
+      <Card
+        key={item.id}
+        padding={0}
+        style={styles.historyCard}
+      >
+        <Pressable
+          onPress={() => toggleSessionExpand(item.id)}
+          android_ripple={ripple.surface}
+          style={({ pressed }) => [
+            styles.cardPressable,
+            pressed && Platform.OS === 'ios' && { opacity: 0.7 },
+          ]}
+          testID={`history-session-card-${item.id}`}
+        >
+          {/* Card Header: Workout Title, Date & PR Badges */}
+          <View style={styles.historyCardHeader}>
+            <View style={styles.historyTitleRow}>
+              <Text style={styles.historyWorkoutTitle} numberOfLines={1}>
+                {item.workoutTitle}
+              </Text>
+              <Text style={styles.historyDateText}>{dateString}</Text>
+            </View>
+            <View style={styles.prBadgesRow}>
+              {item.isPr1RM && (
+                <View style={[styles.prBadge, { backgroundColor: colors.highlightGlow, borderColor: colors.highlight }]}>
+                  <Ionicons name="trophy" size={10} color={colors.highlight} style={{ marginRight: 3 }} />
+                  <Text style={[styles.prBadgeText, { color: colors.highlight }]}>PR 1RM</Text>
+                </View>
+              )}
+              {item.isPrWeight && (
+                <View style={[styles.prBadge, { backgroundColor: colors.goldGlow, borderColor: colors.gold }]}>
+                  <Ionicons name="flame" size={10} color={colors.gold} style={{ marginRight: 3 }} />
+                  <Text style={[styles.prBadgeText, { color: colors.gold }]}>MAX WT</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Metrics Summary Row */}
+          <View style={styles.metricsContainerCompact}>
+            <View style={[styles.metricColumnLeft, { alignItems: 'flex-start' }]}>
+              <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.bestSet')}</Text>
+              <Text style={styles.metricValue}>
+                {item.bestSet ? `${item.bestSet.weightKg}kg × ${item.bestSet.reps}` : '-'}
+              </Text>
+            </View>
+            <View style={[styles.metricColumnCenter, { alignItems: 'center' }]}>
+              <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.est1RM')}</Text>
+              <Text style={styles.metricValue}>
+                {item.best1RM > 0 ? `${item.best1RM}kg` : '-'}
+              </Text>
+            </View>
+            <View style={[styles.metricColumnRight, { alignItems: 'flex-end' }]}>
+              <Text style={styles.metricLabel}>{i18n.t('profile.sets', { defaultValue: 'SETS' }).toUpperCase()}</Text>
+              <Text style={styles.metricValue}>
+                {`${item.completedSetsCount}/${item.sets.length}`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.bottomChevronContainer}>
+            <Ionicons
+              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              size={14}
+              color={colors.textMuted}
+            />
+          </View>
+
+          {isExpanded && (
+            <View style={styles.expandedContainer}>
+              <View style={styles.expandedSetsList}>
+                {item.sets.map((set, setIdx) => (
+                  <View key={setIdx} style={styles.expandedSetRow}>
+                    <View style={styles.setRowLeft}>
+                      <Text style={styles.expandedSetIndexText}>
+                        {set.setNumber || setIdx + 1}
+                      </Text>
+                      {set.category && set.category !== 'S' && (
+                        <View style={[styles.categoryPill, getCategoryPillStyle(set.category)]}>
+                          <Text style={[styles.categoryPillText, getCategoryTextStyle(set.category)]}>
+                            {set.category}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.setRowCenter}>
+                      <Text style={styles.expandedSetDetailsText}>
+                        <Text style={styles.expandedSetValueText}>{set.weightKg}</Text>
+                        <Text style={styles.expandedSetUnitText}>kg</Text>
+                        <Text style={styles.expandedSetTimesText}>  ×  </Text>
+                        <Text style={styles.expandedSetValueText}>{set.reps}</Text>
+                        <Text style={styles.expandedSetUnitText}> reps</Text>
+                      </Text>
+                      {set.isUnilateral && (set.leftWeightKg !== undefined || set.rightWeightKg !== undefined) && (
+                        <Text style={styles.unilateralDetailsText}>
+                          {`L: ${set.leftWeightKg ?? set.weightKg}kg × ${set.leftReps ?? set.reps ?? '-'} | R: ${set.rightWeightKg ?? set.weightKg}kg × ${set.rightReps ?? set.reps ?? '-'}`}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.setRowRight}>
+                      {set.rpe !== undefined && (
+                        <Text style={styles.rpeText}>@{set.rpe}</Text>
+                      )}
+                      <Ionicons
+                        name={set.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={16}
+                        color={set.completed ? colors.success : colors.textMuted}
+                        style={{ marginLeft: spacing.xs }}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </Pressable>
+      </Card>
+    );
+  }, [expandedSessions, toggleSessionExpand]);
 
   return (
     <Modal
@@ -299,163 +475,154 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
           <SegmentedControl tabs={tabs} activeKey={activeTab} onChange={(k) => setActiveTab(k as any)} />
         </View>
 
-        {/* Tab Scroll Content */}
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <TabErrorBoundary key={activeTab}>
-            {activeTab === 'info' && (
-              <View style={styles.tabContent}>
-                {/* Only show image area if a real imageUri exists */}
-                {exerciseLibraryEntry?.imageUri && (
-                  <View style={styles.imagePlaceholder}>
-                    <Image
-                      source={{ uri: exerciseLibraryEntry.imageUri }}
-                      style={styles.exerciseImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                )}
+        {/* Tab Content */}
+        <TabErrorBoundary key={activeTab}>
+          {activeTab === 'history' ? (
+            <FlatList<ExerciseHistorySession>
+              data={historyData}
+              keyExtractor={(item) => item.id}
+              renderItem={renderHistoryCard}
+              contentContainerStyle={styles.historyListContent}
+              ListEmptyComponent={renderEmptyHistory}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
+            />
+          ) : (
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              {activeTab === 'info' && (
+                <View style={styles.tabContent}>
+                  {/* Only show image area if a real imageUri exists */}
+                  {exerciseLibraryEntry?.imageUri && (
+                    <View style={styles.imagePlaceholder}>
+                      <Image
+                        source={{ uri: exerciseLibraryEntry.imageUri }}
+                        style={styles.exerciseImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  )}
 
-                {/* 1 — Targeted Muscle Groups & Anatomy */}
-                {currentExercise?.muscleGroup && (
-                  <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.targetedMusclesHeader')}</Text>
-                    <View style={styles.badgesRow}>
-                      {/* Primary muscle — accent tint */}
-                      <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
-                        <Text style={[styles.detailsBadgeText, { color: colors.accent }]}>
-                          {getMuscleDisplayName(currentExercise.muscleGroup, exerciseNameLanguage).toUpperCase()}
-                        </Text>
-                      </View>
-
-                      {/* Secondary muscles — slightly dimmer accent tint */}
-                      <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
-                        <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
-                          {getSecondaryMuscles(currentExercise.muscleGroup).toUpperCase()}
-                        </Text>
-                      </View>
-
-                      {/* Equipment */}
-                      <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
-                        <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
-                          {(currentExercise.equipment || 'Other').toUpperCase()}
-                        </Text>
-                      </View>
-
-                      {/* Bilateral / Unilateral */}
-                      {currentExercise.isUnilateral !== undefined && (
-                        <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
-                          <Text style={[styles.detailsBadgeText, { color: colors.textMuted }]}>
-                            {currentExercise.isUnilateral ? 'UNILATERAL' : 'BILATERAL'}
+                  {/* 1 — Targeted Muscle Groups & Anatomy */}
+                  {currentExercise?.muscleGroup && (
+                    <Card style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.targetedMusclesHeader')}</Text>
+                      <View style={styles.badgesRow}>
+                        {/* Primary muscle — accent tint */}
+                        <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
+                          <Text style={[styles.detailsBadgeText, { color: colors.accent }]}>
+                            {getMuscleDisplayName(currentExercise.muscleGroup, exerciseNameLanguage).toUpperCase()}
                           </Text>
                         </View>
-                      )}
-                    </View>
-                  </Card>
-                )}
 
-                {/* 2 — Exercise Insights Notes (moved up to 2nd) */}
-                {exerciseLibraryEntry?.id && (
-                  <Card style={styles.sectionCard}>
-                    <View style={styles.notesHeader}>
-                      <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.notesHeader')}</Text>
-                      {savedJustNow && (
-                        <Text style={styles.savedBadgeText}>{i18n.t('common.saved', { defaultValue: 'Saved' })}</Text>
-                      )}
-                    </View>
-                    <TextInput
-                      style={styles.notesInput}
-                      value={notes}
-                      onChangeText={setNotes}
-                      onBlur={handleAutoSaveNotes}
-                      placeholder={i18n.t('exerciseInsights.notesPlaceholder')}
-                      placeholderTextColor={colors.textMuted}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                      testID="insights-notes-input"
-                    />
-                  </Card>
-                )}
-
-                {/* 3 — Variations & Tags (polished design) */}
-                {currentExercise && (
-                  <Card style={[styles.sectionCard, styles.tagsCard]}>
-                    <View style={styles.tagsCardHeader}>
-                      <View style={styles.tagsCardHeaderLeft}>
-                        <Ionicons name="bookmark-outline" size={14} color={colors.accent} />
-                        <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.variationsHeader')}</Text>
-                      </View>
-                      {currentExercise.variations && currentExercise.variations.length > 0 && (
-                        <View style={styles.tagCountBadge}>
-                          <Text style={styles.tagCountText}>{currentExercise.variations.length}</Text>
+                        {/* Secondary muscles — slightly dimmer accent tint */}
+                        <View style={[styles.detailsBadge, { backgroundColor: colors.accentGlow }]}>
+                          <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
+                            {getSecondaryMuscles(currentExercise.muscleGroup).toUpperCase()}
+                          </Text>
                         </View>
-                      )}
-                    </View>
 
-                    {currentExercise.variations && currentExercise.variations.length > 0 ? (
-                      <View style={styles.tagChipsContainer}>
-                        {currentExercise.variations.map((tag) => (
-                          <View key={tag} style={styles.cleanTagChip}>
-                            <Text style={styles.cleanTagChipText}>{tag}</Text>
-                            <Pressable
-                              onPress={() => {
-                                if (currentExercise) {
-                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  const updated = removeVariationFromExercise(currentExercise, tag);
-                                  setCurrentExercise(updated);
-                                  if (onUpdateExerciseVariations) {
-                                    onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
-                                  }
-                                }
-                              }}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              style={{ marginLeft: 6 }}
-                            >
-                              <Ionicons name="close-circle" size={14} color={colors.textMuted} />
-                            </Pressable>
+                        {/* Equipment */}
+                        <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
+                          <Text style={[styles.detailsBadgeText, { color: colors.textSecondary }]}>
+                            {(currentExercise.equipment || 'Other').toUpperCase()}
+                          </Text>
+                        </View>
+
+                        {/* Bilateral / Unilateral */}
+                        {currentExercise.isUnilateral !== undefined && (
+                          <View style={[styles.detailsBadge, { backgroundColor: colors.surfaceHigh }]}>
+                            <Text style={[styles.detailsBadgeText, { color: colors.textMuted }]}>
+                              {currentExercise.isUnilateral ? 'UNILATERAL' : 'BILATERAL'}
+                            </Text>
                           </View>
-                        ))}
+                        )}
                       </View>
-                    ) : (
-                      <Text style={styles.emptyTagText}>
-                        {i18n.t('exerciseInsights.noTagsYet')}
-                      </Text>
-                    )}
+                    </Card>
+                  )}
 
-                    <View style={styles.addTagRow}>
+                  {/* 2 — Exercise Insights Notes (moved up to 2nd) */}
+                  {exerciseLibraryEntry?.id && (
+                    <Card style={styles.sectionCard}>
+                      <View style={styles.notesHeader}>
+                        <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.notesHeader')}</Text>
+                        {savedJustNow && (
+                          <Text style={styles.savedBadgeText}>{i18n.t('common.saved', { defaultValue: 'Saved' })}</Text>
+                        )}
+                      </View>
                       <TextInput
-                        style={styles.addTagInput}
-                        placeholder={i18n.t('variations.placeholder', { defaultValue: 'e.g. gym, home...' })}
+                        style={styles.notesInput}
+                        value={notes}
+                        onChangeText={setNotes}
+                        onBlur={handleAutoSaveNotes}
+                        placeholder={i18n.t('exerciseInsights.notesPlaceholder')}
                         placeholderTextColor={colors.textMuted}
-                        value={newTagText}
-                        onChangeText={setNewTagText}
-                        keyboardAppearance="dark"
-                        maxLength={40}
-                        onSubmitEditing={() => {
-                          if (!newTagText.trim() || !currentExercise) return;
-                          if (!isValidTag(newTagText)) return;
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          const updated = addVariationToExercise(currentExercise, newTagText);
-                          setCurrentExercise(updated);
-                          if (onUpdateExerciseVariations) {
-                            onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
-                          }
-                          setNewTagText('');
-                        }}
-                        returnKeyType="done"
+                        multiline
+                        numberOfLines={3}
+                        textAlignVertical="top"
+                        testID="insights-notes-input"
                       />
-                      <Pressable
-                        style={styles.addTagBtn}
-                        onPress={() => {
-                          if (!newTagText.trim()) return;
-                          if (!isValidTag(newTagText)) {
-                            Alert.alert(
-                              i18n.t('common.error'),
-                              i18n.t('variations.tooLong', { defaultValue: 'Tag name too long (max 40 chars)' })
-                            );
-                            return;
-                          }
-                          if (currentExercise) {
+                    </Card>
+                  )}
+
+                  {/* 3 — Variations & Tags (polished design) */}
+                  {currentExercise && (
+                    <Card style={[styles.sectionCard, styles.tagsCard]}>
+                      <View style={styles.tagsCardHeader}>
+                        <View style={styles.tagsCardHeaderLeft}>
+                          <Ionicons name="bookmark-outline" size={14} color={colors.accent} />
+                          <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.variationsHeader')}</Text>
+                        </View>
+                        {currentExercise.variations && currentExercise.variations.length > 0 && (
+                          <View style={styles.tagCountBadge}>
+                            <Text style={styles.tagCountText}>{currentExercise.variations.length}</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {currentExercise.variations && currentExercise.variations.length > 0 ? (
+                        <View style={styles.tagChipsContainer}>
+                          {currentExercise.variations.map((tag) => (
+                            <View key={tag} style={styles.cleanTagChip}>
+                              <Text style={styles.cleanTagChipText}>{tag}</Text>
+                              <Pressable
+                                onPress={() => {
+                                  if (currentExercise) {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    const updated = removeVariationFromExercise(currentExercise, tag);
+                                    setCurrentExercise(updated);
+                                    if (onUpdateExerciseVariations) {
+                                      onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
+                                    }
+                                  }
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={{ marginLeft: 6 }}
+                              >
+                                <Ionicons name="close-circle" size={14} color={colors.textMuted} />
+                              </Pressable>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.emptyTagText}>
+                          {i18n.t('exerciseInsights.noTagsYet')}
+                        </Text>
+                      )}
+
+                      <View style={styles.addTagRow}>
+                        <TextInput
+                          style={styles.addTagInput}
+                          placeholder={i18n.t('variations.placeholder', { defaultValue: 'e.g. gym, home...' })}
+                          placeholderTextColor={colors.textMuted}
+                          value={newTagText}
+                          onChangeText={setNewTagText}
+                          keyboardAppearance="dark"
+                          maxLength={40}
+                          onSubmitEditing={() => {
+                            if (!newTagText.trim() || !currentExercise) return;
+                            if (!isValidTag(newTagText)) return;
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             const updated = addVariationToExercise(currentExercise, newTagText);
                             setCurrentExercise(updated);
@@ -463,271 +630,133 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                               onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
                             }
                             setNewTagText('');
-                          }
-                        }}
-                        android_ripple={ripple.accent}
-                      >
-                        <Text style={styles.addTagBtnText}>{i18n.t('common.add', { defaultValue: 'Add' })}</Text>
-                      </Pressable>
-                    </View>
-                  </Card>
-                )}
-
-                {/* 4 — Instructions */}
-                {exerciseLibraryEntry?.instructions && (
-                  <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.instructionsHeader')}</Text>
-                    {(Array.isArray(exerciseLibraryEntry.instructions)
-                      ? exerciseLibraryEntry.instructions
-                      : [exerciseLibraryEntry.instructions]
-                    ).map((step: string, idx: number) => (
-                      <View key={idx} style={styles.instructionStep}>
-                        <View style={styles.stepBadge}>
-                          <Text style={styles.stepBadgeText}>{idx + 1}</Text>
-                        </View>
-                        <Text style={styles.instructionText}>{step}</Text>
+                          }}
+                          returnKeyType="done"
+                        />
+                        <Pressable
+                          style={styles.addTagBtn}
+                          onPress={() => {
+                            if (!newTagText.trim()) return;
+                            if (!isValidTag(newTagText)) {
+                              Alert.alert(
+                                i18n.t('common.error'),
+                                i18n.t('variations.tooLong', { defaultValue: 'Tag name too long (max 40 chars)' })
+                              );
+                              return;
+                            }
+                            if (currentExercise) {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              const updated = addVariationToExercise(currentExercise, newTagText);
+                              setCurrentExercise(updated);
+                              if (onUpdateExerciseVariations) {
+                                onUpdateExerciseVariations(currentExercise.id, updated.variations || []);
+                              }
+                              setNewTagText('');
+                            }
+                          }}
+                          android_ripple={ripple.accent}
+                        >
+                          <Text style={styles.addTagBtnText}>{i18n.t('common.add', { defaultValue: 'Add' })}</Text>
+                        </Pressable>
                       </View>
-                    ))}
-                  </Card>
-                )}
+                    </Card>
+                  )}
 
-                {/* Delete custom exercise */}
-                {exerciseLibraryEntry?.id.startsWith('ex-custom-') && onDeleteExercise && (
-                  <Pressable
-                    style={styles.deleteExBtn}
-                    onPress={() => {
-                      if (onDeleteExercise && exerciseLibraryEntry) {
-                        onDeleteExercise(exerciseLibraryEntry.id);
-                        onClose();
-                      }
-                    }}
-                    android_ripple={ripple.borderless}
-                  >
-                    <Ionicons name="trash-outline" size={16} color={colors.error} />
-                    <Text style={styles.deleteExBtnText}>{i18n.t('extras.deleteExerciseBtn', { defaultValue: 'DELETE EXERCISE' })}</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-
-            {activeTab === 'data' && (
-              <View style={styles.tabContent}>
-                {chartData.has1RMData && (
-                  hasValidProfileMetrics ? (
-                    <View style={styles.chartWrapper}>
-                      <DistributionChart
-                        title={i18n.t('exerciseInsights.est1RMDistribution')}
-                        percentile={strengthPercentile}
-                      />
-                    </View>
-                  ) : (
-                    <View style={styles.chartWrapper}>
-                      <Card style={styles.percentileHintCard} padding={spacing.md}>
-                        <View style={styles.percentileHintRow}>
-                          <Ionicons name="information-circle-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
-                          <Text style={styles.percentileHintText}>
-                            {i18n.t('exerciseInsights.percentileHint', { defaultValue: 'Set bodyweight & gender in Profile to unlock strength percentiles' })}
-                          </Text>
-                        </View>
-                      </Card>
-                    </View>
-                  )
-                )}
-
-                <View style={styles.chartWrapper}>
-                  <LineChart
-                    title={i18n.t('exerciseInsights.est1RMOverTime')}
-                    data={chartData.series1RM}
-                    color={colors.accent}
-                    height={150}
-                    yAxisFormatter={(val) => `${Math.round(val)}kg`}
-                  />
-                </View>
-
-                <View style={styles.chartWrapper}>
-                  <LineChart
-                    title={i18n.t('exerciseInsights.setsPerWeek')}
-                    data={chartData.weeklySetsSeries}
-                    color={colors.accent}
-                    height={150}
-                    yAxisFormatter={(val) => `${Math.round(val)} sets`}
-                  />
-                </View>
-
-                <View style={styles.chartWrapper}>
-                  <LineChart
-                    title={i18n.t('exerciseInsights.avgRepsPerWorkout')}
-                    data={chartData.repsSeries}
-                    color={colors.highlight}
-                    height={150}
-                    yAxisFormatter={(val) => `${Math.round(val * 10) / 10}`}
-                  />
-                </View>
-              </View>
-            )}
-
-            {activeTab === 'history' && (
-              <View style={styles.tabContent}>
-                {(() => {
-                  try {
-                    const history = Array.isArray(sessions) ? sessions.reduce<any[]>((acc, session) => {
-                      if (!session || !Array.isArray(session.exercises)) return acc;
-                      const ex = session.exercises.find((e: any) => 
-                        e && (
-                          (typeof e.name === 'string' && e.name.toLowerCase() === exerciseName.toLowerCase()) ||
-                          (e.id && exerciseLibraryEntry?.id && e.id === exerciseLibraryEntry.id)
-                        )
-                      );
-                      if (ex) {
-                        const rawSets = Array.isArray(ex.sets) ? ex.sets : (Array.isArray(ex.setsDetails) ? ex.setsDetails : []);
-                        const normalizedSets = rawSets
-                          .filter((s: any) => s != null)
-                          .map((s: any) => ({
-                            weightKg: Number(s.weightKg ?? s.weight ?? 0),
-                            reps: Number(s.reps ?? 0),
-                          }))
-                          .filter((s: any) => !isNaN(s.reps) && !isNaN(s.weightKg) && (s.reps > 0 || s.weightKg > 0));
-
-                        if (normalizedSets.length > 0) {
-                          const dt = session.datetime ? new Date(session.datetime) : ((session as any).date ? new Date((session as any).date) : new Date());
-                          const validDate = isNaN(dt.getTime()) ? new Date() : dt;
-                          acc.push({
-                            id: session.id || `sess-${validDate.getTime()}-${Math.random()}`,
-                            date: validDate,
-                            sets: normalizedSets,
-                          });
-                        }
-                      }
-                      return acc;
-                    }, []) : [];
-
-                    if (history.length === 0) {
-                      return (
-                        <View style={styles.emptyHistoryContainer}>
-                          <Ionicons name="time-outline" size={48} color={colors.textMuted} />
-                          <Text style={styles.emptyHistoryText}>
-                            {i18n.t('exerciseInsights.noHistoryFound')}
-                          </Text>
-                        </View>
-                      );
-                    }
-
-                    const validHistory = history.filter((h) => h && h.date && !isNaN(new Date(h.date).getTime()));
-                    const sortedHistory = [...validHistory].sort(
-                      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-                    );
-
-                    return (
-                      <View style={styles.historyList}>
-                        {sortedHistory.map((entry, idx) => {
-                        const sets = entry.sets || [];
-                        let bestSet = sets[0] || { weightKg: 0, reps: 0 };
-                        let bestSet1RM = 0;
-                        sets.forEach((s: any) => {
-                          if (!s) return;
-                          const s1RM = estimate1RM(s.weightKg, s.reps);
-                          if (!isNaN(s1RM) && s1RM >= bestSet1RM) {
-                            bestSet1RM = s1RM;
-                            bestSet = s;
-                          }
-                        });
-
-                        const sessionEst1RM = Math.max(0, bestSet1RM);
-                        const isExpanded = !!expandedSessions[entry.id];
-
-                        const day = String(entry.date.getDate()).padStart(2, '0');
-                        const month = String(entry.date.getMonth() + 1).padStart(2, '0');
-                        const year = entry.date.getFullYear();
-                        const dateString = `${day}.${month}.${year}`;
-
-                        const chevronElement = (
-                          <View style={styles.bottomChevronContainer}>
-                            <Ionicons
-                              name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                              size={14}
-                              color={colors.textMuted}
-                            />
+                  {/* 4 — Instructions */}
+                  {exerciseLibraryEntry?.instructions && (
+                    <Card style={styles.sectionCard}>
+                      <Text style={styles.sectionTitle}>{i18n.t('exerciseInsights.instructionsHeader')}</Text>
+                      {(Array.isArray(exerciseLibraryEntry.instructions)
+                        ? exerciseLibraryEntry.instructions
+                        : [exerciseLibraryEntry.instructions]
+                      ).map((step: string, idx: number) => (
+                        <View key={idx} style={styles.instructionStep}>
+                          <View style={styles.stepBadge}>
+                            <Text style={styles.stepBadgeText}>{idx + 1}</Text>
                           </View>
-                        );
+                          <Text style={styles.instructionText}>{step}</Text>
+                        </View>
+                      ))}
+                    </Card>
+                  )}
 
-                        return (
-                          <Card
-                            key={entry.id}
-                            padding={0}
-                            style={styles.historyCard}
-                          >
-                            <Pressable
-                              onPress={() => toggleSessionExpand(entry.id)}
-                              android_ripple={ripple.surface}
-                              style={({ pressed }) => [
-                                styles.cardPressable,
-                                pressed && Platform.OS === 'ios' && { opacity: 0.7 }
-                              ]}
-                            >
-                              <View style={styles.metricsContainerCompact}>
-                                <View style={[styles.metricColumnLeft, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.bestSet')}</Text>
-                                  <Text style={styles.metricValue}>
-                                    {bestSet.weightKg}kg × {bestSet.reps}
-                                  </Text>
-                                </View>
-                                <View style={[styles.metricColumnCenter, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.date')}</Text>
-                                  <Text style={styles.dateTextLargePrimary}>{dateString}</Text>
-                                </View>
-                                <View style={[styles.metricColumnRight, { alignItems: 'center' }]}>
-                                  <Text style={styles.metricLabel}>{i18n.t('exerciseInsights.est1RM')}</Text>
-                                  <Text style={styles.metricValue}>
-                                    {Math.round(sessionEst1RM)}kg
-                                  </Text>
-                                </View>
-                              </View>
-                              {chevronElement}
+                  {/* Delete custom exercise */}
+                  {exerciseLibraryEntry?.id.startsWith('ex-custom-') && onDeleteExercise && (
+                    <Pressable
+                      style={styles.deleteExBtn}
+                      onPress={() => {
+                        if (onDeleteExercise && exerciseLibraryEntry) {
+                          onDeleteExercise(exerciseLibraryEntry.id);
+                          onClose();
+                        }
+                      }}
+                      android_ripple={ripple.borderless}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.error} />
+                      <Text style={styles.deleteExBtnText}>{i18n.t('extras.deleteExerciseBtn', { defaultValue: 'DELETE EXERCISE' })}</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
 
-                              {isExpanded && (
-                                <View style={styles.expandedContainer}>
-                                  <View style={styles.expandedSetsList}>
-                                    {entry.sets.map((set: any, setIdx: number) => {
-                                      return (
-                                        <View key={setIdx} style={styles.expandedSetRow}>
-                                          <Text style={styles.expandedSetIndexText}>
-                                            {setIdx + 1}
-                                          </Text>
-                                          <Text style={styles.expandedSetDetailsText}>
-                                            <Text style={styles.expandedSetValueText}>{set.reps}</Text>
-                                            <Text style={styles.expandedSetUnitText}> reps</Text>
-                                            <Text style={styles.expandedSetTimesText}>  ×  </Text>
-                                            <Text style={styles.expandedSetValueText}>{set.weightKg}</Text>
-                                            <Text style={styles.expandedSetUnitText}> kg</Text>
-                                          </Text>
-                                        </View>
-                                      );
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-                            </Pressable>
-                          </Card>
-                        );
-                      })}
-                    </View>
-                  );
-                  } catch (err) {
-                    console.error('Error computing exercise history:', err);
-                    return (
-                      <View style={styles.emptyHistoryContainer}>
-                        <Ionicons name="time-outline" size={48} color={colors.textMuted} />
-                        <Text style={styles.emptyHistoryText}>
-                          {i18n.t('exerciseInsights.noHistoryFound')}
-                        </Text>
+              {activeTab === 'data' && (
+                <View style={styles.tabContent}>
+                  {chartData.has1RMData && (
+                    hasValidProfileMetrics ? (
+                      <View style={styles.chartWrapper}>
+                        <DistributionChart
+                          title={i18n.t('exerciseInsights.est1RMDistribution')}
+                          percentile={strengthPercentile}
+                        />
                       </View>
-                    );
-                  }
-                })()}
-              </View>
-            )}
-          </TabErrorBoundary>
-        </ScrollView>
+                    ) : (
+                      <View style={styles.chartWrapper}>
+                        <Card style={styles.percentileHintCard} padding={spacing.md}>
+                          <View style={styles.percentileHintRow}>
+                            <Ionicons name="information-circle-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                            <Text style={styles.percentileHintText}>
+                              {i18n.t('exerciseInsights.percentileHint', { defaultValue: 'Set bodyweight & gender in Profile to unlock strength percentiles' })}
+                            </Text>
+                          </View>
+                        </Card>
+                      </View>
+                    )
+                  )}
+
+                  <View style={styles.chartWrapper}>
+                    <LineChart
+                      title={i18n.t('exerciseInsights.est1RMOverTime')}
+                      data={chartData.series1RM}
+                      color={colors.accent}
+                      height={150}
+                      yAxisFormatter={(val) => `${Math.round(val)}kg`}
+                    />
+                  </View>
+
+                  <View style={styles.chartWrapper}>
+                    <LineChart
+                      title={i18n.t('exerciseInsights.setsPerWeek')}
+                      data={chartData.weeklySetsSeries}
+                      color={colors.accent}
+                      height={150}
+                      yAxisFormatter={(val) => `${Math.round(val)} sets`}
+                    />
+                  </View>
+
+                  <View style={styles.chartWrapper}>
+                    <LineChart
+                      title={i18n.t('exerciseInsights.avgRepsPerWorkout')}
+                      data={chartData.repsSeries}
+                      color={colors.highlight}
+                      height={150}
+                      yAxisFormatter={(val) => `${Math.round(val * 10) / 10}`}
+                    />
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </TabErrorBoundary>
       </SafeAreaView>
     </Modal>
   );
@@ -864,19 +893,68 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
-  historyList: {
+  historyListContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
     gap: spacing.md,
   },
   historyCard: {
     overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
   },
   cardPressable: {
     padding: spacing.md,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  historyTitleRow: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  historyWorkoutTitle: {
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
+    color: colors.textPrimary,
+  },
+  historyDateText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  prBadgesRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  prBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  prBadgeText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.bold,
+    letterSpacing: 0.5,
   },
   metricsContainerCompact: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   metricColumnLeft: {
     flex: 1,
@@ -899,11 +977,6 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     color: colors.textPrimary,
   },
-  dateTextLargePrimary: {
-    fontSize: font.sizes.sm,
-    fontFamily: font.semibold,
-    color: colors.textSecondary,
-  },
   bottomChevronContainer: {
     alignItems: 'center',
     marginTop: spacing.xs,
@@ -920,13 +993,43 @@ const styles = StyleSheet.create({
   expandedSetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  setRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 60,
+    gap: spacing.xs,
+  },
+  setRowCenter: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  setRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minWidth: 50,
+  },
+  categoryPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+  },
+  categoryPillText: {
+    fontSize: 10,
+    fontFamily: font.bold,
   },
   expandedSetIndexText: {
-    width: 24,
     fontSize: font.sizes.xs,
     fontFamily: font.bold,
     color: colors.textMuted,
+    width: 18,
   },
   expandedSetDetailsText: {
     fontSize: font.sizes.sm,
@@ -941,6 +1044,18 @@ const styles = StyleSheet.create({
   },
   expandedSetTimesText: {
     color: colors.textMuted,
+  },
+  unilateralDetailsText: {
+    fontSize: 10,
+    fontFamily: font.medium,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  rpeText: {
+    fontSize: font.sizes.xs,
+    fontFamily: font.semibold,
+    color: colors.textSecondary,
+    marginRight: spacing.xs,
   },
   badgesRow: {
     flexDirection: 'row',
@@ -969,7 +1084,7 @@ const styles = StyleSheet.create({
   cleanTagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(79, 142, 247, 0.15)',
+    backgroundColor: colors.accentGlow,
     borderColor: colors.accent,
     borderWidth: 1,
     borderRadius: radius.full,
@@ -1026,10 +1141,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.md,
-    backgroundColor: colors.error + '15',
+    backgroundColor: colors.errorGlow,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.error + '40',
+    borderColor: colors.errorGlow,
     marginTop: spacing.md,
   },
   deleteExBtnText: {
@@ -1040,7 +1155,7 @@ const styles = StyleSheet.create({
   },
   tagsCard: {
     borderWidth: 1,
-    borderColor: colors.accent + '25',
+    borderColor: colors.accentGlow,
   },
   tagsCardHeader: {
     flexDirection: 'row',

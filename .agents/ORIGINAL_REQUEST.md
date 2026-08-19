@@ -55,3 +55,37 @@ Integrity mode: development
 - [ ] Full functional parity: Login flow, Workout execution & rest timer, History, Measurement sheet, Sounds/Haptics, Language switching (EN ↔ HE), and Deep linking (`strongern://`).
 - [ ] `npm test` and `npm run typecheck` pass with zero errors.
 - [ ] Regression guard test added for APK font census.
+
+## 2026-08-19T21:04:48Z
+
+Complete remaining production launch milestones for StrongerN (R5 Exercise History Breakdown & Virtualization, R7 Reanimated 120 FPS Polish, and R10 Hardcode & i18n Cleanup + Version Bump + Release APK Build).
+
+Working directory: c:\Antigravity\strongerN
+Integrity mode: development
+
+## Requirements
+
+### R1. Exercise History Breakdown & Virtualization (R5)
+- Finish integrating `src/utils/exerciseHistory.ts` into `src/screens/ExerciseInsightsModal.tsx`.
+- Replace the legacy session map in the History tab with a performant virtualized `FlatList` displaying session cards, PR badges, and collapsible set details.
+- Add unit test in `src/__tests__/r5_exerciseHistory.test.ts`.
+
+### R2. Premium Animation Polish at 120 FPS (R7)
+- In `src/components/layout/ActiveWorkoutModal.tsx`, migrate remaining slide/fade modal animations to Reanimated UI-thread worklets (`useSharedValue`, `useAnimatedStyle`, `withTiming`).
+- Ensure no JS-thread jank during modal presentation, dismiss, or active set toggles.
+- Add unit test in `src/__tests__/r7_animationPolish.test.ts`.
+
+### R3. Hardcode Cleanup, i18n, Version Bump & APK Build (R10)
+- Audit hardcoded strings and colors to ensure token and i18n (EN+HE) compliance.
+- Increment app version in `app.json` and in translation keys `profile.version` in `src/utils/i18n.ts` (both English and Hebrew).
+- Run `npm test` and `npm run typecheck` to verify zero errors.
+- Build release standalone APK via `cmd /c build-apk.bat --auto`.
+- Commit and push all milestones to `master` and update the knowledge graph with `graphify update .`.
+
+## Acceptance Criteria
+- [ ] `npm test` passes 100% across all suites.
+- [ ] `npm run typecheck` passes with 0 errors.
+- [ ] Standalone release APK builds and installs cleanly via `build-apk.bat --auto`.
+- [ ] Version incremented and reported at the end.
+- [ ] Changes pushed to `master` and graph updated via `graphify update .`.
+

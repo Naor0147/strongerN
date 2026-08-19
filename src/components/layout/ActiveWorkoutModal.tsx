@@ -20,8 +20,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, withRepeat, withSequence, runOnJS, Easing, cancelAnimation, withDelay, useAnimatedRef } from 'react-native-reanimated';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as RN from 'react-native';
+import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -44,7 +43,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import i18n from '../../utils/i18n';
 import * as Haptics from 'expo-haptics';
-import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
+import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
 import { ExerciseSet } from '../../data/mockData';
 import IconButton from '../ui/IconButton';
 import { CustomWorkoutKeyboard } from '../ui/CustomWorkoutKeyboard';
@@ -162,32 +161,51 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [isWorkoutNoteActive, setIsWorkoutNoteActive] = useState<boolean>(() => !!(editingComment && editingComment.trim().length > 0));
   const [isWorkoutNoteLocked, setIsWorkoutNoteLocked] = useState<boolean>(false);
 
-  // Transparent dark modal slide animation
+  // Transparent dark modal slide animation (Reanimated 3 UI-thread worklet)
   const [modalRendered, setModalRendered] = useState(visible);
-  const slideAnim = useRef(new RN.Animated.Value(visible ? 0 : (windowHeight || 800))).current;
+  const translateY = useSharedValue(visible ? 0 : (windowHeight || 800));
 
   useEffect(() => {
     if (visible) {
       setModalRendered(true);
-      RN.Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 280,
-        easing: RN.Easing.out(RN.Easing.cubic),
-        useNativeDriver: true,
-      }).start();
+      if (globalAnimation.speed === 0) {
+        translateY.value = 0;
+      } else {
+        translateY.value = withTiming(0, {
+          duration: getScaledDuration(280),
+          easing: Easing.out(Easing.cubic),
+        });
+      }
     } else if (modalRendered) {
-      RN.Animated.timing(slideAnim, {
-        toValue: windowHeight || 800,
-        duration: 240,
-        easing: RN.Easing.in(RN.Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) {
-          setModalRendered(false);
-        }
-      });
+      if (globalAnimation.speed === 0) {
+        translateY.value = windowHeight || 800;
+        setModalRendered(false);
+      } else {
+        translateY.value = withTiming(
+          windowHeight || 800,
+          {
+            duration: getScaledDuration(240),
+            easing: Easing.in(Easing.cubic),
+          },
+          (finished) => {
+            'worklet';
+            if (finished) {
+              runOnJS(setModalRendered)(false);
+            }
+          }
+        );
+      }
     }
-  }, [visible, windowHeight, slideAnim, modalRendered]);
+    return () => {
+      cancelAnimation(translateY);
+    };
+  }, [visible, windowHeight, modalRendered, translateY]);
+
+  const animatedModalStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    backgroundColor: colors.bg,
+    transform: [{ translateY: translateY.value }],
+  }));
   const {
     isWorkoutMenuVisible,
     setIsWorkoutMenuVisible,
@@ -402,167 +420,56 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const mountedRef = useRef(true);
 
-  // Bottom Sheet Swipe gesture translation and PanResponders
-  const sheetTranslateY = useRef(new RN.Animated.Value(0)).current;
+  // Bottom Sheet Swipe gesture translation & Reanimated 3 UI-thread worklets
+  const sheetTranslateY = useSharedValue(0);
 
-  // PanResponder for Exercise Menu bottom sheet
-  const exMenuPanResponder = useRef(
-    RN.PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only drag if it is downward vertical movement
-        return gestureState.dy > 8 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          sheetTranslateY.setValue(gestureState.dy);
+  const createSheetPanGesture = useCallback((onDismiss: () => void) => {
+    return Gesture.Pan()
+      .activeOffsetY([0, 10])
+      .failOffsetX([-15, 15])
+      .onUpdate((e) => {
+        'worklet';
+        if (e.translationY > 0) {
+          sheetTranslateY.value = e.translationY;
         }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
-          RN.Animated.timing(sheetTranslateY, {
-            toValue: 600,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => {
-            if (!mountedRef.current) return;
-            setIsExMenuVisible(false);
-            sheetTranslateY.setValue(0);
-          });
+      })
+      .onEnd((e) => {
+        'worklet';
+        if (e.translationY > 80 || e.velocityY > 400) {
+          if (globalAnimation.speed === 0) {
+            sheetTranslateY.value = 0;
+            runOnJS(onDismiss)();
+          } else {
+            sheetTranslateY.value = withTiming(
+              600,
+              { duration: getScaledDuration(180) },
+              (finished) => {
+                'worklet';
+                if (finished) {
+                  runOnJS(onDismiss)();
+                  sheetTranslateY.value = 0;
+                }
+              }
+            );
+          }
         } else {
-          RN.Animated.spring(sheetTranslateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
+          if (globalAnimation.speed === 0) {
+            sheetTranslateY.value = 0;
+          } else {
+            sheetTranslateY.value = withSpring(0, getSpringConfig(180, 18));
+          }
         }
-      },
-      onPanResponderTerminate: () => {
-        RN.Animated.spring(sheetTranslateY, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+      });
+  }, [sheetTranslateY]);
 
-  // PanResponder for Timer Picker bottom sheet
-  const timerPickerPanResponder = useRef(
-    RN.PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 8 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          sheetTranslateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
-          RN.Animated.timing(sheetTranslateY, {
-            toValue: 600,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => {
-            if (!mountedRef.current) return;
-            setIsTimerPickerVisible(false);
-            sheetTranslateY.setValue(0);
-          });
-        } else {
-          RN.Animated.spring(sheetTranslateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        RN.Animated.spring(sheetTranslateY, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+  const exMenuPanGesture = useMemo(() => createSheetPanGesture(() => setIsExMenuVisible(false)), [createSheetPanGesture]);
+  const timerPickerPanGesture = useMemo(() => createSheetPanGesture(() => setIsTimerPickerVisible(false)), [createSheetPanGesture]);
+  const defaultTimerPanGesture = useMemo(() => createSheetPanGesture(() => setIsDefaultTimerPickerVisible(false)), [createSheetPanGesture]);
+  const workoutMenuPanGesture = useMemo(() => createSheetPanGesture(() => setIsWorkoutMenuVisible(false)), [createSheetPanGesture]);
 
-  // PanResponder for Default Timer bottom sheet
-  const defaultTimerPanResponder = useRef(
-    RN.PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 8 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          sheetTranslateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
-          RN.Animated.timing(sheetTranslateY, {
-            toValue: 600,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => {
-            if (!mountedRef.current) return;
-            setIsDefaultTimerPickerVisible(false);
-            sheetTranslateY.setValue(0);
-          });
-        } else {
-          RN.Animated.spring(sheetTranslateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        RN.Animated.spring(sheetTranslateY, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
-
-  // PanResponder for Workout Menu bottom sheet
-  const workoutMenuPanResponder = useRef(
-    RN.PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 8 && Math.abs(gestureState.dx) < Math.abs(gestureState.dy);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          sheetTranslateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 80 || gestureState.vy > 0.4) {
-          RN.Animated.timing(sheetTranslateY, {
-            toValue: 600,
-            duration: 180,
-            useNativeDriver: true,
-          }).start(() => {
-            if (!mountedRef.current) return;
-            setIsWorkoutMenuVisible(false);
-            sheetTranslateY.setValue(0);
-          });
-        } else {
-          RN.Animated.spring(sheetTranslateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        RN.Animated.spring(sheetTranslateY, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+  const animatedSheetCardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
 
 
   // Drag-and-drop reorder state for exercises
@@ -593,13 +500,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     
     let sideWeight = (target - barWeight) / 2;
     const availablePlates = [
-      { size: 25, color: '#EF4444', textColor: '#FFFFFF' },
-      { size: 20, color: '#3B82F6', textColor: '#FFFFFF' },
-      { size: 15, color: '#FBBF24', textColor: '#0D0F14' },
-      { size: 10, color: '#10B981', textColor: '#FFFFFF' },
-      { size: 5,  color: '#EEF1F6', textColor: '#0D0F14' },
-      { size: 2.5, color: '#374151', textColor: '#FFFFFF' },
-      { size: 1.25, color: '#6B7280', textColor: '#FFFFFF' },
+      { size: 25, color: colors.error, textColor: colors.textPrimary },
+      { size: 20, color: colors.accent, textColor: colors.textPrimary },
+      { size: 15, color: colors.gold, textColor: colors.bg },
+      { size: 10, color: colors.success, textColor: colors.textPrimary },
+      { size: 5,  color: colors.textPrimary, textColor: colors.bg },
+      { size: 2.5, color: colors.surfaceHigh, textColor: colors.textPrimary },
+      { size: 1.25, color: colors.borderStrong, textColor: colors.textPrimary },
     ];
     
     const result: typeof availablePlates = [];
@@ -617,10 +524,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Map each unique superSetGroupId to a dynamic color from theme
   const superSetColors = useMemo(() => {
     const colorsList = [
-      '#4F8EF7', // Electric Blue
-      '#38BDF8', // Neon Sky Blue
-      '#6366F1', // Sporty Indigo
-      '#22D97A', // Emerald Green
+      colors.accent,
+      colors.highlight,
+      colors.gold,
+      colors.success,
     ];
     const map: Record<string, string> = {};
     let colorIdx = 0;
@@ -1201,12 +1108,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
-      <RN.Animated.View
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg,
-          transform: [{ translateY: slideAnim }],
-        }}
+      <Animated.View
+        style={animatedModalStyle}
       >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1272,7 +1175,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   android_ripple={rippleTokens.accent}
                   accessibilityLabel="Finish workout"
                 >
-                  <Ionicons name="checkmark" size={20} color="#0D0F14" />
+                  <Ionicons name="checkmark" size={20} color={colors.textInverse} />
                 </Pressable>
               </View>
             </View>
@@ -1512,25 +1415,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {isExMenuVisible && activeExerciseMenuIndex !== null && (
               <Modal
                 visible={isExMenuVisible}
-                animationType="fade"
+                animationType="none"
                 transparent
                 onRequestClose={() => setIsExMenuVisible(false)}
               >
-                <Pressable
-                  style={styles.sheetBackdrop}
-                  onPress={() => setIsExMenuVisible(false)}
-                  testID="ex-menu-backdrop"
-                >
-                  <RN.Animated.View
-                    style={[
-                      styles.sheetCard,
-                      { transform: [{ translateY: sheetTranslateY }] }
-                    ]}
-                    onStartShouldSetResponder={() => true}
-                    onResponderTerminationRequest={() => false}
-                    {...exMenuPanResponder.panHandlers}
-                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                  <Pressable
+                    style={styles.sheetBackdrop}
+                    onPress={() => setIsExMenuVisible(false)}
+                    testID="ex-menu-backdrop"
                   >
+                    <GestureDetector gesture={exMenuPanGesture}>
+                      <Animated.View
+                        style={[
+                          styles.sheetCard,
+                          animatedSheetCardStyle
+                        ]}
+                        onStartShouldSetResponder={() => true}
+                        onResponderTerminationRequest={() => false}
+                        {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                      >
                     <View style={styles.dragHandleContainer}>
                       <View style={styles.sheetDragHandle} />
                     </View>
@@ -1723,71 +1627,76 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           : i18n.t('extras.switchToUnilateral')}
                       </Text>
                     </Pressable>
-                  </RN.Animated.View>
-                </Pressable>
-              </Modal>
+                  </Animated.View>
+                </GestureDetector>
+              </Pressable>
+            </GestureHandlerRootView>
+          </Modal>
             )}
 
             {/* Modal E: Set Auto-Timer for Active Exercise */}
             {isTimerPickerVisible && activeExerciseMenuIndex !== null && (
               <Modal
                 visible={isTimerPickerVisible}
-                animationType="slide"
+                animationType="none"
                 transparent
                 onRequestClose={() => setIsTimerPickerVisible(false)}
               >
-                <Pressable
-                  style={styles.sheetBackdrop}
-                  onPress={() => setIsTimerPickerVisible(false)}
-                  testID="timer-picker-backdrop"
-                >
-                  <RN.Animated.View
-                    style={[
-                      styles.sheetCard,
-                      { transform: [{ translateY: sheetTranslateY }] }
-                    ]}
-                    onStartShouldSetResponder={() => true}
-                    onResponderTerminationRequest={() => false}
-                    {...timerPickerPanResponder.panHandlers}
-                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                  <Pressable
+                    style={styles.sheetBackdrop}
+                    onPress={() => setIsTimerPickerVisible(false)}
+                    testID="timer-picker-backdrop"
                   >
-                    <View style={styles.dragHandleContainer}>
-                      <View style={styles.sheetDragHandle} />
-                    </View>
+                    <GestureDetector gesture={timerPickerPanGesture}>
+                      <Animated.View
+                        style={[
+                          styles.sheetCard,
+                          animatedSheetCardStyle
+                        ]}
+                        onStartShouldSetResponder={() => true}
+                        onResponderTerminationRequest={() => false}
+                        {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                      >
+                        <View style={styles.dragHandleContainer}>
+                          <View style={styles.sheetDragHandle} />
+                        </View>
 
-                    <Text style={styles.sheetTitle}>
-                      {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
-                    </Text>
+                        <Text style={styles.sheetTitle}>
+                          {activeExercises[activeExerciseMenuIndex].name.toUpperCase()}
+                        </Text>
 
-                    {/* Rest Timer Picker wrapper */}
-                    <View style={{ marginVertical: spacing.md }}>
-                      <RestTimerPicker
-                        value={autoTimerDraft}
-                        defaultValue={defaultRestDuration}
-                        max={1000}
-                        step={5}
-                        onChange={setAutoTimerDraft}
-                        onCommit={setAutoTimerDraft}
-                        onReset={() => setAutoTimerDraft(defaultRestDuration)}
-                        onSave={() => {
-                          if (autoTimerDraft <= 0 || autoTimerDraft > 1000) {
-                            WebSafeAlert.alert(i18n.t('restTimer.invalidInput'), i18n.t('restTimer.selectValidDuration'));
-                            return;
-                          }
-                          setActiveExercises(prev => {
-                            const updated = [...prev];
-                            updated[activeExerciseMenuIndex] = {
-                              ...updated[activeExerciseMenuIndex],
-                              autoTimer: autoTimerDraft === defaultRestDuration ? undefined : autoTimerDraft,
-                            };
-                            return updated;
-                          });
-                          setIsTimerPickerVisible(false);
-                        }}
-                      />
-                    </View>
-                  </RN.Animated.View>
-                </Pressable>
+                        {/* Rest Timer Picker wrapper */}
+                        <View style={{ marginVertical: spacing.md }}>
+                          <RestTimerPicker
+                            value={autoTimerDraft}
+                            defaultValue={defaultRestDuration}
+                            max={1000}
+                            step={5}
+                            onChange={setAutoTimerDraft}
+                            onCommit={setAutoTimerDraft}
+                            onReset={() => setAutoTimerDraft(defaultRestDuration)}
+                            onSave={() => {
+                              if (autoTimerDraft <= 0 || autoTimerDraft > 1000) {
+                                WebSafeAlert.alert(i18n.t('restTimer.invalidInput'), i18n.t('restTimer.selectValidDuration'));
+                                return;
+                              }
+                              setActiveExercises(prev => {
+                                const updated = [...prev];
+                                updated[activeExerciseMenuIndex] = {
+                                  ...updated[activeExerciseMenuIndex],
+                                  autoTimer: autoTimerDraft === defaultRestDuration ? undefined : autoTimerDraft,
+                                };
+                                return updated;
+                              });
+                              setIsTimerPickerVisible(false);
+                            }}
+                          />
+                        </View>
+                      </Animated.View>
+                    </GestureDetector>
+                  </Pressable>
+                </GestureHandlerRootView>
               </Modal>
             )}
 
@@ -1811,95 +1720,98 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {isWorkoutMenuVisible && (
               <Modal
                 visible={isWorkoutMenuVisible}
-                animationType="fade"
+                animationType="none"
                 transparent
                 onRequestClose={() => setIsWorkoutMenuVisible(false)}
               >
-                <Pressable
-                  style={styles.sheetBackdrop}
-                  onPress={() => setIsWorkoutMenuVisible(false)}
-                  testID="workout-menu-backdrop"
-                >
-                  <RN.Animated.View
-                    style={[
-                      styles.sheetCard,
-                      { transform: [{ translateY: sheetTranslateY }] }
-                    ]}
-                    onStartShouldSetResponder={() => true}
-                    onResponderTerminationRequest={() => false}
-                    {...workoutMenuPanResponder.panHandlers}
-                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                  <Pressable
+                    style={styles.sheetBackdrop}
+                    onPress={() => setIsWorkoutMenuVisible(false)}
+                    testID="workout-menu-backdrop"
                   >
-                    <View style={styles.dragHandleContainer}>
-                      <View style={styles.sheetDragHandle} />
-                    </View>
-
-                    <Text style={styles.sheetTitle}>
-                      {i18n.t('activeWorkout.workoutOptions')}
-                    </Text>
-
-                    <View style={{ rowGap: spacing.sm }}>
-
-                      {/* Change Start Time option */}
-                      <Pressable
-                        style={styles.sheetItem}
-                        onPress={() => {
-                          setIsWorkoutMenuVisible(false);
-                          setEditedStartTimeText(startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
-                          setIsStartTimePickerVisible(true);
-                        }}
-                        android_ripple={rippleTokens.surface}
+                    <GestureDetector gesture={workoutMenuPanGesture}>
+                      <Animated.View
+                        style={[
+                          styles.sheetCard,
+                          animatedSheetCardStyle
+                        ]}
+                        onStartShouldSetResponder={() => true}
+                        onResponderTerminationRequest={() => false}
+                        {...({ onClick: (e: any) => e.stopPropagation() } as any)}
                       >
-                        <Ionicons name="time-outline" size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeStartTime')}</Text>
-                      </Pressable>
+                        <View style={styles.dragHandleContainer}>
+                          <View style={styles.sheetDragHandle} />
+                        </View>
 
-                      {/* Toggle Workout Note option */}
-                      <Pressable
-                        style={styles.sheetItem}
-                        onPress={() => {
-                          setIsWorkoutMenuVisible(false);
-                          setIsWorkoutNoteActive(prev => !prev);
-                        }}
-                        android_ripple={rippleTokens.surface}
-                        testID="toggle-workout-note-btn"
-                      >
-                        <Ionicons name={isWorkoutNoteActive ? "document-text" : "document-text-outline"} size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>
-                          {isWorkoutNoteActive ? i18n.t('activeWorkout.hideWorkoutNote') : i18n.t('activeWorkout.showWorkoutNote')}
+                        <Text style={styles.sheetTitle}>
+                          {i18n.t('activeWorkout.workoutOptions')}
                         </Text>
-                      </Pressable>
 
-                      {/* Change Default Timer option */}
-                      <Pressable
-                        style={styles.sheetItem}
-                        onPress={() => {
-                          setIsWorkoutMenuVisible(false);
-                          setIsDefaultTimerPickerVisible(true);
-                        }}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Ionicons name="alarm-outline" size={20} color={colors.textPrimary} />
-                        <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeDefaultTimer')}</Text>
-                      </Pressable>
+                        <View style={{ rowGap: spacing.sm }}>
 
-                      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
+                          {/* Change Start Time option */}
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              setIsWorkoutMenuVisible(false);
+                              setEditedStartTimeText(startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+                              setIsStartTimePickerVisible(true);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="time-outline" size={20} color={colors.textPrimary} />
+                            <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeStartTime')}</Text>
+                          </Pressable>
 
-                      {/* Discard Workout */}
-                      <Pressable
-                        style={styles.sheetItem}
-                        onPress={() => {
-                          setIsWorkoutMenuVisible(false);
-                          handleDiscardPress();
-                        }}
-                        android_ripple={rippleTokens.surface}
-                      >
-                        <Ionicons name="trash-outline" size={20} color={colors.error} />
-                        <Text style={[styles.sheetItemText, { color: colors.error }]}>{i18n.t('activeWorkout.discardWorkoutTitle')}</Text>
-                      </Pressable>
-                    </View>
-                  </RN.Animated.View>
-                </Pressable>
+                          {/* Toggle Workout Note option */}
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              setIsWorkoutMenuVisible(false);
+                              setIsWorkoutNoteActive(prev => !prev);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                            testID="toggle-workout-note-btn"
+                          >
+                            <Ionicons name={isWorkoutNoteActive ? "document-text" : "document-text-outline"} size={20} color={colors.textPrimary} />
+                            <Text style={styles.sheetItemText}>
+                              {isWorkoutNoteActive ? i18n.t('activeWorkout.hideWorkoutNote') : i18n.t('activeWorkout.showWorkoutNote')}
+                            </Text>
+                          </Pressable>
+
+                          {/* Change Default Timer option */}
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              setIsWorkoutMenuVisible(false);
+                              setIsDefaultTimerPickerVisible(true);
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="alarm-outline" size={20} color={colors.textPrimary} />
+                            <Text style={styles.sheetItemText}>{i18n.t('activeWorkout.changeDefaultTimer')}</Text>
+                          </Pressable>
+
+                          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.xs }} />
+
+                          {/* Discard Workout */}
+                          <Pressable
+                            style={styles.sheetItem}
+                            onPress={() => {
+                              setIsWorkoutMenuVisible(false);
+                              handleDiscardPress();
+                            }}
+                            android_ripple={rippleTokens.surface}
+                          >
+                            <Ionicons name="trash-outline" size={20} color={colors.error} />
+                            <Text style={[styles.sheetItemText, { color: colors.error }]}>{i18n.t('activeWorkout.discardWorkoutTitle')}</Text>
+                          </Pressable>
+                        </View>
+                      </Animated.View>
+                    </GestureDetector>
+                  </Pressable>
+                </GestureHandlerRootView>
               </Modal>
             )}
 
@@ -1908,7 +1820,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {isStartTimePickerVisible && (
               <Modal
                 visible={isStartTimePickerVisible}
-                animationType="slide"
+                animationType="none"
                 transparent
                 onRequestClose={() => setIsStartTimePickerVisible(false)}
               >
@@ -1993,114 +1905,117 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {isDefaultTimerPickerVisible && (
               <Modal
                 visible={isDefaultTimerPickerVisible}
-                animationType="slide"
+                animationType="none"
                 transparent
                 onRequestClose={() => setIsDefaultTimerPickerVisible(false)}
               >
-                <Pressable
-                  style={styles.sheetBackdrop}
-                  onPress={() => setIsDefaultTimerPickerVisible(false)}
-                  testID="default-timer-backdrop"
-                >
-                  <RN.Animated.View
-                    style={[
-                      styles.sheetCard,
-                      { transform: [{ translateY: sheetTranslateY }] }
-                    ]}
-                    onStartShouldSetResponder={() => true}
-                    onResponderTerminationRequest={() => false}
-                    {...defaultTimerPanResponder.panHandlers}
-                    {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+                  <Pressable
+                    style={styles.sheetBackdrop}
+                    onPress={() => setIsDefaultTimerPickerVisible(false)}
+                    testID="default-timer-backdrop"
                   >
-                    <View style={styles.dragHandleContainer}>
-                      <View style={styles.sheetDragHandle} />
-                    </View>
+                    <GestureDetector gesture={defaultTimerPanGesture}>
+                      <Animated.View
+                        style={[
+                          styles.sheetCard,
+                          animatedSheetCardStyle
+                        ]}
+                        onStartShouldSetResponder={() => true}
+                        onResponderTerminationRequest={() => false}
+                        {...({ onClick: (e: any) => e.stopPropagation() } as any)}
+                      >
+                        <View style={styles.dragHandleContainer}>
+                          <View style={styles.sheetDragHandle} />
+                        </View>
 
-                    <Text style={styles.sheetTitle}>
-                      {i18n.t('activeWorkout.defaultRestTimer')}
-                    </Text>
-                    
-                    <Text style={{
-                      color: colors.textSecondary,
-                      fontSize: font.sizes.xs,
-                      fontFamily: font.medium,
-                      marginBottom: spacing.xs,
-                    }}>
-                      {i18n.t('activeWorkout.configureDefaultRest')}
-                    </Text>
+                        <Text style={styles.sheetTitle}>
+                          {i18n.t('activeWorkout.defaultRestTimer')}
+                        </Text>
+                        
+                        <Text style={{
+                          color: colors.textSecondary,
+                          fontSize: font.sizes.xs,
+                          fontFamily: font.medium,
+                          marginBottom: spacing.xs,
+                        }}>
+                          {i18n.t('activeWorkout.configureDefaultRest')}
+                        </Text>
 
-                    <View style={styles.bottomSheetOptions}>
-                      {([30, 60, 90, 120, 180] as const).map((durationVal) => {
-                        const isSelected = localDefaultRest === durationVal;
-                        return (
-                          <Pressable
-                            key={durationVal}
-                            style={[
-                              styles.soundOptionRow,
-                              isSelected && styles.soundOptionRowActive
-                            ]}
-                            onPress={() => {
-                              setLocalDefaultRest(durationVal);
-                              if (onUpdateDefaultRestDuration) {
-                                onUpdateDefaultRestDuration(durationVal);
-                              }
-                              setIsDefaultTimerPickerVisible(false);
-                            }}
-                            android_ripple={rippleTokens.surface}
-                          >
-                            <View style={styles.soundOptionLeft}>
-                              <Ionicons 
-                                name="time-outline" 
-                                size={18} 
-                                color={isSelected ? colors.accent : colors.textSecondary} 
-                              />
-                              <Text style={[
-                                styles.soundOptionText,
-                                isSelected && styles.soundOptionTextActive
-                              ]}>
-                                {durationVal < 60 ? `${durationVal}s` : `${durationVal / 60}m (${durationVal}s)`}
-                              </Text>
-                            </View>
-                            {isSelected && (
-                              <Ionicons name="checkmark" size={20} color={colors.accent} />
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                        <View style={styles.bottomSheetOptions}>
+                          {([30, 60, 90, 120, 180] as const).map((durationVal) => {
+                            const isSelected = localDefaultRest === durationVal;
+                            return (
+                              <Pressable
+                                key={durationVal}
+                                style={[
+                                  styles.soundOptionRow,
+                                  isSelected && styles.soundOptionRowActive
+                                ]}
+                                onPress={() => {
+                                  setLocalDefaultRest(durationVal);
+                                  if (onUpdateDefaultRestDuration) {
+                                    onUpdateDefaultRestDuration(durationVal);
+                                  }
+                                  setIsDefaultTimerPickerVisible(false);
+                                }}
+                                android_ripple={rippleTokens.surface}
+                              >
+                                <View style={styles.soundOptionLeft}>
+                                  <Ionicons 
+                                    name="time-outline" 
+                                    size={18} 
+                                    color={isSelected ? colors.accent : colors.textSecondary} 
+                                  />
+                                  <Text style={[
+                                    styles.soundOptionText,
+                                    isSelected && styles.soundOptionTextActive
+                                  ]}>
+                                    {durationVal < 60 ? `${durationVal}s` : `${durationVal / 60}m (${durationVal}s)`}
+                                  </Text>
+                                </View>
+                                {isSelected && (
+                                  <Ionicons name="checkmark" size={20} color={colors.accent} />
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
 
-                    {/* Custom input card */}
-                    <Card padding={spacing.md} style={styles.customTimerContainer}>
-                      <Text style={styles.customTimerTitle}>{i18n.t('activeWorkout.customDefaultRest')}</Text>
-                      <View style={styles.customTimerRow}>
-                        <TextInput
-                          style={styles.customTimerInput}
-                          keyboardType="number-pad"
-                          value={customDefaultTimerValue}
-                          onChangeText={(val) => setCustomDefaultTimerValue(val.replace(/[^0-9]/g, ''))}
-                          placeholder={i18n.t('activeWorkout.customTimerPlaceholder')}
-                          placeholderTextColor={colors.textMuted}
-                          maxLength={4}
-                        />
-                        <Pressable
-                          style={styles.customTimerBtn}
-                          onPress={() => {
-                            const parsed = parseInt(customDefaultTimerValue, 10);
-                            if (!isNaN(parsed) && parsed > 0) {
-                              setLocalDefaultRest(parsed);
-                              if (onUpdateDefaultRestDuration) {
-                                onUpdateDefaultRestDuration(parsed);
-                              }
-                              setIsDefaultTimerPickerVisible(false);
-                            }
-                          }}
-                        >
-                          <Text style={styles.customTimerBtnText}>{i18n.t('common.save')}</Text>
-                        </Pressable>
-                      </View>
-                    </Card>
-                  </RN.Animated.View>
-                </Pressable>
+                        {/* Custom input card */}
+                        <Card padding={spacing.md} style={styles.customTimerContainer}>
+                          <Text style={styles.customTimerTitle}>{i18n.t('activeWorkout.customDefaultRest')}</Text>
+                          <View style={styles.customTimerRow}>
+                            <TextInput
+                              style={styles.customTimerInput}
+                              keyboardType="number-pad"
+                              value={customDefaultTimerValue}
+                              onChangeText={(val) => setCustomDefaultTimerValue(val.replace(/[^0-9]/g, ''))}
+                              placeholder={i18n.t('activeWorkout.customTimerPlaceholder')}
+                              placeholderTextColor={colors.textMuted}
+                              maxLength={4}
+                            />
+                            <Pressable
+                              style={styles.customTimerBtn}
+                              onPress={() => {
+                                const parsed = parseInt(customDefaultTimerValue, 10);
+                                if (!isNaN(parsed) && parsed > 0) {
+                                  setLocalDefaultRest(parsed);
+                                  if (onUpdateDefaultRestDuration) {
+                                    onUpdateDefaultRestDuration(parsed);
+                                  }
+                                  setIsDefaultTimerPickerVisible(false);
+                                }
+                              }}
+                            >
+                              <Text style={styles.customTimerBtnText}>{i18n.t('common.save')}</Text>
+                            </Pressable>
+                          </View>
+                        </Card>
+                      </Animated.View>
+                    </GestureDetector>
+                  </Pressable>
+                </GestureHandlerRootView>
               </Modal>
             )}
 
@@ -2116,7 +2031,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-      </RN.Animated.View>
+      </Animated.View>
       </GestureHandlerRootView>
     </Modal>
     {isLibraryVisible && (

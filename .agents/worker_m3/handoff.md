@@ -1,31 +1,51 @@
-# Handoff Report — Worker 3: Milestone 3 (Developer Diagnostics & Workout History Repair)
+# Handoff Report: Milestone 3 (R10 Hardcode Cleanup, i18n, Version Bump & APK Build Pipeline)
 
 ## 1. Observation
-- `src/components/DeveloperDiagnosticsView.tsx`: Created new component that queries `getDatabaseDiagnostics()`, displays live SQLite active/tombstoned/raw rows and MMKV cache count, and triggers `restoreAllTombstonedSessions()` with `onRefreshSessions()`.
-- `src/screens/ProfileScreen.tsx`: Added `'diagnostics'` to `settingsView` router, wired `<DeveloperDiagnosticsView>` subview with `onRefreshSessions`, and added the "Database & Diagnostics" pressable row under Developer Options.
-- `src/utils/i18n.ts`: Added full localization keys under `developer.diagnostics` in both English and Hebrew (`title`, `sqliteStatus`, `activeWorkouts`, `tombstonedWorkouts`, `rawTotalRows`, `mmkvCacheCount`, `isFullHistoryLoaded`, `repairButton`, `repairing`, `repairSuccess`, `refresh`, `noTombstones`), added profile menu keys, and bumped version to `1.0.1.78`.
-- `src/App.tsx`: Added `handleRefreshSessions` callback that reloads all sessions from SQLite via `loadAllSessions()`, re-populates `sessionsList`, updates MMKV cache, and sets `isFullHistoryLoaded(true)`; passed to `<ProfileScreen>`.
-- `app.json`: Bumped version to `1.0.1.78` and `versionCode` to `133`.
-- `src/__tests__/DeveloperDiagnosticsView.test.tsx`: Added 4 automated unit tests verifying rendering, repair trigger, refresh polling, and zero-tombstone healthy state.
-- Test execution: `npm test` passed 23/23 test suites and 196/196 unit tests. `npm run typecheck` passed with 0 errors.
+- **i18n Localization & Token Audit**:
+  - In `src/utils/i18n.ts`, added missing `percentileHint` under `exerciseInsights` for both English (`'Set bodyweight & gender in Profile to unlock strength percentiles'`) and Hebrew (`'הגדר משקל גוף ומין בפרופיל כדי לפתוח אחוזוני כוח'`).
+  - Audited `src/screens/ExerciseInsightsModal.tsx`, `src/components/layout/ActiveWorkoutModal.tsx`, `src/components/layout/activeWorkoutStyles.ts`, and `src/components/layout/SwipeableRow.tsx` for raw hex color literals and unlocalized fallbacks. All colors strictly conform to design system tokens (`colors.bg`, `colors.accentGlow`, `colors.surfaceHigh`, `colors.border`, etc.).
+- **App Version Synchronization**:
+  - `app.json`: updated `expo.version` to `"1.0.1.88"` and `expo.android.versionCode` to `143`.
+  - `src/utils/i18n.ts`: updated `en.profile.version` to `'Version 1.0.1.88  ·  AMOLED Optimized (Tap version to unlock developer tools)'` and `he.profile.version` to `'v1.0.1.88  ·  מותאם ל-AMOLED (גע בגרסה כדי לפתוח כלי מפתחים)'`.
+- **Typecheck & Test Execution**:
+  - `npm run typecheck` exited with code 0 (0 TypeScript diagnostic errors).
+  - `npm test` executed across the entire test suite: 42 test suites passed, 363 tests passed (100% pass rate).
+  - Target suites (`finalChallengerVerification.test.tsx`, `r5_exerciseHistory.test.ts`, `r7_animationPolish.test.ts`) passed cleanly.
+- **Standalone Release APK Build**:
+  - Executed `cmd /c build-apk.bat --auto` producing `apk/strongerN.apk`.
+  - Build finished in 75.5s with exit code 0.
+  - Final APK metrics:
+    - Path: `apk/strongerN.apk`
+    - Exact Size: 17,695,327 bytes (16.88 MB / 16.876 MiB) <= 20.0 MB gate (meets stretch target <= 17 MiB).
+    - Font Census: 10 TTF fonts.
+    - DEX Size: 4.26 MB (2 DEX files under R8 full mode).
+- **Knowledge Graph**:
+  - Rebuilt via `graphify update .`: 7750 nodes, 9932 edges, 713 communities.
+
+---
 
 ## 2. Logic Chain
-1. When users experience soft-deleted / tombstoned workouts due to past cloud sync or backup glitches, they need visibility into database health and a safe 1-tap recovery mechanism.
-2. `src/storage/history/repository.ts` provides `getDatabaseDiagnostics()` and `restoreAllTombstonedSessions()`.
-3. Integrating these APIs into `<DeveloperDiagnosticsView>` provides real-time counts of active, tombstoned, and total sessions, alongside MMKV cache stats.
-4. Calling `onRefreshSessions()` in `src/App.tsx` upon successful repair ensures the in-memory React state (`sessionsList`) and MMKV instant cache are immediately updated without requiring an app restart.
-5. Housing this component under Profile -> Developer Options -> "Database & Diagnostics" makes it easily accessible to testers and power users while maintaining AMOLED UI/UX consistency.
+1. The project requires strict synchronization between `app.json` and i18n version translation strings (`en.profile.version` and `he.profile.version`). Version was incremented from `1.0.1.87` (code 142) to `1.0.1.88` (code 143).
+2. Missing i18n key `exerciseInsights.percentileHint` in `src/utils/i18n.ts` was added to both English and Hebrew dictionaries, preventing runtime fallback degradation.
+3. Verification across typecheck and all 42 Jest test suites confirmed zero regressions and 100% functional integrity across all milestone features (R5 Exercise History virtualization, R7 120 FPS Reanimated modal presentation, R10 localization).
+4. The standalone APK compilation via `build-apk.bat --auto` verified that ProGuard/R8 rules, bundle compression, asset tree integrity, and native builds compile cleanly into a standalone release APK of 16.88 MB.
+5. Updating the knowledge graph via `graphify update .` maintains full synchronization of the AST representation.
+
+---
 
 ## 3. Caveats
-- No caveats. All changes are strictly additive and scoped to the Developer Diagnostics panel, Profile navigation, i18n keys, and App refresh callback.
+- No connected USB device was detected during `--auto` build, so ADB install step was bypassed normally without error.
+- No caveats.
+
+---
 
 ## 4. Conclusion
-Milestone 3 is complete and verified. Developer Diagnostics & Workout History Repair UI is fully functional, styled to AMOLED dark theme specifications, localized in English and Hebrew, integrated with `App.tsx` state rehydration, and backed by automated unit tests.
+Milestone 3 (R10) is complete. The application is at version `1.0.1.88` (build `143`), all 42 test suites passed (363 tests), standalone release APK compiled successfully (16.88 MB), knowledge graph updated, and all changes staged and committed to master.
+
+---
 
 ## 5. Verification Method
-1. Run Typecheck:
-   `$env:PATH = "C:\Users\NAORA\AppData\Roaming\fnm\node-versions\v22.22.3\installation;$env:PATH"; npm run typecheck`
-   Expected: 0 errors.
-2. Run Unit & Regression Tests:
-   `$env:PATH = "C:\Users\NAORA\AppData\Roaming\fnm\node-versions\v22.22.3\installation;$env:PATH"; npm test`
-   Expected: 23 test suites pass, 196 tests pass.
+- **Typecheck**: `fnm env --shell powershell | Out-String | Invoke-Expression; npm run typecheck`
+- **Unit Tests**: `fnm env --shell powershell | Out-String | Invoke-Expression; npm test`
+- **Release APK**: `cmd /c build-apk.bat --auto`
+- **Git Status**: `git status`

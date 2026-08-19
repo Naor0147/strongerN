@@ -342,7 +342,7 @@ const translations = {
       routineFolders: 'Routine Folders',
       routineFoldersDesc: 'Group routines into folders',
       about: 'ABOUT',
-      version: 'Version 1.0.1.87  ·  AMOLED Optimized (Tap version to unlock developer tools)',
+      version: 'Version 1.0.1.88  ·  AMOLED Optimized (Tap version to unlock developer tools)',
       developerOptions: 'DEVELOPER OPTIONS',
       developerOptionsSub: 'Testing and demo tools',
       diagnosticsMenuTitle: 'Database & Diagnostics',
@@ -541,6 +541,7 @@ const translations = {
       bestSet: 'BEST SET',
       date: 'DATE',
       est1RM: 'EST. 1RM',
+      percentileHint: 'Set bodyweight & gender in Profile to unlock strength percentiles',
     },
     activeWorkoutBar: {
       finish: 'FINISH',
@@ -1296,7 +1297,7 @@ const translations = {
       routineFolders: 'תיקיות שגרות',
       routineFoldersDesc: 'קבץ שגרות לתיקיות',
       about: 'אודות',
-      version: 'v1.0.1.87  ·  מותאם ל-AMOLED (גע בגרסה כדי לפתוח כלי מפתחים)',
+      version: 'v1.0.1.88  ·  מותאם ל-AMOLED (גע בגרסה כדי לפתוח כלי מפתחים)',
       developerOptions: 'אפשרויות מפתחים',
       developerOptionsSub: 'כלי בדיקה ודגימה',
       diagnosticsMenuTitle: 'אבחון מסד נתונים',
@@ -1516,6 +1517,7 @@ const translations = {
       bestSet: 'סט שיא',
       date: 'תאריך',
       est1RM: '1RM משוער',
+      percentileHint: 'הגדר משקל גוף ומין בפרופיל כדי לפתוח אחוזוני כוח',
     },
     routineEditor: {
       nameRequired: 'שם נדרש',

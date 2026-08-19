@@ -1,76 +1,87 @@
-# Handoff Report — Milestone 1: History Recovery & Tombstone Self-Healing
-
-**Agent**: Worker 1 (`worker_m1`)  
-**Milestone**: Milestone 1  
-**Status**: COMPLETE (Hard Handoff)  
-**Date**: 2026-08-18  
-
----
+# Milestone 1 (R5: Exercise History Breakdown & Virtualization) — Handoff Report
 
 ## 1. Observation
-1. **Target Files**:
-   - `src/storage/history/repository.ts`
-   - `src/storage/persistenceBootstrap.ts`
-   - `src/App.tsx`
-2. **Pre-existing State**:
-   - Soft-deleted/tombstoned sessions in `workout_sessions` had non-null `deleted_at_ms`.
-   - `repository.ts` lacked functions to count or restore tombstoned sessions and provide diagnostic metrics.
-   - `insertMissingSessionsOnly` in `repository.ts` skipped any session ID present in SQLite, ignoring whether it was active or tombstoned.
-   - `bootstrapPersistence.ts` only self-healed when `rawLegacySessions.length > totalRawCount`, failing to heal sessions tombstoned in SQLite.
-   - `loadData()` in `App.tsx` silenced persistence load errors via `if (__DEV__) console.warn`.
-3. **Verification Command & Results**:
-   - `node c:\Antigravity\strongerN\node_modules\typescript\bin\tsc --noEmit` exited with code 0 (0 type errors).
-   - `node c:\Antigravity\strongerN\node_modules\jest\bin\jest.js` passed all 19 test suites, 160/160 tests passed.
+
+- **`src/utils/exerciseHistory.ts`**:
+  - Line 89 previously defaulted un-categorized sets to `'W'` (`(s.category || 'W')`). This was changed to `(s.category || 'S')` to align with standard working set semantics across StrongerN.
+  - Added a check `completedCount > 0` before checking and setting `isPr1RM` and `isPrWeight` flags, ensuring uncompleted fallback sets do not earn personal records or skew the historical progression tracking.
+- **`src/screens/ExerciseInsightsModal.tsx`**:
+  - Imported `FlatList`, `buildExerciseSessionHistory`, `ExerciseHistorySession`, and `ExerciseHistorySet`.
+  - Replaced the inline `.reduce()` computation with `const historyData = useMemo(() => buildExerciseSessionHistory(exerciseName, sessions), [exerciseName, sessions])`.
+  - Separated tab containers: top-level `<FlatList>` for the `'history'` tab and `<ScrollView>` for the `'info'` and `'data'` tabs, eliminating nested vertical scrolling anti-patterns and virtualization performance degradation.
+  - Built `renderHistoryCard` with:
+    - Workout Title and Date (`DD.MM.YYYY`).
+    - PR Badges: `PR 1RM` (`colors.highlight` with `colors.highlightGlow`) and `MAX WT` (`colors.gold` with `colors.goldGlow`).
+    - Metrics Summary Row: Best Set (`${weightKg}kg × ${reps}`), Est 1RM (`${best1RM}kg`), and Completed Ratio (`${completedSetsCount}/${sets.length}`).
+    - Collapsible Accordion: set index, category indicator pill ('W', 'D', 'F'), weight × reps, unilateral breakdown (L/R), RPE (`@${rpe}`), and completion status indicator.
+  - Cleaned up raw RGBA/hex colors into design tokens (`colors.accentGlow`, `colors.errorGlow`).
+- **`src/__tests__/r5_exerciseHistory.test.ts`**:
+  - Created 10 comprehensive unit and component test cases covering invalid input handling, case-insensitive/trimmed exercise matching, `nameSnapshot` fallback, chronological PR progression, incomplete set exclusion, uncompleted session handling, unilateral/category preservation, FlatList rendering, PR badges, accordion expansion, and empty history fallback.
 
 ---
 
 ## 2. Logic Chain
-1. **Tombstone Recovery Mechanics**:
-   - Soft deletion in SQLite v2 only populates `deleted_at_ms` in `workout_sessions`; relational child rows in `session_exercises` and `set_logs` remain intact.
-   - Running `UPDATE workout_sessions SET deleted_at_ms = NULL, updated_at_ms = ?, revision = revision + 1 WHERE deleted_at_ms IS NOT NULL;` cleanly restores all sessions and their complete exercise/set data.
-   - Adding `countTombstonedSessions()`, `restoreAllTombstonedSessions()`, and `getDatabaseDiagnostics()` gives the app and future UI panels direct visibility and control over tombstoned records.
-2. **Safe Import Re-activation**:
-   - When `insertMissingSessionsOnly` encounters an existing session ID with `deleted_at_ms IS NOT NULL`, updating `deleted_at_ms = NULL` re-activates the local workout while preserving all child records.
-3. **Startup Self-Healing**:
-   - In `bootstrapPersistence`, checking `countTombstonedSessions() > 0` immediately after establishing SQLite readiness ensures that when an affected user opens the app, all 300+ workouts are restored to `sessionsList` on startup.
-4. **Crash Logging Telemetry**:
-   - Using `saveCrashLogSync` in `loadData()` ensures any failure during persistence bootstrap or fallback history hydration is permanently recorded in `strongern_crashes.db` and the FileSystem crash log.
+
+1. **Category Normalization**:
+   - In StrongerN contracts, standard sets without explicit categories are standard working sets (`'S'`). Defaulting to `'W'` caused normal sets to be improperly tagged as Warmups.
+   - Updating line 89 to `(s.category || 'S')` restores data consistency with `validators.ts` and `legacySessionMapper.ts`.
+
+2. **Accurate PR Awarding**:
+   - Historical PRs (`runningMax1RM`, `runningMaxWeight`) must only advance on successfully completed sets.
+   - Gating the PR evaluation with `completedCount > 0` prevents failed/uncompleted attempts from advancing running maxes or flagging false PRs.
+
+3. **Virtualization Performance & Tab Separation**:
+   - Nesting vertical FlatLists inside a vertical ScrollView disables virtualization and emits React Native warnings.
+   - Splitting the tab containers so `'history'` renders directly via `<FlatList>` ensures virtualized windowing (`initialNumToRender={10}`, `maxToRenderPerBatch={10}`, `windowSize={5}`, `removeClippedSubviews`) for high-speed scrolling even across long histories.
+
+4. **UI Design System Synchronization**:
+   - All components and cards adhere to AMOLED dark mode (`colors.bg`, `colors.surface`, `colors.surface2`, `colors.border`, `colors.accent`, `colors.highlight`, `colors.gold`).
 
 ---
 
 ## 3. Caveats
-- No caveats. All changes are contained within exclusively owned files and accompanied by dedicated unit tests.
+
+- `ActiveWorkoutModal.tsx` and `r7_animationPolish.test.ts` (owned by Worker M2) have outstanding syntax/test adjustments that are outside Worker M1 file ownership scope.
+- All files owned by Worker M1 (`src/utils/exerciseHistory.ts`, `src/screens/ExerciseInsightsModal.tsx`, `src/__tests__/r5_exerciseHistory.test.ts`) are 100% typecheck clean and pass all tests.
 
 ---
 
 ## 4. Conclusion
-Milestone 1 requirements are fully satisfied:
-- `countTombstonedSessions()`, `restoreAllTombstonedSessions()`, `recoverTombstonedSessions()`, and `getDatabaseDiagnostics()` are implemented and exported in `src/storage/history/repository.ts`.
-- `insertMissingSessionsOnly()` untombstones matching soft-deleted records.
-- `bootstrapPersistence()` automatically detects and restores tombstoned sessions on startup.
-- `App.tsx` logs all persistence load errors via `console.error` and `saveCrashLogSync`.
-- 100% of unit tests and TypeScript typechecks pass.
+
+Milestone 1 (R5) is complete. The pure exercise history engine has been hardened and integrated into `ExerciseInsightsModal.tsx` with top-level virtualization, PR badges, stat summaries, collapsible set details, and design system token compliance. All 10 test cases in `r5_exerciseHistory.test.ts` pass with zero regressions.
 
 ---
 
 ## 5. Verification Method
-1. **Type Check**:
-   ```powershell
-   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
-   node c:\Antigravity\strongerN\node_modules\typescript\bin\tsc --noEmit
-   ```
-   *Expected*: Zero errors.
 
-2. **Automated Unit Tests**:
-   ```powershell
-   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
-   node c:\Antigravity\strongerN\node_modules\jest\bin\jest.js src/__tests__/historyRepositoryRecovery.test.ts
-   ```
-   *Expected*: 10/10 tests pass.
+To independently verify:
 
-3. **Full Project Test Suite**:
+1. Run the R5 unit and integration test suite:
    ```powershell
-   $env:Path = "C:\Users\NAORA\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;" + $env:Path
-   node c:\Antigravity\strongerN\node_modules\jest\bin\jest.js
+   fnm env --shell powershell | Out-String | Invoke-Expression; npm test -- --testPathPattern=r5_exerciseHistory
    ```
-   *Expected*: 19/19 suites pass (160/160 tests).
+   **Expected Result**:
+   ```
+   PASS src/__tests__/r5_exerciseHistory.test.ts
+     R5 Exercise History Breakdown & Virtualization
+       buildExerciseSessionHistory engine
+         √ returns empty array for invalid or empty inputs
+         √ filters sessions matching target exercise case-insensitively and trimmed
+         √ matches exercises with nameSnapshot when name is absent
+         √ sorts output descending (newest first) and computes chronological PR flags accurately
+         √ ignores incomplete sets when computing best1RM, bestSet, and PR flags
+         √ falls back to first set when no sets are completed
+         √ preserves unilateral fields and defaults category to S when omitted
+       ExerciseInsightsModal History Tab UI Integration
+         √ renders virtualized history session cards with PR badge and expands set details on press
+         √ renders unilateral details and RPE in expanded set rows
+         √ renders empty history fallback when no session history matches
+
+   Test Suites: 1 passed, 1 total
+   Tests:       10 passed, 10 total
+   ```
+
+2. Inspect the modified files:
+   - `src/utils/exerciseHistory.ts`
+   - `src/screens/ExerciseInsightsModal.tsx`
+   - `src/__tests__/r5_exerciseHistory.test.ts`

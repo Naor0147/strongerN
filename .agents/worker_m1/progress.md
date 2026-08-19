@@ -1,14 +1,12 @@
-# Progress Log - Worker M1
+# Progress Log — Worker M1
 
-Last visited: 2026-08-18T19:51:55Z
+Last visited: 2026-08-19T21:13:30+03:00
 
-- [x] Initialized DISPATCH.md and BRIEFING.md
-- [x] Read ORIGINAL_REQUEST.md, PROJECT.md, survey_report.md
-- [x] Inspect owned files (`src/storage/history/repository.ts`, `src/storage/persistenceBootstrap.ts`, `src/App.tsx`)
-- [x] Implement required repository methods (`countTombstonedSessions`, `restoreAllTombstonedSessions`, `getDatabaseDiagnostics`) & update `insertMissingSessionsOnly`
-- [x] Implement self-healing tombstone recovery in `bootstrapPersistence`
-- [x] Update `App.tsx` persistence load error handling with `saveCrashLogSync`
-- [x] Add comprehensive unit tests in `src/__tests__/historyRepositoryRecovery.test.ts`
-- [x] Run unit tests & typechecks (19/19 suites, 160 tests passing, 0 type errors)
-- [x] Write `changes.md` and `handoff.md`
-- [x] Send completion message to parent
+## Status
+- [x] Initialized workspace and briefing
+- [x] Read handoffs, docs, and source files
+- [x] Fix `src/utils/exerciseHistory.ts` category fallback ('W' -> 'S') & completedCount PR gate
+- [x] Update `src/screens/ExerciseInsightsModal.tsx` (FlatList virtualization, separated tab containers, PR badges, set breakdown accordion, design token compliance)
+- [x] Create `src/__tests__/r5_exerciseHistory.test.ts` (10/10 test cases passing)
+- [x] Run typecheck & test suite verification
+- [x] Write handoff report and notify parent
