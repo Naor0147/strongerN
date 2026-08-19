@@ -50,6 +50,7 @@ import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySe
 import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, insertMissingSessionsOnly } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
+import { countCompletedSetsInExercise } from './utils/setCounting';
 
 // Screens — Auth & Initial Screen (Eager)
 import LoginScreen from './screens/LoginScreen';
@@ -1965,7 +1966,7 @@ function MainApp() {
         session.exercises.forEach((ex: any) => {
           if (ex && ex.name) {
             const muscle = nameToMuscle(ex.name);
-            sets[muscle] = (sets[muscle] ?? 0) + (ex.sets || 0);
+            sets[muscle] = (sets[muscle] ?? 0) + countCompletedSetsInExercise(ex);
           }
         });
       }

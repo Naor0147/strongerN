@@ -40,6 +40,7 @@ import { exerciseMatchesQuery, getDisplayName, getMuscleDisplayName } from '../u
 import { normalizeTag, isValidTag, addVariationToExercise, removeVariationFromExercise } from '../utils/variationUtils';
 import ExerciseInsightsModal from './ExerciseInsightsModal';
 import { showToast } from '../utils/toast';
+import { countCompletedSetsInExercise } from '../utils/setCounting';
 
 const ITEM_HEIGHT   = 72;
 const HEADER_HEIGHT = 48;
@@ -134,7 +135,7 @@ export function computeEnrichedExercises(exercises: Exercise[], sessions: any[])
       session.exercises.forEach((ex: any) => {
         if (ex.name) {
           const exKey = getNormalizedKey(ex.name);
-          const setsCount = typeof ex.sets === 'number' ? ex.sets : (ex.setsDetails?.length || 0);
+          const setsCount = countCompletedSetsInExercise(ex);
 
           allTimeCounts[exKey] = (allTimeCounts[exKey] || 0) + setsCount;
           if (isLast7Days) {

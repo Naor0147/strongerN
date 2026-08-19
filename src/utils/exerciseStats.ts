@@ -1,4 +1,5 @@
 import { WorkoutSession } from '../data/mockData';
+import { isCompletedSet } from './setCounting';
 
 // Monday of the week helper
 function getMonday(date: Date): Date | null {
@@ -30,7 +31,7 @@ export function setsPerWeek(
     );
     if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
-    const completedSets = exSet.setsDetails.filter((s) => s && s.completed).length;
+    const completedSets = exSet.setsDetails.filter(isCompletedSet).length;
     if (completedSets === 0) continue;
 
     const monday = getMonday(new Date(session.datetime));
@@ -73,7 +74,7 @@ export function avgRepsPerWorkout(
     );
     if (!exSet || !Array.isArray(exSet.setsDetails)) continue;
 
-    const completed = exSet.setsDetails.filter((s) => s && s.completed);
+    const completed = exSet.setsDetails.filter(isCompletedSet);
     if (completed.length === 0) continue;
 
     const totalReps = completed.reduce((sum, s) => {
