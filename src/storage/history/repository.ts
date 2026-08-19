@@ -254,6 +254,8 @@ export async function loadAllSessions(): Promise<WorkoutSessionV2[]> {
   return sessions;
 }
 
+export const loadSessionsChunk = listSessions;
+
 export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
   const sessionRows: any[] = await db.getAllAsync(

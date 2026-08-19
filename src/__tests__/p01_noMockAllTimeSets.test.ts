@@ -47,7 +47,7 @@ describe('P0 Production Data Integrity & Mock Removal', () => {
         exercises: [
           {
             name: mockExercises[0].name,
-            setsDetails: [{ reps: 10, weightKg: 50 }, { reps: 8, weightKg: 55 }],
+            setsDetails: [{ completed: true, reps: 10, weightKg: 50 }, { completed: true, reps: 8, weightKg: 55 }],
           },
         ],
       },

@@ -51,6 +51,7 @@ import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
+import { historyHydrator } from './storage/history/historyHydrator';
 
 // Screens — Auth & Initial Screen (Eager)
 import LoginScreen from './screens/LoginScreen';
@@ -716,6 +717,19 @@ function MainApp() {
               setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
               setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
               setIsFullHistoryLoaded(true);
+
+              if (persistence.historyReady && persistence.sessions) {
+                historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
+                  const mapped = sessions.map(sessionV2ToLegacy);
+                  setSessionsList(mapped);
+                  setCachedRecentSessions(mapped, totalCount);
+                  setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
+                  if (isComplete) {
+                    setIsFullHistoryLoaded(true);
+                  }
+                });
+                historyHydrator.start(persistence.sessions).catch(() => {});
+              }
             }
 
             if (st('isAutoTimerEnabled') !== undefined) setIsAutoTimerEnabled(st('isAutoTimerEnabled'));
