@@ -109,20 +109,6 @@ export interface MeasureItem {
   history?: MeasureHistoryEntry[];
 }
 
-export interface ProgramDay {
-  dayNumber: number;
-  workoutName: string;
-  exercises: string[];
-}
-
-export interface TrainingProgram {
-  id: string;
-  name: string;
-  weeks: number;
-  description: string;
-  days: ProgramDay[];
-}
-
 // ─────────────────────────────────────────────
 // MOCK DATA
 // ─────────────────────────────────────────────
@@ -320,32 +306,6 @@ export const mockTemplates: Template[] = [
     lastUsed: getRelativeDate(43, 17, 0),
     folder: 'Travel',
   },
-];
-
-export const mockPrograms: TrainingProgram[] = [
-  {
-    id: 'prog-ppl',
-    name: '6-Week Push/Pull/Legs',
-    weeks: 6,
-    description: 'A classic PPL routine designed to optimize muscle growth and recovery. Highlights 3 dynamic workouts per week.',
-    days: [
-      { dayNumber: 1, workoutName: 'Push Day', exercises: ['Incline Bench Press', 'Cable Fly', 'Lateral Raise', 'Tricep Dips', 'Rear Delt Fly'] },
-      { dayNumber: 2, workoutName: 'Pull Day', exercises: ['Deadlift', 'Barbell Row', 'Lat Pulldown', 'Face Pull', 'Bicep Curl'] },
-      { dayNumber: 3, workoutName: 'Lower Power', exercises: ['Back Squat', 'Romanian Deadlift', 'Leg Press', 'Calf Raises', 'Nordic Curl'] },
-    ]
-  },
-  {
-    id: 'prog-531',
-    name: '5/3/1 Powerlifting',
-    weeks: 4,
-    description: 'An advanced powerlifting program focusing on the big compound lifts. Focuses on squat, bench press, deadlift, and overhead press.',
-    days: [
-      { dayNumber: 1, workoutName: 'Bench Press Focus', exercises: ['Bench Press', 'Overhead Press', 'Tricep Dips', 'Lateral Raise'] },
-      { dayNumber: 2, workoutName: 'Deadlift Focus', exercises: ['Deadlift', 'Barbell Row', 'Pull-ups', 'Face Pull'] },
-      { dayNumber: 3, workoutName: 'Squat Focus', exercises: ['Back Squat', 'Romanian Deadlift', 'Leg Press', 'Calf Raises'] },
-      { dayNumber: 4, workoutName: 'Military Press Focus', exercises: ['Overhead Press', 'Bench Press', 'Lat Pulldown', 'Bicep Curl'] },
-    ]
-  }
 ];
 
 export const mockExercises: Exercise[] = [

@@ -60,7 +60,6 @@ import {
   mockExercises,
   mockPrimaryMetrics,
   mockBodyPartMetrics,
-  mockPrograms,
 } from '../data/mockData';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
@@ -301,13 +300,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const [hStr, mStr] = reminderTime.split(':');
       const hour = parseInt(hStr, 10) || 9;
       const minute = parseInt(mStr, 10) || 0;
-      let trainingDays = [2, 4, 6];
-      if (activeProgramId) {
-        const prog = mockPrograms.find(p => p.id === activeProgramId);
-        if (prog && prog.days && prog.days.length > 0) {
-          trainingDays = prog.days.map((_, idx) => (idx * 2 + 1) % 7 + 1);
-        }
-      }
+      const trainingDays = [2, 4, 6];
       await scheduleDailyWorkoutReminders(trainingDays, hour, minute);
     }
   };
@@ -3007,13 +3000,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         const [hStr, mStr] = timeVal.split(':');
                         const hour = parseInt(hStr, 10) || 9;
                         const minute = parseInt(mStr, 10) || 0;
-                        let trainingDays = [2, 4, 6];
-                        if (activeProgramId) {
-                          const prog = mockPrograms.find(p => p.id === activeProgramId);
-                          if (prog && prog.days && prog.days.length > 0) {
-                            trainingDays = prog.days.map((_, idx) => (idx * 2 + 1) % 7 + 1);
-                          }
-                        }
+                        const trainingDays = [2, 4, 6];
                         await scheduleDailyWorkoutReminders(trainingDays, hour, minute);
                       }
                     }}

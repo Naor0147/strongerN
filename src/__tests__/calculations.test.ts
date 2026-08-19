@@ -153,22 +153,24 @@ describe('strongerN Calculation Utilities', () => {
   describe('Intelligent Routine Selector (getNextWorkout)', () => {
     const dummyColors = { accent: '#4F8EF7', violet: '#7C5CFC', highlight: '#38BDF8' };
 
-    test('Case 1: Subscribed to PPL program with history', () => {
+    test('Case 1: Predicts next routine in split based on session history', () => {
+      const templates = [
+        { id: 'tpl-1', name: 'Push Day', exercises: ['Bench Press'], lastUsed: new Date('2026-06-01T12:00:00Z') },
+        { id: 'tpl-2', name: 'Pull Day', exercises: ['Deadlift'], lastUsed: new Date('2026-05-30T12:00:00Z') },
+        { id: 'tpl-3', name: 'Leg Day', exercises: ['Squat'], lastUsed: new Date('2026-05-28T12:00:00Z') },
+      ];
       const sessions = [
         { id: 's-1', title: 'Push Day', datetime: new Date('2026-06-01T12:00:00Z'), exercises: [] }
       ];
-      const result = getNextWorkout('prog-ppl', sessions, [], dummyColors);
+      const result = getNextWorkout(null, sessions, templates, dummyColors);
       expect(result.name).toBe('Pull Day');
-      expect(result.type).toBe('Active Program');
+      expect(result.type).toBe('Routine Split');
     });
 
-    test('Case 2: Subscribed to PPL program with wrapping sequence', () => {
-      const sessions = [
-        { id: 's-1', title: 'Lower Power', datetime: new Date('2026-06-01T12:00:00Z'), exercises: [] }
-      ];
-      const result = getNextWorkout('prog-ppl', sessions, [], dummyColors);
-      expect(result.name).toBe('Push Day');
-      expect(result.type).toBe('Active Program');
+    test('Case 2: Falls back to empty workout when no templates exist', () => {
+      const result = getNextWorkout(null, [], [], dummyColors);
+      expect(result.name).toBe('Empty Workout');
+      expect(result.type).toBe('Quick Start');
     });
 
     test('Case 3: Cycle templates in order of the templates array', () => {

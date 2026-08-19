@@ -22,7 +22,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedRef, useSharedValue, useAnimatedStyle, withSpring, withTiming, Easing } from 'react-native-reanimated';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, getSpringConfig } from '../theme';
-import { Template, Exercise, mockPrograms, TrainingProgram } from '../data/mockData';
+import { Template, Exercise } from '../data/mockData';
 import i18n from '../utils/i18n';
 import { showToast } from '../utils/toast';
 
@@ -280,11 +280,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     return maxTemplate;
   }, [templates]);
 
-  // Active Program Memo
-  const activeProgram = useMemo(() => {
-    if (!activeProgramId) return null;
-    return mockPrograms.find(p => p.id === activeProgramId) || null;
-  }, [activeProgramId]);
+  // Active Program Memo (Programs feature removed)
+  const activeProgram: any = null;
 
   // Unique folders list
   const uniqueFolders = useMemo(() => {
@@ -594,47 +591,8 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
     return actions;
   }, [isSearching, activeTab, selectedFolderFilter, enableRoutineFolders]);
 
-  // Calendar days generation
-  const calendarDays = useMemo(() => {
-    if (!activeProgram) return [];
-    
-    // Map calendar days (1-7) for the selected week
-    const weekDays = i18n.t('extras.weekDaysMon') as unknown as string[];
-    
-    return weekDays.map((dayName, idx) => {
-      // Index of training day (e.g. Day 1, Day 2, Day 3)
-      // Standard layout: Week 1 has training days based on program layout
-      // E.g. for PPL: 3 training days per week. Bench/Dead/Squat/OHP: 4 training days per week.
-      const trainingDaysPerWeek = activeProgram.id === 'prog-ppl' ? 3 : 4;
-      
-      // Determine if this day is a training day in the schedule
-      // Monday = Training 1, Wednesday = Training 2, Friday = Training 3, Sunday = Training 4 (or similar split)
-      let trainingDayIndex = -1;
-      if (activeProgram.id === 'prog-ppl') {
-        // Mon, Wed, Fri
-        if (idx === 0) trainingDayIndex = 0;
-        if (idx === 2) trainingDayIndex = 1;
-        if (idx === 4) trainingDayIndex = 2;
-      } else {
-        // Mon, Tue, Thu, Fri
-        if (idx === 0) trainingDayIndex = 0;
-        if (idx === 1) trainingDayIndex = 1;
-        if (idx === 3) trainingDayIndex = 2;
-        if (idx === 4) trainingDayIndex = 3;
-      }
-      
-      const overallDayNumber = (viewingWeek - 1) * trainingDaysPerWeek + trainingDayIndex + 1;
-      const scheduledWorkout = trainingDayIndex !== -1 
-        ? activeProgram.days.find(d => d.dayNumber === overallDayNumber) 
-        : null;
-
-      return {
-        dayName,
-        isTraining: trainingDayIndex !== -1,
-        workout: scheduledWorkout,
-      };
-    });
-  }, [activeProgram, viewingWeek]);
+  // Calendar days generation (Programs feature removed)
+  const calendarDays: any[] = [];
 
   const folderPressHandlers = useMemo(() => {
     const map: Record<string, () => void> = {};
@@ -1116,33 +1074,16 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
             <>
               {/* No program subscribed, display catalog */}
               <SectionLabel title={i18n.t('workout.trainingProgramsLibrary')} subtitle={i18n.t('workout.subscribeToSplits')} />
-              
-              {mockPrograms.map((prog, idx) => (
-                <Card key={prog.id} padding={spacing.lg} style={styles.programCard}>
-                  <View style={styles.progCardHeader}>
-                    <Ionicons name="calendar-sharp" size={24} color={colors.accent} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.progCardName}>{prog.name}</Text>
-                      <Text style={styles.progCardWeeks}>{i18n.t('workout.weeksProgram', { count: prog.weeks })}</Text>
-                    </View>
+              <Card padding={spacing.lg} style={styles.programCard}>
+                <View style={styles.progCardHeader}>
+                  <Ionicons name="fitness-outline" size={24} color={colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.progCardName}>{i18n.t('workout.routines')}</Text>
+                    <Text style={styles.progCardWeeks}>{i18n.t('workout.subscribeToSplits')}</Text>
                   </View>
-                  <Text style={styles.progCardDesc}>{prog.description}</Text>
-                  
-                  <Pressable
-                    style={styles.subscribeBtn}
-                    onPress={() => {
-                      if (onSubscribeProgram) {
-                        onSubscribeProgram(prog.id);
-                        setViewingWeek(1);
-                        Alert.alert(i18n.t('workout.subscribed'), i18n.t('workout.subscribedMsg', { name: prog.name }));
-                      }
-                    }}
-                    android_ripple={rippleTokens.accent}
-                  >
-                    <Text style={styles.subscribeBtnText}>{i18n.t('workout.subscribeScheduling')}</Text>
-                  </Pressable>
-                </Card>
-              ))}
+                </View>
+                <Text style={styles.progCardDesc}>{i18n.t('workout.noProgramsMessage') || 'Custom routines let you organize your training splits with automatic progression tracking.'}</Text>
+              </Card>
             </>
           )}
         </ScrollView>

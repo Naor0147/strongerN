@@ -1,10 +1,10 @@
-import { mockPrograms, Template } from '../data/mockData';
+import { Template } from '../data/mockData';
 
 export interface NextWorkoutSelection {
   name: string;
   exercises: string[];
   exercisesDetails?: any[];
-  type: 'Active Program' | 'Routine Split' | 'Quick Start';
+  type: 'Routine Split' | 'Quick Start';
   badgeColor: string;
 }
 
@@ -14,40 +14,7 @@ export const getNextWorkout = (
   templates: Template[],
   colors: { accent: string; violet: string; highlight: string }
 ): NextWorkoutSelection => {
-  // 1. If user is on an active program
-  if (activeProgramId) {
-    const activeProgram = mockPrograms.find(p => p.id === activeProgramId);
-    if (activeProgram && activeProgram.days && activeProgram.days.length > 0) {
-      const programDayNames = activeProgram.days.map(d => d.workoutName.toLowerCase().trim());
-      
-      const dayNameToIndex = new Map<string, number>();
-      programDayNames.forEach((name, i) => {
-        if (!dayNameToIndex.has(name)) dayNameToIndex.set(name, i);
-      });
-      
-      let lastMatchingDayIndex = -1;
-      for (let i = 0; i < sessions.length; i++) {
-        const titleClean = sessions[i].title.toLowerCase().trim();
-        const matchIdx = dayNameToIndex.get(titleClean);
-        if (matchIdx !== undefined && matchIdx > -1) {
-          lastMatchingDayIndex = matchIdx;
-          break;
-        }
-      }
-      
-      const nextDayIndex = (lastMatchingDayIndex + 1) % activeProgram.days.length;
-      const nextDay = activeProgram.days[nextDayIndex];
-      
-      return {
-        name: nextDay.workoutName,
-        exercises: nextDay.exercises,
-        type: 'Active Program',
-        badgeColor: colors.accent,
-      };
-    }
-  }
-
-  // 2. If no active program, check templates
+  // 1. If user has templates, predict next routine in split
   if (templates && templates.length > 0) {
     const lastSession = sessions && sessions.length > 0 ? sessions[0] : null;
     let matchedTemplate: Template | null = null;

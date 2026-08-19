@@ -95,7 +95,6 @@ import {
   mockExercises,
   mockPrimaryMetrics,
   mockBodyPartMetrics,
-  mockPrograms,
 } from './data/mockData';
 
 const Tab = createBottomTabNavigator();
