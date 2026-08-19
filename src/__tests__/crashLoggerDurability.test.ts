@@ -8,13 +8,17 @@ describe('CrashLogger Durability & Reliability', () => {
     await crashLogger.clearCrashLogs();
   });
 
+  afterEach(() => {
+    crashLogger.setCustomSaveCrashLogsHandlerForTesting(null);
+  });
+
   it('re-queues logs and keeps newest logs when saveCrashLogs fails', async () => {
     // Add logs
     await crashLogger.addCrashLog('Log 1', 'Stack 1', false);
     await crashLogger.addCrashLog('Log 2', 'Stack 2', false);
 
     // Mock saveCrashLogs to fail
-    const saveSpy = jest.spyOn(crashLogger, 'saveCrashLogs').mockResolvedValue(false);
+    crashLogger.setCustomSaveCrashLogsHandlerForTesting(jest.fn().mockResolvedValue(false));
 
     await crashLogger.flushCrashQueueAsync();
 
@@ -24,12 +28,10 @@ describe('CrashLogger Durability & Reliability', () => {
     expect(logs.map(l => l.message)).toEqual(
       expect.arrayContaining(['Log 1', 'Log 2'])
     );
-
-    saveSpy.mockRestore();
   });
 
   it('preserves the newest 100 logs when queue overflows on failure', async () => {
-    const saveSpy = jest.spyOn(crashLogger, 'saveCrashLogs').mockResolvedValue(false);
+    crashLogger.setCustomSaveCrashLogsHandlerForTesting(jest.fn().mockResolvedValue(false));
 
     for (let i = 0; i < 120; i++) {
       await crashLogger.addCrashLog(`Log ${i}`, `Stack ${i}`, false);
@@ -43,8 +45,6 @@ describe('CrashLogger Durability & Reliability', () => {
     expect(logs.some(l => l.message === 'Log 119')).toBe(true);
     // Oldest log should have been dropped
     expect(logs.some(l => l.message === 'Log 0')).toBe(false);
-
-    saveSpy.mockRestore();
   });
 
   it('flushes crash queue on AppState background transition', async () => {

@@ -244,7 +244,7 @@ function MainApp() {
     } catch (e) {}
   }
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -256,11 +256,21 @@ function MainApp() {
     ...Ionicons.font,
   });
 
+  const [fontTimeout, setFontTimeout] = React.useState(false);
+
   React.useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setFontTimeout(true);
+      SplashScreen.hideAsync().catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // ── Synchronous Fast First-Render Checks ──
   const initialAuth = React.useMemo(() => getInitialAuthState(), []);
@@ -484,6 +494,9 @@ function MainApp() {
         if (cachedAppData?.googleUser) {
           setGoogleUser(cachedAppData.googleUser);
         }
+        if (cachedSummaries) {
+          setProfileSummaries(cachedSummaries);
+        }
         setIsDataLoaded(true);
       });
     }
@@ -619,12 +632,15 @@ function MainApp() {
           // Pre-fetch auth and secure token before state updates to batch atomically
           let authedName: string | undefined;
           let authedAvatar: string | undefined;
+          let isAuthed = false;
           if (parsed?.user) {
             const currentAuth = await loadAuthState();
             const currentAuthMode = currentAuth?.authMode || parsed.authMode;
-            const isAuthed = currentAuthMode === 'google' || currentAuthMode === 'local';
-            authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
-            authedAvatar = (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : undefined;
+            isAuthed = currentAuthMode === 'google' || (currentAuthMode === 'local' && Boolean(currentAuth?.localUsername) && currentAuth.localUsername !== 'Guest');
+            if (isAuthed) {
+              authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
+              authedAvatar = (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : undefined;
+            }
           }
 
           let secureToken: string | null = null;
@@ -654,8 +670,8 @@ function MainApp() {
               if (parsed.user) {
                 setUser(prev => ({
                   ...parsed.user,
-                  name: authedName ? authedName : (parsed.user.name || prev.name),
-                  avatarUri: authedAvatar ? authedAvatar : (parsed.user.avatarUri || prev.avatarUri),
+                  name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
+                  avatarUri: (isAuthed && authedAvatar) ? authedAvatar : (parsed.user.avatarUri || prev.avatarUri),
                 }));
               }
               if (parsed.templatesList) {
@@ -1968,10 +1984,11 @@ function MainApp() {
 
   // Persist precomputed profile summaries (charts, muscle sets) to MMKV for Frame 0 zero-delay rendering
   React.useEffect(() => {
+    if (!isDataLoaded) return;
     if (dynamicWeeklyChartData.length > 0 || (weeklyMuscleSets && Object.keys(weeklyMuscleSets).length > 0)) {
       setCachedProfileSummaries({ dynamicWeeklyChartData, weeklyMuscleSets });
     }
-  }, [dynamicWeeklyChartData, weeklyMuscleSets]);
+  }, [dynamicWeeklyChartData, weeklyMuscleSets, isDataLoaded]);
 
 
 
@@ -2680,7 +2697,7 @@ function MainApp() {
     },
   }), []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError && !fontTimeout) {
     return null;
   }
 

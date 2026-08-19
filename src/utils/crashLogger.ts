@@ -14,14 +14,26 @@ export interface CrashLog {
 }
 
 const CRASH_LOGS_KEY = 'crash_logs';
-export const DEFAULT_APP_VERSION = '1.0.1.82';
+export const DEFAULT_APP_VERSION = '1.0.1.87';
 const CURRENT_APP_VERSION = Application.nativeApplicationVersion || DEFAULT_APP_VERSION;
 
 let memoryCrashQueue: CrashLog[] = [];
 let flushTimeout: any = null;
 let isFlushing = false;
+let flushFailures = 0;
+const MAX_FLUSH_RETRIES = 3;
 
-export function scheduleCrashQueueFlush(): void {
+let customSaveCrashLogsHandler: ((logs: CrashLog[]) => Promise<boolean>) | null = null;
+
+export function setCustomSaveCrashLogsHandlerForTesting(handler: ((logs: CrashLog[]) => Promise<boolean>) | null): void {
+  customSaveCrashLogsHandler = handler;
+}
+
+export function resetFlushFailures(): void {
+  flushFailures = 0;
+}
+
+export function scheduleCrashQueueFlush(delayMs = 2000): void {
   if (flushTimeout) return;
 
   let fallbackTimer: any = null;
@@ -40,16 +52,16 @@ export function scheduleCrashQueueFlush(): void {
     flushCrashQueueAsync().catch(() => {});
   };
 
-  if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions) {
+  if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions && delayMs <= 2000) {
     interactionHandle = InteractionManager.runAfterInteractions(() => {
       triggerFlush();
     });
     fallbackTimer = setTimeout(() => {
       triggerFlush();
-    }, 2000);
+    }, delayMs);
     flushTimeout = fallbackTimer;
   } else {
-    flushTimeout = setTimeout(triggerFlush, 1500);
+    flushTimeout = setTimeout(triggerFlush, delayMs);
   }
 }
 
@@ -120,9 +132,17 @@ export async function flushCrashQueueAsync(): Promise<void> {
   } catch (e) {
     flushSucceeded = false;
   } finally {
-    if (!flushSucceeded && logsToFlush.length > 0) {
+    if (flushSucceeded) {
+      flushFailures = 0;
+    } else if (logsToFlush.length > 0) {
+      flushFailures++;
       memoryCrashQueue = [...logsToFlush, ...memoryCrashQueue].slice(-100);
-      scheduleCrashQueueFlush();
+      if (flushFailures <= MAX_FLUSH_RETRIES) {
+        const backoffDelay = Math.min(2000 * Math.pow(4, flushFailures - 1), 60000); // 2s -> 8s -> 32s
+        scheduleCrashQueueFlush(backoffDelay);
+      } else {
+        console.warn(`[CrashLogger] Max flush retries (${MAX_FLUSH_RETRIES}) reached. Queue kept in memory until next event.`);
+      }
     }
     isFlushing = false;
   }
@@ -188,6 +208,10 @@ export async function getCrashLogs(): Promise<CrashLog[]> {
 }
 
 export async function saveCrashLogs(logs: CrashLog[]): Promise<boolean> {
+  if (customSaveCrashLogsHandler) {
+    return customSaveCrashLogsHandler(logs);
+  }
+
   const isWeb = Platform.OS === 'web';
   const serialized = JSON.stringify(logs);
   if (isWeb) {

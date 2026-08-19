@@ -84,8 +84,11 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
     console.log(`[BENCHMARK] Routine load time for ${ROUTINE_EXERCISE_COUNT} exercises against ${LARGE_EXERCISE_COUNT} library items: ${duration.toFixed(3)}ms`);
   });
 
-  test('Performance set suggestions resolution across 1000 historic sessions executes in under 2ms', () => {
+  test('Performance set suggestions resolution across 1000 historic sessions executes in under 20ms', () => {
     const historyIndex = buildExerciseHistoryIndex(mockSessions);
+    // Warm up JIT compiler before measuring
+    resolveLastPerformanceSuggestion('Exercise 0', 'S', 0, mockSessions, false, undefined, historyIndex);
+
     const startTime = performance.now();
 
     for (let i = 0; i < ROUTINE_EXERCISE_COUNT; i++) {
@@ -96,7 +99,7 @@ describe('Routine Loading Benchmark & Active Workout Guarding', () => {
     }
 
     const duration = performance.now() - startTime;
-    expect(duration).toBeLessThan(50);
+    expect(duration).toBeLessThan(20);
     console.log(`[BENCHMARK] Performance suggestions for 50 exercises (200 sets) across 1,000 sessions: ${duration.toFixed(3)}ms`);
   });
 

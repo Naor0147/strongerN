@@ -23,6 +23,7 @@ jest.mock('expo-auth-session/providers/google', () => ({
   ]),
 }));
 
+import * as Reanimated from 'react-native-reanimated';
 import LoginScreen from '../screens/LoginScreen';
 import BarChart from '../components/ui/BarChart';
 import StatCard from '../components/ui/StatCard';
@@ -63,6 +64,31 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
       });
 
       expect(tree.toJSON()).toBeTruthy();
+      renderer.act(() => {
+        tree.unmount();
+      });
+    });
+
+    test('triggers entrance animation with 600ms duration at default speed', () => {
+      const onComplete = jest.fn();
+      let tree: any;
+      renderer.act(() => {
+        tree = renderer.create(
+          <LoginScreen onComplete={onComplete} onGoogleLogin={jest.fn()} />
+        );
+      });
+
+      renderer.act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      expect(Reanimated.withTiming).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          duration: 600,
+        })
+      );
+
       renderer.act(() => {
         tree.unmount();
       });
@@ -112,6 +138,40 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
       });
 
       expect(tree.toJSON()).toBeTruthy();
+      renderer.act(() => {
+        tree.unmount();
+      });
+    });
+
+    test('animates columns with withSpring { stiffness: 130, damping: 15, mass: 0.8 } and withDelay(i * 90 * speed)', () => {
+      let tree: any;
+      renderer.act(() => {
+        tree = renderer.create(
+          <BarChart data={sampleData} chartHeight={200} />
+        );
+        jest.runAllTimers();
+      });
+
+      expect(Reanimated.withSpring).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          stiffness: 130,
+          damping: 15,
+          mass: 0.8,
+        })
+      );
+
+      // Verify staggered delay for column 1 (i=1 => 90ms)
+      expect(Reanimated.withDelay).toHaveBeenCalledWith(
+        90,
+        expect.anything()
+      );
+      // Verify staggered delay for column 2 (i=2 => 180ms)
+      expect(Reanimated.withDelay).toHaveBeenCalledWith(
+        180,
+        expect.anything()
+      );
+
       renderer.act(() => {
         tree.unmount();
       });

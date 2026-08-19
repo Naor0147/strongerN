@@ -45,7 +45,7 @@ const nextId = (prefix: string = 'id'): string => {
 };
 
 export default function E2EAppHarness() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -57,11 +57,21 @@ export default function E2EAppHarness() {
     ...Ionicons.font,
   });
 
+  const [fontTimeout, setFontTimeout] = useState(false);
+
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFontTimeout(true);
+      SplashScreen.hideAsync().catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Eagerly activate the iOS audio session on mount so the first
   // set-complete chime has zero latency.
@@ -69,10 +79,6 @@ export default function E2EAppHarness() {
     initSounds();
     initNotifications();
   }, []);
-
-  if (!fontsLoaded) {
-    return null;
-  }
 
   // State for active workout
   const [isWorkoutModalVisible, setIsWorkoutModalVisible] = useState(false);
@@ -373,6 +379,10 @@ export default function E2EAppHarness() {
   };
 
 
+
+  if (!fontsLoaded && !fontError && !fontTimeout) {
+    return null;
+  }
 
   return (
     <SafeAreaProvider>

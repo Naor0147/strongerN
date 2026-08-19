@@ -14,6 +14,7 @@ import Animated, {
   withTiming,
   withSpring,
   interpolate,
+  Extrapolation,
   Easing,
   SharedValue,
 } from 'react-native-reanimated';
@@ -50,12 +51,14 @@ const BarBlock: React.FC<{
     const opacity = interpolate(
       p,
       [0, Math.max(0, start), Math.min(1, end), 1],
-      [0, 0, 1, 1]
+      [0, 0, 1, 1],
+      Extrapolation.CLAMP
     );
     const scale = interpolate(
       p,
       [0, Math.max(0, start), Math.min(1, end), 1],
-      [0.3, 0.3, 1, 1]
+      [0.3, 0.3, 1, 1],
+      Extrapolation.EXTEND
     );
     return {
       opacity,
@@ -105,12 +108,12 @@ const BarColumn: React.FC<{
     animProgress.value = withDelay(
       index * 90 * speed,
       withSpring(1, {
-        stiffness: 130,
+        stiffness: 130 / (speed || 1),
         damping: 15,
-        mass: 0.8,
+        mass: 0.8 * (speed || 1),
       })
     );
-  }, [item.value, chartReady, index]);
+  }, [item.value, item.label, chartReady, index]);
 
   const trackPadding = 3;
   const blockGap = 3;

@@ -124,17 +124,25 @@ jest.mock('react-native-reanimated', () => {
     Image: ({ children, style, ...props }) => React.createElement('Image', { style, ...props }, children),
     createAnimatedComponent: (component) => component,
   };
+  const withSpring = jest.fn((toValue, config) => toValue);
+  const withTiming = jest.fn((toValue, config) => toValue);
+  const withDelay = jest.fn((_delay, anim) => anim);
+  const withRepeat = jest.fn((anim) => anim);
+  const withSequence = jest.fn((...anims) => anims[0]);
+  const cancelAnimation = jest.fn();
+
   return {
     __esModule: true,
     default: mockReanimated,
     ...mockReanimated,
     useSharedValue: (val) => ({ value: val }),
     useAnimatedStyle: (fn) => fn(),
-    withSpring: (toValue) => toValue,
-    withTiming: (toValue) => toValue,
-    withDelay: (_delay, anim) => anim,
-    withRepeat: (anim) => anim,
-    withSequence: (...anims) => anims[0],
+    withSpring,
+    withTiming,
+    withDelay,
+    withRepeat,
+    withSequence,
+    cancelAnimation,
     Easing: {
       linear: (t) => t,
       ease: (t) => t,
@@ -145,7 +153,12 @@ jest.mock('react-native-reanimated', () => {
       out: (fn) => fn,
       inOut: (fn) => fn,
     },
-    interpolate: (val, input, output) => {
+    Extrapolation: {
+      EXTEND: 'extend',
+      CLAMP: 'clamp',
+      IDENTITY: 'identity',
+    },
+    interpolate: (val, input, output, type) => {
       // Return a mocked interpolated value
       return output ? output[0] : 0;
     },

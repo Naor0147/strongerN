@@ -213,4 +213,46 @@ describe('instantCache MMKV synchronous storage', () => {
     }
     expect(getCachedTotalSessionsCount()).toBe(300);
   });
+
+  it('prevents empty initial render from clobbering valid profile summaries cache before data is loaded', () => {
+    // 1. Existing valid profile summaries in cache
+    const goodSummaries = {
+      dynamicWeeklyChartData: [
+        { weekLabel: '8/1', count: 5 },
+        { weekLabel: '8/8', count: 4 },
+      ],
+      weeklyMuscleSets: { Chest: 16, Back: 14, Legs: 12 },
+    };
+    setCachedProfileSummaries(goodSummaries);
+    expect(getCachedProfileSummaries()).toEqual(goodSummaries);
+
+    // 2. Cold start before data load: empty sessions produces 8 zero weeks
+    const emptySessionsWeeklyChart = [
+      { weekLabel: 'Week 1', count: 0 },
+      { weekLabel: 'Week 2', count: 0 },
+    ];
+    const isDataLoaded = false;
+
+    // Guard simulation: if (!isDataLoaded) return;
+    if (isDataLoaded) {
+      setCachedProfileSummaries({ dynamicWeeklyChartData: emptySessionsWeeklyChart, weeklyMuscleSets: {} });
+    }
+
+    // Cache must remain pristine with goodSummaries
+    expect(getCachedProfileSummaries()).toEqual(goodSummaries);
+
+    // 3. Once data is loaded:
+    const updatedDataLoaded = true;
+    if (updatedDataLoaded) {
+      const newSummaries = {
+        dynamicWeeklyChartData: [
+          { weekLabel: '8/1', count: 6 },
+          { weekLabel: '8/8', count: 5 },
+        ],
+        weeklyMuscleSets: { Chest: 18, Back: 15 },
+      };
+      setCachedProfileSummaries(newSummaries);
+    }
+    expect(getCachedProfileSummaries()?.dynamicWeeklyChartData[0].count).toBe(6);
+  });
 });

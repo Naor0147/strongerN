@@ -292,10 +292,13 @@ if (Test-Path $apkSrc) {
     if (Test-Path $inspectScript) {
         Write-Host "`n[CENSUS] Running Release APK Census & Quality Assertions..." -ForegroundColor $PrimaryColor
         & $inspectScript -ApkPath $apkDest -Assert
-        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
             Write-Error "Release APK Census assertion failed!"
             exit 1
         }
+    } else {
+        Write-Error "Required inspection script missing: $inspectScript"
+        exit 1
     }
 } else {
     Write-Error "Compiled APK could not be found at: $apkSrc (Took $buildTime seconds)"
