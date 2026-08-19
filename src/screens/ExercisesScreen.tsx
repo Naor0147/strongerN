@@ -110,7 +110,7 @@ const getSecondaryMuscles = (primary: string): string => {
 // Pure function — extracted at module scope so it is never re-created and
 // can be called from both InteractionManager callbacks and unit tests.
 // ─────────────────────────────────────────────────────────────────────────────
-function computeEnrichedExercises(exercises: Exercise[], sessions: any[]): Exercise[] {
+export function computeEnrichedExercises(exercises: Exercise[], sessions: any[]): Exercise[] {
   const weeklyCounts: Record<string, number> = {};
   const allTimeCounts: Record<string, number> = {};
   const now = Date.now();
@@ -150,7 +150,7 @@ function computeEnrichedExercises(exercises: Exercise[], sessions: any[]): Exerc
     return {
       ...ex,
       weeklySets: weeklyCounts[exKey] || 0,
-      allTimeSets: (allTimeCounts[exKey] || 0) || (ex.allTimeSets || 0),
+      allTimeSets: allTimeCounts[exKey] || 0,
     };
   });
 }
@@ -166,7 +166,6 @@ const SkeletonRow: React.FC = React.memo(() => {
     opacity.value = withTiming(0.7, { duration: 700 }, () => {
       opacity.value = withTiming(0.35, { duration: 700 });
     });
-    // Infinite ping-pong handled externally per list — see SkeletonList
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));

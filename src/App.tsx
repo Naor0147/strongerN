@@ -89,9 +89,6 @@ import Toast from './components/ui/Toast';
 
 // Mock data
 import {
-  mockUser,
-  mockChartData,
-  mockSessions,
   mockTemplates,
   mockExercises,
   mockPrimaryMetrics,
@@ -213,18 +210,12 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
 
 function App() {
   const isE2E = Platform.OS === 'web' && (
-    process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
-      window.location?.search?.includes('e2e=true') ||
-      window.sessionStorage?.getItem('is_e2e_mode') === 'true'
+    process.env.EXPO_PUBLIC_E2E === 'true' && (typeof window !== 'undefined' && Boolean(
+      window.location?.search?.includes('e2e=true')
     ))
   );
 
   if (isE2E) {
-    if (typeof window !== 'undefined') {
-      try {
-        window.sessionStorage?.setItem('is_e2e_mode', 'true');
-      } catch (e) {}
-    }
     return (
       <React.Suspense fallback={null}>
         <E2EAppHarness />
@@ -406,7 +397,7 @@ function MainApp() {
 
   const [sessionsList, setSessionsList] = React.useState<any[]>(() => []);
   const [templatesList, setTemplatesList] = React.useState<any[]>(() => []);
-  const [exercisesList, setExercisesList] = React.useState<any[]>(() => mockExercises);
+  const [exercisesList, setExercisesList] = React.useState<any[]>(() => mockExercises.map(e => ({ ...e, allTimeSets: 0 })));
   const exercisesListRef = React.useRef(exercisesList);
 
   const [primaryMetricsList, setPrimaryMetricsList] = React.useState<any[]>(() =>
@@ -437,7 +428,7 @@ function MainApp() {
   const [lastSynced, setLastSynced] = React.useState<string | null>(null);
 
   // Program & Folder States
-  const [foldersList, setFoldersList] = React.useState<string[]>(() => ['All', 'Bulking Splits', 'Home Workouts', 'Travel']);
+  const [foldersList, setFoldersList] = React.useState<string[]>(() => ['All']);
   const [activeProgramId, setActiveProgramId] = React.useState<string | null>(null);
   const [programStartDate, setProgramStartDate] = React.useState<string | null>(null);
 
@@ -636,7 +627,7 @@ function MainApp() {
           if (parsed?.user) {
             const currentAuth = await loadAuthState();
             const currentAuthMode = currentAuth?.authMode || parsed.authMode;
-            isAuthed = currentAuthMode === 'google' || (currentAuthMode === 'local' && Boolean(currentAuth?.localUsername) && currentAuth.localUsername !== 'Guest');
+            isAuthed = currentAuthMode === 'google' || (currentAuthMode === 'local' && Boolean(currentAuth?.localUsername) && currentAuth?.localUsername !== 'Guest');
             if (isAuthed) {
               authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
               authedAvatar = (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : undefined;
@@ -697,7 +688,7 @@ function MainApp() {
                 const merged = [...uniqueLoaded];
                 mockExercises.forEach((defaultEx) => {
                   if (!loadedIds.has(defaultEx.id) && !loadedNames.has(defaultEx.name.toLowerCase().trim())) {
-                    merged.push({ ...defaultEx, variations: Array.isArray(defaultEx.variations) ? defaultEx.variations : [] });
+                    merged.push({ ...defaultEx, allTimeSets: 0, variations: Array.isArray(defaultEx.variations) ? defaultEx.variations : [] });
                     loadedIds.add(defaultEx.id);
                   }
                 });

@@ -7,10 +7,10 @@
 
 import { scan } from 'react-scan';
 
-export const REACT_SCAN_ENABLED = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_E2E === 'true' ? false : true;
+export const REACT_SCAN_ENABLED = process.env.NODE_ENV !== 'production' && process.env.EXPO_PUBLIC_E2E !== 'true';
 
 /**
- * Initializes React Scan overlay for web browsers.
+ * Initializes React Scan overlay for web browsers in development.
  */
 export function initReactScan(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -22,17 +22,8 @@ export function initReactScan(): void {
       scan({
         enabled: true,
         showToolbar: true,
-        dangerouslyForceRunInProduction: true,
         log: true,
       });
-
-      if (!document.getElementById('react-scan-script')) {
-        const script = document.createElement('script');
-        script.id = 'react-scan-script';
-        script.src = 'https://unpkg.com/react-scan/dist/auto.global.js';
-        script.async = false;
-        (document.head || document.documentElement).appendChild(script);
-      }
 
       console.log('[ReactScan] ⚡ Web performance monitoring overlay active.');
     } catch (error) {

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, shadow, ripple } from '../theme';
-import { Exercise, WorkoutSession, mockExerciseHistory } from '../data/mockData';
+import { Exercise, WorkoutSession } from '../data/mockData';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Card from '../components/ui/Card';
 import LineChart from '../components/ui/charts/LineChart';
@@ -146,11 +146,14 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     }));
   }, []);
 
+  const hasValidProfileMetrics = typeof userBodyweight === 'number' && userBodyweight > 0 && Boolean(userGender);
+
   const strengthPercentile = useMemo(() => {
+    if (!hasValidProfileMetrics) return 50;
     const series1RM = exercise1RMSeries(exerciseName, sessions);
     const current1RM = series1RM.length > 0 ? series1RM[series1RM.length - 1].value : 0;
     return getExercisePercentile(exerciseName, current1RM, userBodyweight, userGender);
-  }, [exerciseName, sessions, userBodyweight, userGender]);
+  }, [exerciseName, sessions, userBodyweight, userGender, hasValidProfileMetrics]);
 
   useEffect(() => {
     setNotes(exerciseLibraryEntry?.insightsNotes || '');
@@ -495,12 +498,25 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
             {activeTab === 'data' && (
               <View style={styles.tabContent}>
                 {chartData.has1RMData && (
-                  <View style={styles.chartWrapper}>
-                    <DistributionChart
-                      title={i18n.t('exerciseInsights.est1RMDistribution')}
-                      percentile={strengthPercentile}
-                    />
-                  </View>
+                  hasValidProfileMetrics ? (
+                    <View style={styles.chartWrapper}>
+                      <DistributionChart
+                        title={i18n.t('exerciseInsights.est1RMDistribution')}
+                        percentile={strengthPercentile}
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.chartWrapper}>
+                      <Card style={styles.percentileHintCard} padding={spacing.md}>
+                        <View style={styles.percentileHintRow}>
+                          <Ionicons name="information-circle-outline" size={20} color={colors.accent} style={{ marginRight: spacing.sm }} />
+                          <Text style={styles.percentileHintText}>
+                            {i18n.t('exerciseInsights.percentileHint', { defaultValue: 'Set bodyweight & gender in Profile to unlock strength percentiles' })}
+                          </Text>
+                        </View>
+                      </Card>
+                    </View>
+                  )
                 )}
 
                 <View style={styles.chartWrapper}>
@@ -539,7 +555,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
               <View style={styles.tabContent}>
                 {(() => {
                   try {
-                    const historyFromSessions = Array.isArray(sessions) ? sessions.reduce<any[]>((acc, session) => {
+                    const history = Array.isArray(sessions) ? sessions.reduce<any[]>((acc, session) => {
                       if (!session || !Array.isArray(session.exercises)) return acc;
                       const ex = session.exercises.find((e: any) => 
                         e && (
@@ -569,24 +585,6 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
                       }
                       return acc;
                     }, []) : [];
-
-                    const historyFromMock = (Array.isArray(mockExerciseHistory) ? mockExerciseHistory : [])
-                      .filter((h) => h && h.exerciseId === exerciseLibraryEntry?.id && Array.isArray(h.sets) && h.sets.length > 0)
-                      .map((h) => ({
-                        id: h.id,
-                        date: new Date(h.date),
-                        sets: h.sets.map((s: any) => ({ weightKg: Number(s.weightKg ?? 0), reps: Number(s.reps ?? 0) })),
-                      }));
-
-                    const combinedHistoryMap = new Map<string, any>();
-                    [...historyFromSessions, ...historyFromMock].forEach((item) => {
-                      if (!item || !item.date || isNaN(item.date.getTime())) return;
-                      const timeKey = `${item.date.getFullYear()}-${item.date.getMonth()}-${item.date.getDate()}`;
-                      if (!combinedHistoryMap.has(timeKey)) {
-                        combinedHistoryMap.set(timeKey, item);
-                      }
-                    });
-                    const history = Array.from(combinedHistoryMap.values());
 
                     if (history.length === 0) {
                       return (
@@ -1053,6 +1051,23 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: 10,
     lineHeight: 16,
+  },
+  percentileHintCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+  },
+  percentileHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  percentileHintText: {
+    color: colors.textSecondary,
+    fontFamily: font.medium,
+    fontSize: font.sizes.xs,
+    flex: 1,
+    lineHeight: 18,
   },
 });
 

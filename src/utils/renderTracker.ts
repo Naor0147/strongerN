@@ -7,6 +7,7 @@ class RenderTrackerStore {
   private counts: Map<string, number> = new Map();
 
   recordRender(componentName: string) {
+    if (process.env.NODE_ENV === 'production' && typeof __DEV__ !== 'undefined' && !__DEV__) return;
     const current = this.counts.get(componentName) || 0;
     this.counts.set(componentName, current + 1);
   }
@@ -31,6 +32,9 @@ class RenderTrackerStore {
 export const renderTracker = new RenderTrackerStore();
 
 export function useTrackRender(componentName: string, id?: string) {
+  if (process.env.NODE_ENV === 'production' && typeof __DEV__ !== 'undefined' && !__DEV__) {
+    return;
+  }
   const key = id ? `${componentName}:${id}` : componentName;
   renderTracker.recordRender(key);
 

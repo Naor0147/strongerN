@@ -253,6 +253,6 @@ describe('instantCache MMKV synchronous storage', () => {
       };
       setCachedProfileSummaries(newSummaries);
     }
-    expect(getCachedProfileSummaries()?.dynamicWeeklyChartData[0].count).toBe(6);
+    expect(getCachedProfileSummaries()?.dynamicWeeklyChartData?.[0]?.count).toBe(6);
   });
 });

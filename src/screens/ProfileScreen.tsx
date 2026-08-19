@@ -252,6 +252,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const lastVersionTapTime = useRef(0);
 
   const handleVersionPress = () => {
+    if (!__DEV__) return;
     const now = Date.now();
     if (now - lastVersionTapTime.current > 2000) {
       versionTapCount.current = 1;
@@ -471,6 +472,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, []);
 
   const handleLoadDemoData = () => {
+    if (!__DEV__) return;
     if (onImportBackup) {
       const demoBackup = {
         user: {
@@ -884,7 +886,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       >
         <Animated.View style={[animatedProfileStyle, { width: '100%' }]}>
           {/* ── Welcome Empty State / Load Demo Data Card ────────── */}
-          {sessions?.length === 0 && !googleUser && authMode === 'guest' && isDeveloperModeEnabled && (
+          {sessions?.length === 0 && !googleUser && authMode === 'guest' && __DEV__ && isDeveloperModeEnabled && (
             <Card padding={spacing.lg} style={styles.demoCard}>
               <View style={styles.demoHeader}>
                 <View style={[styles.demoIconCircle, { backgroundColor: colors.accent + '22' }]}>
@@ -2263,7 +2265,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
                 </Card>
               </>
-            ) : settingsView === 'diagnostics' ? (
+            ) : (settingsView === 'diagnostics' && __DEV__) ? (
               /* ═══════════════════════════════════════════════════
                  DIAGNOSTICS DEVELOPER SUBVIEW
                  ═══════════════════════════════════════════════════ */
@@ -2271,7 +2273,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 onBack={() => setSettingsView('about')}
                 onRefreshSessions={onRefreshSessions}
               />
-            ) : settingsView === 'developer' ? (
+            ) : (settingsView === 'developer' && __DEV__) ? (
               /* ═══════════════════════════════════════════════════
                  CRASH LOGS DEVELOPER SUBVIEW
                  ═══════════════════════════════════════════════════ */
@@ -2303,7 +2305,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 </Card>
 
                 {/* ── DEVELOPER OPTIONS (Conditionally Shown) ──── */}
-                {developerToolsUnlocked && (
+                {(__DEV__ && developerToolsUnlocked) && (
                   <>
                     <SectionLabel
                       title={i18n.t('profile.developerOptions')}
