@@ -78,6 +78,8 @@ import { ThemeOverrideInput, ThemeOverrideInputProps } from '../components/ui/Th
 import { DeveloperCrashLogsView, DeveloperCrashLogsViewProps } from './DeveloperCrashLogsView';
 import { DeveloperDiagnosticsView } from '../components/DeveloperDiagnosticsView';
 import { useProfileStats } from '../hooks/useProfileStats';
+import { MuscleSetsBars } from '../components/ui/MuscleSetsBars';
+import { getCachedLifetimeStats } from '../storage/instantCache';
 
 interface ProfileScreenProps {
   isHydrating?:          boolean;
@@ -1125,41 +1127,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               style={[styles.sectionLabel, { marginTop: spacing.xl }]}
             />
             <Card padding={spacing.lg}>
-              {Object.keys(weeklyMuscleSets || {}).length === 0 ? (
-                <Text style={{ color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' }}>
-                  {i18n.t('profile.noSetsThisWeek')}
-                </Text>
-              ) : (
-                <View style={{ gap: spacing.md }}>
-                  {Object.keys(weeklyMuscleSets).map((muscle) => {
-                    const sets = weeklyMuscleSets[muscle] || 0;
-                    const maxVal = Math.max(...Object.values(weeklyMuscleSets), 1);
-                    const percentage = Math.round((sets / maxVal) * 100);
-                    return (
-                      <View key={muscle} style={{ gap: 4 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text style={{ color: colors.textPrimary, fontSize: font.sizes.xs, fontFamily: font.semibold }}>
-                            {muscle.toUpperCase()}
-                          </Text>
-                          <Text style={{ color: colors.textSecondary, fontSize: font.sizes.xs, fontFamily: font.bold }}>
-                            {sets} {i18n.t('profile.sets')}
-                          </Text>
-                        </View>
-                        <View style={{ height: 6, backgroundColor: colors.surface2, borderRadius: radius.full, overflow: 'hidden' }}>
-                          <View 
-                            style={{ 
-                              height: '100%', 
-                              width: `${percentage}%`, 
-                              backgroundColor: colors.accent, 
-                              borderRadius: radius.full 
-                            }} 
-                          />
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
+              <MuscleSetsBars muscleSets={weeklyMuscleSets} testID="profile.muscleSetsBars" />
             </Card>
           </>
         )}

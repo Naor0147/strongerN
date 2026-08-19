@@ -31,6 +31,7 @@ import { getExercisePercentile } from '../utils/strengthDistributionEngine';
 import i18n from '../utils/i18n';
 import { getDisplayName, getMuscleDisplayName } from '../utils/exerciseNames';
 import { addVariationToExercise, removeVariationFromExercise, isValidTag } from '../utils/variationUtils';
+import { countCompletedSetsInExercise } from '../utils/setCounting';
 
 class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -234,6 +235,19 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
     };
   }, [exerciseName, sessions]);
 
+  const lifetimeCompletedSets = useMemo(() => {
+    let count = 0;
+    const nameLower = exerciseName.toLowerCase().trim();
+    sessions.forEach((s) => {
+      (s.exercises || []).forEach((e: any) => {
+        if ((e.name || '').toLowerCase().trim() === nameLower) {
+          count += countCompletedSetsInExercise(e);
+        }
+      });
+    });
+    return count;
+  }, [exerciseName, sessions]);
+
   const handleClose = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onClose();
@@ -273,6 +287,7 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
             {(exerciseLibraryEntry?.muscleGroup || (exerciseLibraryEntry as any)?.bodyPart) && (
               <Text style={styles.headerSubtitle}>
                 {(exerciseLibraryEntry?.muscleGroup || (exerciseLibraryEntry as any)?.bodyPart || '').toUpperCase()}
+                {lifetimeCompletedSets > 0 ? ` · ${lifetimeCompletedSets} ${i18n.t('profile.sets')}` : ''}
               </Text>
             )}
           </View>
