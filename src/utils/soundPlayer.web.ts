@@ -75,6 +75,9 @@ function getOrCreateWebPlayer(soundKey: string, source: any): HTMLAudioElement |
  * Web Audio API helper for specific sound keys on Web
  */
 function playWebSound(soundKey: string) {
+  if (soundKey === 'bell1' || soundKey === 'bell2' || soundKey === 'boxing-bell') {
+    soundKey = 'beep';
+  }
   if (soundKey === 'chime') {
     playWebSynthesizer([
       { freq: 523.25, duration: 0.15, delay: 0 },

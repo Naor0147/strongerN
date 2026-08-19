@@ -178,7 +178,6 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
   onDeleteMetricLog,
 }) => {
   const insets = useSafeAreaInsets();
-  if (!visible) return null;
   return (
     <Modal
       visible={visible}
@@ -210,7 +209,9 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
       </View>
     </Modal>
   );
-});function App() {
+});
+
+function App() {
   const isE2E = Platform.OS === 'web' && (
     process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
       window.location?.search?.includes('e2e=true') ||
@@ -329,16 +330,22 @@ function MainApp() {
 
     if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions) {
       interactionTask = InteractionManager.runAfterInteractions(() => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
         initSounds();
         initNotifications();
       });
       timer = setTimeout(() => {
         interactionTask?.cancel?.();
+        timer = null;
         initSounds();
         initNotifications();
       }, 500);
     } else {
       timer = setTimeout(() => {
+        timer = null;
         initSounds();
         initNotifications();
       }, 60);
@@ -748,6 +755,8 @@ function MainApp() {
             const t0 = (global as any).__STARTUP_T0__ || now;
             console.log(`[PERF_BENCHMARK] Background SQLite & History Sync Complete in ${now - t0}ms`);
           }
+        } else {
+          setIsDataLoaded(true);
         }
       } catch (e: any) {
         console.error('[Persistence] Error loading persisted state:', e);
@@ -771,6 +780,8 @@ function MainApp() {
           saveCrashLogSync('Persistence Fallback Failure: ' + (fallbackErr?.message || fallbackErr), fallbackErr?.stack || '', false);
           setIsDataLoaded(true);
         }
+      } finally {
+        setIsDataLoaded(true);
       }
     }
     loadData();
@@ -2233,7 +2244,7 @@ function MainApp() {
     });
   }, [beginActiveWorkout, isProgressiveOverloadEnabled]);
 
-  const handleResumeWorkout = (session: any) => {
+  const handleResumeWorkout = React.useCallback((session: any) => {
     if (isWorkoutActive) {
       Alert.alert(
         i18n.t('alerts.workoutActive'),
@@ -2265,7 +2276,7 @@ function MainApp() {
       activeWorkoutComment: session.comment || '',
       editingSessionId: session.id,
     });
-  };
+  }, [isWorkoutActive, beginActiveWorkout]);
 
   const handleDiscardWorkout = React.useCallback(() => {
     try {
@@ -2779,35 +2790,43 @@ function MainApp() {
             {isHistoryEnabled && (
               <Tab.Screen name="History">
                 {() => (
-                  <React.Suspense fallback={<TabFallback />}>
-                    {historyScreenElement}
-                  </React.Suspense>
+                  <ErrorBoundary>
+                    <React.Suspense fallback={<TabFallback />}>
+                      {historyScreenElement}
+                    </React.Suspense>
+                  </ErrorBoundary>
                 )}
               </Tab.Screen>
             )}
 
             <Tab.Screen name="Workout">
               {() => (
-                <React.Suspense fallback={<TabFallback />}>
-                  {workoutScreenElement}
-                </React.Suspense>
+                <ErrorBoundary>
+                  <React.Suspense fallback={<TabFallback />}>
+                    {workoutScreenElement}
+                  </React.Suspense>
+                </ErrorBoundary>
               )}
             </Tab.Screen>
 
             <Tab.Screen name="Exercises">
               {() => (
-                <React.Suspense fallback={<TabFallback />}>
-                  {exercisesScreenElement}
-                </React.Suspense>
+                <ErrorBoundary>
+                  <React.Suspense fallback={<TabFallback />}>
+                    {exercisesScreenElement}
+                  </React.Suspense>
+                </ErrorBoundary>
               )}
             </Tab.Screen>
 
             {isMusclesEnabled && (
               <Tab.Screen name="Muscles">
                 {() => (
-                  <React.Suspense fallback={<TabFallback />}>
-                    {muscleMapScreenElement}
-                  </React.Suspense>
+                  <ErrorBoundary>
+                    <React.Suspense fallback={<TabFallback />}>
+                      {muscleMapScreenElement}
+                    </React.Suspense>
+                  </ErrorBoundary>
                 )}
               </Tab.Screen>
             )}

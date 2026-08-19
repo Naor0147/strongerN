@@ -395,9 +395,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     if (soundKey === 'chime') return i18n.t('extras.soundChime');
     if (soundKey === 'beep') return i18n.t('extras.soundDoubleBeep');
     if (soundKey === 'fanfare') return i18n.t('extras.soundFanfare');
-    if (soundKey === 'bell1') return i18n.t('extras.soundBell1');
-    if (soundKey === 'bell2') return i18n.t('extras.soundBell2');
-    if (soundKey === 'boxing-bell') return i18n.t('extras.soundBoxingBell');
     if (soundKey === 'mute') return i18n.t('extras.soundMute');
     const found = customSounds.find(c => c.id === soundKey);
     return found ? found.name : i18n.t('extras.soundCustom');
