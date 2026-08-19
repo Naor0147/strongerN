@@ -1,4 +1,4 @@
-import { Platform, Share, Clipboard, InteractionManager } from 'react-native';
+import { Platform, Share, Clipboard, InteractionManager, AppState } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import * as Application from 'expo-application';
@@ -14,7 +14,8 @@ export interface CrashLog {
 }
 
 const CRASH_LOGS_KEY = 'crash_logs';
-const CURRENT_APP_VERSION = Application.nativeApplicationVersion || '1.0.0.98';
+export const DEFAULT_APP_VERSION = '1.0.1.82';
+const CURRENT_APP_VERSION = Application.nativeApplicationVersion || DEFAULT_APP_VERSION;
 
 let memoryCrashQueue: CrashLog[] = [];
 let flushTimeout: any = null;
@@ -23,19 +24,30 @@ let isFlushing = false;
 export function scheduleCrashQueueFlush(): void {
   if (flushTimeout) return;
 
+  let fallbackTimer: any = null;
+  let interactionHandle: any = null;
+
   const triggerFlush = () => {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    if (interactionHandle) {
+      interactionHandle.cancel?.();
+      interactionHandle = null;
+    }
     flushTimeout = null;
     flushCrashQueueAsync().catch(() => {});
   };
 
   if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions) {
-    const handle = InteractionManager.runAfterInteractions(() => {
+    interactionHandle = InteractionManager.runAfterInteractions(() => {
       triggerFlush();
     });
-    flushTimeout = setTimeout(() => {
-      handle?.cancel?.();
+    fallbackTimer = setTimeout(() => {
       triggerFlush();
     }, 2000);
+    flushTimeout = fallbackTimer;
   } else {
     flushTimeout = setTimeout(triggerFlush, 1500);
   }
@@ -47,6 +59,7 @@ export async function flushCrashQueueAsync(): Promise<void> {
   const logsToFlush = [...memoryCrashQueue];
   memoryCrashQueue = [];
 
+  let flushSucceeded = false;
   try {
     const isWeb = Platform.OS === 'web';
     if (isWeb) {
@@ -61,6 +74,7 @@ export async function flushCrashQueueAsync(): Promise<void> {
           .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
           .slice(0, 100);
         window.localStorage.setItem(CRASH_LOGS_KEY, JSON.stringify(combined));
+        flushSucceeded = true;
       }
     } else {
       let sqliteLogs: CrashLog[] = [];
@@ -101,11 +115,15 @@ export async function flushCrashQueueAsync(): Promise<void> {
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 100);
 
-      await saveCrashLogs(combined);
+      flushSucceeded = await saveCrashLogs(combined);
     }
   } catch (e) {
-    memoryCrashQueue = [...logsToFlush, ...memoryCrashQueue].slice(0, 100);
+    flushSucceeded = false;
   } finally {
+    if (!flushSucceeded && logsToFlush.length > 0) {
+      memoryCrashQueue = [...logsToFlush, ...memoryCrashQueue].slice(-100);
+      scheduleCrashQueueFlush();
+    }
     isFlushing = false;
   }
 }
@@ -499,6 +517,15 @@ export function initCrashLogger(): void {
   } catch (e) {
     // Rejection tracking module may not be available on all JS runtimes
   }
+
+  // Hook AppState changes to flush crash queue on app background
+  try {
+    AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        flushCrashQueueAsync().catch(() => {});
+      }
+    });
+  } catch (e) {}
 }
 
 // Automatically initialize when imported
