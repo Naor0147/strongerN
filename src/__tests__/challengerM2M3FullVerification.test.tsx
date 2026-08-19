@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 
 jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
@@ -175,19 +175,36 @@ describe('Challenger Empirical Verification: Milestones 2 & 3', () => {
     });
 
     describe('StatCard Edge Cases', () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
       test('Renders cleanly with zero value and no decimals', () => {
         const { getByText } = render(<StatCard value={0} label="Total Workouts" />);
+        act(() => {
+          jest.advanceTimersByTime(500);
+        });
         expect(getByText('0')).toBeTruthy();
         expect(getByText('Total Workouts')).toBeTruthy();
       });
 
       test('Renders cleanly with float value and explicit decimals', () => {
         const { getByText } = render(<StatCard value={12.3456} label="Avg Workouts" decimals={1} />);
+        act(() => {
+          jest.advanceTimersByTime(500);
+        });
         expect(getByText('12.3')).toBeTruthy();
       });
 
       test('Renders cleanly with large volume values', () => {
         const { getByText } = render(<StatCard value={987654.321} label="All Time Volume" decimals={0} />);
+        act(() => {
+          jest.advanceTimersByTime(500);
+        });
         expect(getByText('987654')).toBeTruthy();
       });
 

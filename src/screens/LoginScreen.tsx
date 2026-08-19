@@ -18,8 +18,7 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, withSpring, interpolate, Easing } from 'react-native-reanimated';
-import * as RN from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, cancelAnimation, interpolate, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -106,6 +105,12 @@ const AnimatedLogo: React.FC = () => {
       -1,
       true
     );
+    return () => {
+      if (typeof cancelAnimation === 'function') {
+        cancelAnimation(pulseAnim);
+        cancelAnimation(glowAnim);
+      }
+    };
   }, [globalAnimation.speed]);
 
   const glowStyle = useAnimatedStyle(() => ({
@@ -292,10 +297,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     }
 
     const STAGGER = 50 * speed;
-    const dur = getScaledDuration(420);
+    const dur = getScaledDuration(600);
     const easing = Easing.out(Easing.cubic);
 
-    logoAnim.value = withDelay(0, withTiming(1, { duration: dur, easing }));
+    logoAnim.value = withTiming(1, { duration: dur, easing });
     titleAnim.value = withDelay(STAGGER, withTiming(1, { duration: dur, easing }));
     cardAnim.value = withDelay(STAGGER * 2, withTiming(1, { duration: dur, easing }));
     footerAnim.value = withDelay(STAGGER * 3, withTiming(1, { duration: dur, easing }));
@@ -305,29 +310,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const logoEntranceStyle = useAnimatedStyle(() => ({
     opacity: logoAnim.value,
     transform: [
-      { translateY: interpolate(logoAnim.value, [0, 1], [24, 0]) },
-      { scale: interpolate(logoAnim.value, [0, 1], [0.92, 1]) },
+      { translateY: interpolate(logoAnim.value, [0, 1], [32, 0]) },
     ],
   }));
 
   const titleEntranceStyle = useAnimatedStyle(() => ({
     opacity: titleAnim.value,
     transform: [
-      { translateY: interpolate(titleAnim.value, [0, 1], [20, 0]) },
+      { translateY: interpolate(titleAnim.value, [0, 1], [32, 0]) },
     ],
   }));
 
   const cardEntranceStyle = useAnimatedStyle(() => ({
     opacity: cardAnim.value,
     transform: [
-      { translateY: interpolate(cardAnim.value, [0, 1], [24, 0]) },
+      { translateY: interpolate(cardAnim.value, [0, 1], [32, 0]) },
     ],
   }));
 
   const footerEntranceStyle = useAnimatedStyle(() => ({
     opacity: footerAnim.value,
     transform: [
-      { translateY: interpolate(footerAnim.value, [0, 1], [16, 0]) },
+      { translateY: interpolate(footerAnim.value, [0, 1], [32, 0]) },
     ],
   }));
 

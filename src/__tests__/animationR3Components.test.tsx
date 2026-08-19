@@ -153,7 +153,15 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
   // 3. StatCard Optimization (Zero JS-Thread RAF Re-renders)
   // ═════════════════════════════════════════════════════════════════════════
   describe('StatCard Performance & Value Formatting', () => {
-    test('renders integer stat card directly without RAF re-render storm', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test('renders integer stat card accurately with rAF count-up', () => {
       let tree: any;
       renderer.act(() => {
         tree = renderer.create(
@@ -164,6 +172,10 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
             testID="stat-workouts"
           />
         );
+      });
+
+      renderer.act(() => {
+        jest.advanceTimersByTime(500);
       });
 
       const json = tree.toJSON();
@@ -189,6 +201,10 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
             testID="stat-weight"
           />
         );
+      });
+
+      renderer.act(() => {
+        jest.advanceTimersByTime(500);
       });
 
       const json = tree.toJSON();

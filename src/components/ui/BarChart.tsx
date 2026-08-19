@@ -12,6 +12,7 @@ import Animated, {
   useAnimatedStyle,
   withDelay,
   withTiming,
+  withSpring,
   interpolate,
   Easing,
   SharedValue,
@@ -102,13 +103,14 @@ const BarColumn: React.FC<{
     }
     animProgress.value = 0;
     animProgress.value = withDelay(
-      index * 35 * speed,
-      withTiming(1, {
-        duration: getScaledDuration(380),
-        easing: Easing.out(Easing.cubic),
+      index * 90 * speed,
+      withSpring(1, {
+        stiffness: 130,
+        damping: 15,
+        mass: 0.8,
       })
     );
-  }, [item.value, chartReady, speed, index]);
+  }, [item.value, chartReady, index]);
 
   const trackPadding = 3;
   const blockGap = 3;
