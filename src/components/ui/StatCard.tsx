@@ -1,9 +1,16 @@
 // components/ui/StatCard.tsx
-// Premium stat display card with icon, large animated count-up number, and label.
-import React, { useEffect, useRef } from 'react';
+// Premium stat display card with icon, direct formatted value, and 120 FPS UI-thread entrance
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, font, spacing, radius, shadow, animation, globalAnimation } from '../../theme';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, font, spacing, radius, shadow, globalAnimation, getScaledDuration } from '../../theme';
 
 interface StatCardProps {
   value:      number;
@@ -25,60 +32,41 @@ const StatCard: React.FC<StatCardProps> = ({
   style,
   testID,
 }) => {
-  const [displayVal, setDisplayVal] = React.useState(0);
-  const prevValRef = useRef(0);
+  const isInstant = typeof globalAnimation !== 'undefined' && globalAnimation && globalAnimation.speed === 0;
+  const entranceAnim = useSharedValue(isInstant ? 1 : 0);
 
   useEffect(() => {
-    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
-      ? globalAnimation.speed
-      : 1;
-
-    if (speed === 0) {
-      setDisplayVal(value);
-      prevValRef.current = value;
+    if (isInstant) {
+      entranceAnim.value = 1;
       return;
     }
+    entranceAnim.value = withTiming(1, {
+      duration: getScaledDuration(320),
+      easing: Easing.out(Easing.quad),
+    });
+  }, [isInstant]);
 
-    const duration = animation.slow * speed;
-    const startTime = Date.now();
-    const startVal = prevValRef.current;
-    let animId: number;
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    opacity: entranceAnim.value,
+    transform: [
+      { translateY: interpolate(entranceAnim.value, [0, 1], [12, 0]) },
+    ],
+  }));
 
-    const tick = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease out quad
-      const easeProgress = progress * (2 - progress);
-      const currentVal = startVal + (value - startVal) * easeProgress;
-      
-      setDisplayVal(parseFloat(currentVal.toFixed(decimals)));
-
-      if (progress < 1) {
-        animId = requestAnimationFrame(tick);
-      } else {
-        prevValRef.current = value;
-      }
-    };
-
-    animId = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(animId);
-    };
-  }, [value, decimals]);
+  const formattedValue = decimals > 0 ? value.toFixed(decimals) : Math.round(value);
 
   return (
-    <View style={[styles.card, style]} testID={testID}>
+    <Animated.View style={[styles.card, cardAnimStyle, style]} testID={testID}>
       {icon ? (
         <View style={[styles.iconWrap, { backgroundColor: iconColor + '20' }]}>
           <Ionicons name={icon} size={18} color={iconColor} />
         </View>
       ) : null}
       <Text style={styles.value} numberOfLines={1}>
-        {decimals > 0 ? displayVal.toFixed(decimals) : Math.round(displayVal)}
+        {formattedValue}
       </Text>
       <Text style={styles.label} numberOfLines={1}>{label}</Text>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -116,4 +104,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default StatCard;
+export default React.memo(StatCard);

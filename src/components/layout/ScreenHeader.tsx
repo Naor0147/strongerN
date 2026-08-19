@@ -3,7 +3,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { colors, font, spacing } from '../../theme';
 import IconButton from '../ui/IconButton';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 interface IconAction {
   icon:   keyof typeof Ionicons.glyphMap;

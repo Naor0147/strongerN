@@ -32,7 +32,7 @@ const safeLayoutAnim = (preset = LayoutAnimation.Presets.easeInEaseOut) => {
   } catch { /* no-op */ }
 };
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import { Exercise } from '../../data/mockData';
 import IconButton from '../ui/IconButton';

@@ -18,10 +18,10 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withSpring, interpolate, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, withSpring, interpolate, Easing } from 'react-native-reanimated';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -208,9 +208,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const insets = useSafeAreaInsets();
   const { height: layoutHeight } = useWindowDimensions();
 
-  // Animation refs
-  const fadeAnim = useSharedValue(0);
-  const slideAnim = useSharedValue(32);
+  // 4-tier entrance animation shared values (Logo -> Title -> Card -> Footer)
+  const isInstant = typeof globalAnimation !== 'undefined' && globalAnimation && globalAnimation.speed === 0;
+  const logoAnim = useSharedValue(isInstant ? 1 : 0);
+  const titleAnim = useSharedValue(isInstant ? 1 : 0);
+  const cardAnim = useSharedValue(isInstant ? 1 : 0);
+  const footerAnim = useSharedValue(isInstant ? 1 : 0);
+
+  // Gate animation trigger to execute smoothly after layout/mount commit (Frame 0 gating)
+  const [isReadyToAnimate, setIsReadyToAnimate] = useState(false);
 
   // Local username flow
   const [showLocalForm, setShowLocalForm] = useState(false);
@@ -261,22 +267,68 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     }
   }, [response]);
 
-  // Mount animation
+  // Frame 0 gating: Wait for layout/mount commit before triggering entrance animations
   useEffect(() => {
-    if (globalAnimation.speed === 0) {
-      fadeAnim.value = 1;
-      slideAnim.value = 0;
-      return;
-    }
-    const dur = getScaledDuration(600);
-    const easing = Easing.out(Easing.cubic);
-    fadeAnim.value = withTiming(1, { duration: dur, easing });
-    slideAnim.value = withTiming(0, { duration: dur, easing });
+    const frameId = requestAnimationFrame(() => {
+      setIsReadyToAnimate(true);
+    });
+    return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const contentStyle = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: slideAnim.value }],
+  // 4-tier staggered entrance animation (Logo: 0ms, Title: 50ms, Card: 100ms, Footer: 150ms)
+  useEffect(() => {
+    if (!isReadyToAnimate) return;
+
+    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+      ? globalAnimation.speed
+      : 1;
+
+    if (speed === 0) {
+      logoAnim.value = 1;
+      titleAnim.value = 1;
+      cardAnim.value = 1;
+      footerAnim.value = 1;
+      return;
+    }
+
+    const STAGGER = 50 * speed;
+    const dur = getScaledDuration(420);
+    const easing = Easing.out(Easing.cubic);
+
+    logoAnim.value = withDelay(0, withTiming(1, { duration: dur, easing }));
+    titleAnim.value = withDelay(STAGGER, withTiming(1, { duration: dur, easing }));
+    cardAnim.value = withDelay(STAGGER * 2, withTiming(1, { duration: dur, easing }));
+    footerAnim.value = withDelay(STAGGER * 3, withTiming(1, { duration: dur, easing }));
+  }, [isReadyToAnimate]);
+
+  // Animated styles for each tier executed directly on the UI thread
+  const logoEntranceStyle = useAnimatedStyle(() => ({
+    opacity: logoAnim.value,
+    transform: [
+      { translateY: interpolate(logoAnim.value, [0, 1], [24, 0]) },
+      { scale: interpolate(logoAnim.value, [0, 1], [0.92, 1]) },
+    ],
+  }));
+
+  const titleEntranceStyle = useAnimatedStyle(() => ({
+    opacity: titleAnim.value,
+    transform: [
+      { translateY: interpolate(titleAnim.value, [0, 1], [20, 0]) },
+    ],
+  }));
+
+  const cardEntranceStyle = useAnimatedStyle(() => ({
+    opacity: cardAnim.value,
+    transform: [
+      { translateY: interpolate(cardAnim.value, [0, 1], [24, 0]) },
+    ],
+  }));
+
+  const footerEntranceStyle = useAnimatedStyle(() => ({
+    opacity: footerAnim.value,
+    transform: [
+      { translateY: interpolate(footerAnim.value, [0, 1], [16, 0]) },
+    ],
   }));
 
   // ── Handlers ──────────────────────────────────────────────────
@@ -424,267 +476,268 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Animated.View
-              style={[
-                styles.content,
-                contentStyle,
-              ]}
-            >
-              {/* ── Logo ─────────────────────────────────────── */}
-              <AnimatedLogo />
+            <View style={styles.content}>
+              {/* ── Tier 1: Logo (0ms delay) ─────────────────── */}
+              <Animated.View style={[styles.tierContainer, logoEntranceStyle]}>
+                <AnimatedLogo />
+              </Animated.View>
 
-              {/* ── App Name ─────────────────────────────────── */}
-              <Text style={styles.appName}>{i18n.t('login.appTitle')}</Text>
-              <Text style={styles.tagline}>{i18n.t('login.appSubtitle')}</Text>
+              {/* ── Tier 2: App Name & Tagline (50ms delay) ─── */}
+              <Animated.View style={[styles.tierContainer, titleEntranceStyle]}>
+                <Text style={styles.appName}>{i18n.t('login.appTitle')}</Text>
+                <Text style={styles.tagline}>{i18n.t('login.appSubtitle')}</Text>
+              </Animated.View>
 
-              {/* ── Auth Card ────────────────────────────────── */}
-              <View style={styles.card}>
-                {/* Google Sign-In */}
-                {!showLocalForm && (
-                  <>
-                    <Text style={styles.cardTitle}>{i18n.t('login.getStarted')}</Text>
-                    <Text style={styles.cardSubtitle}>
-                      {i18n.t('login.signInDesc')}
-                    </Text>
+              {/* ── Tier 3: Auth Card & Buttons (100ms delay) ─ */}
+              <Animated.View style={[styles.tierContainer, cardEntranceStyle]}>
+                <View style={styles.card}>
+                  {/* Google Sign-In */}
+                  {!showLocalForm && (
+                    <>
+                      <Text style={styles.cardTitle}>{i18n.t('login.getStarted')}</Text>
+                      <Text style={styles.cardSubtitle}>
+                        {i18n.t('login.signInDesc')}
+                      </Text>
 
-                    {/* Google Button */}
-                    <Pressable
-                      id="login-google-btn"
-                      style={({ pressed }) => [
-                        styles.googleBtn,
-                        pressed && styles.googleBtnPressed,
-                      ]}
-                      onPress={handleGoogleOAuth}
-                      disabled={isGoogleLoading}
-                      android_ripple={rippleTokens.surface}
-                      accessibilityLabel={i18n.t('extras.continueWithGoogleA11y')}
-                    >
-                      {isGoogleLoading ? (
-                        <ActivityIndicator size="small" color={colors.textPrimary} />
-                      ) : (
-                        <>
-                          {/* Google "G" icon via SVG-like Ionicons + manual letter */}
-                          <View style={styles.googleIconBox}>
-                            <Text style={styles.googleG}>G</Text>
-                          </View>
-                          <Text style={styles.googleBtnText}>{i18n.t('login.continueWithGoogle')}</Text>
-                        </>
+                      {/* Google Button */}
+                      <Pressable
+                        id="login-google-btn"
+                        style={({ pressed }) => [
+                          styles.googleBtn,
+                          pressed && styles.googleBtnPressed,
+                        ]}
+                        onPress={handleGoogleOAuth}
+                        disabled={isGoogleLoading}
+                        android_ripple={rippleTokens.surface}
+                        accessibilityLabel={i18n.t('extras.continueWithGoogleA11y')}
+                      >
+                        {isGoogleLoading ? (
+                          <ActivityIndicator size="small" color={colors.textPrimary} />
+                        ) : (
+                          <>
+                            {/* Google "G" icon via SVG-like Ionicons + manual letter */}
+                            <View style={styles.googleIconBox}>
+                              <Text style={styles.googleG}>G</Text>
+                            </View>
+                            <Text style={styles.googleBtnText}>{i18n.t('login.continueWithGoogle')}</Text>
+                          </>
+                        )}
+                      </Pressable>
+
+                      {/* Token fallback (developer / web popup blocked) */}
+                      {showTokenInput && (
+                        <View style={styles.tokenFallback}>
+                          <Text style={styles.tokenLabel}>{i18n.t('login.pasteAccessToken')}</Text>
+                          <TextInput
+                            id="login-google-token-input"
+                            style={styles.tokenInput}
+                            value={googleToken}
+                            onChangeText={setGoogleToken}
+                            placeholder="ya29.xxx…"
+                            placeholderTextColor={colors.textMuted}
+                            autoCorrect={false}
+                            autoCapitalize="none"
+                          />
+                          <Pressable
+                            id="login-google-token-submit"
+                            style={styles.tokenSubmitBtn}
+                            onPress={() => handleGoogleConnectWithToken(googleToken.trim())}
+                            disabled={!googleToken.trim()}
+                            android_ripple={rippleTokens.accent}
+                          >
+                            <Text style={styles.tokenSubmitText}>{i18n.t('login.connect')}</Text>
+                          </Pressable>
+                        </View>
                       )}
-                    </Pressable>
 
-                    {/* Token fallback (developer / web popup blocked) */}
-                    {showTokenInput && (
-                      <View style={styles.tokenFallback}>
-                        <Text style={styles.tokenLabel}>{i18n.t('login.pasteAccessToken')}</Text>
-                        <TextInput
-                          id="login-google-token-input"
-                          style={styles.tokenInput}
-                          value={googleToken}
-                          onChangeText={setGoogleToken}
-                          placeholder="ya29.xxx…"
-                          placeholderTextColor={colors.textMuted}
-                          autoCorrect={false}
-                          autoCapitalize="none"
-                        />
+                      {/* Divider */}
+                      <View style={styles.dividerRow}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>{i18n.t('common.or')}</Text>
+                        <View style={styles.dividerLine} />
+                      </View>
+
+                      {/* Local Account */}
+                      <Pressable
+                        id="login-local-btn"
+                        style={({ pressed }) => [
+                          styles.localBtn,
+                          pressed && { opacity: 0.8 },
+                        ]}
+                        onPress={() => setShowLocalForm(true)}
+                        android_ripple={rippleTokens.accent}
+                        accessibilityLabel={i18n.t('extras.createLocalAccountA11y')}
+                      >
+                        <Ionicons name="person-outline" size={18} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.localBtnText}>{i18n.t('login.createLocalAccount')}</Text>
+                      </Pressable>
+
+                      {/* Guest */}
+                      <Pressable
+                        id="login-guest-btn"
+                        style={({ pressed }) => [
+                          styles.guestBtn,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={handleContinueAsGuest}
+                        android_ripple={rippleTokens.borderless}
+                        accessibilityLabel={i18n.t('extras.continueAsGuestA11y')}
+                      >
+                        <Ionicons name="eye-off-outline" size={15} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
+                        <Text style={styles.guestBtnText}>{i18n.t('login.continueAsGuest')}</Text>
+                      </Pressable>
+                    </>
+                  )}
+
+                  {/* ── Local Username Form ───────────────────── */}
+                  {showLocalForm && (
+                    <>
+                      <Pressable
+                        onPress={() => { setShowLocalForm(false); setUsernameError(''); setRestoreMode(false); }}
+                        style={styles.backRow}
+                        android_ripple={rippleTokens.borderless}
+                      >
+                        <Ionicons name="arrow-back" size={18} color={colors.textSecondary} />
+                        <Text style={styles.backText}>{i18n.t('login.back')}</Text>
+                      </Pressable>
+
+                      {/* ── Tab Switcher: Create | Restore ─── */}
+                      <View style={styles.localTabRow}>
                         <Pressable
-                          id="login-google-token-submit"
-                          style={styles.tokenSubmitBtn}
-                          onPress={() => handleGoogleConnectWithToken(googleToken.trim())}
-                          disabled={!googleToken.trim()}
-                          android_ripple={rippleTokens.accent}
+                          id="login-tab-create"
+                          style={[styles.localTab, !restoreMode && styles.localTabActive]}
+                          onPress={() => { setRestoreMode(false); setUsernameError(''); }}
+                          android_ripple={rippleTokens.borderless}
                         >
-                          <Text style={styles.tokenSubmitText}>{i18n.t('login.connect')}</Text>
+                          <Ionicons name="person-add-outline" size={15} color={!restoreMode ? colors.accent : colors.textMuted} />
+                          <Text style={[styles.localTabText, !restoreMode && styles.localTabTextActive]}>{i18n.t('login.newAccount')}</Text>
+                        </Pressable>
+                        <Pressable
+                          id="login-tab-restore"
+                          style={[styles.localTab, restoreMode && styles.localTabActive]}
+                          onPress={() => { setRestoreMode(true); setUsernameError(''); }}
+                          android_ripple={rippleTokens.borderless}
+                        >
+                          <Ionicons name="cloud-download-outline" size={15} color={restoreMode ? colors.accent : colors.textMuted} />
+                          <Text style={[styles.localTabText, restoreMode && styles.localTabTextActive]}>{i18n.t('login.restore')}</Text>
                         </Pressable>
                       </View>
-                    )}
 
-                    {/* Divider */}
-                    <View style={styles.dividerRow}>
-                      <View style={styles.dividerLine} />
-                      <Text style={styles.dividerText}>{i18n.t('common.or')}</Text>
-                      <View style={styles.dividerLine} />
-                    </View>
+                      {!restoreMode ? (
+                        /* ── Create New Account ── */
+                        <>
+                          <Text style={styles.cardTitle}>{i18n.t('login.createAccount')}</Text>
+                          <Text style={styles.cardSubtitle}>
+                            {i18n.t('login.chooseName')}
+                          </Text>
 
-                    {/* Local Account */}
-                    <Pressable
-                      id="login-local-btn"
-                      style={({ pressed }) => [
-                        styles.localBtn,
-                        pressed && { opacity: 0.8 },
-                      ]}
-                      onPress={() => setShowLocalForm(true)}
-                      android_ripple={rippleTokens.accent}
-                      accessibilityLabel={i18n.t('extras.createLocalAccountA11y')}
-                    >
-                      <Ionicons name="person-outline" size={18} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
-                      <Text style={styles.localBtnText}>{i18n.t('login.createLocalAccount')}</Text>
-                    </Pressable>
-
-                    {/* Guest */}
-                    <Pressable
-                      id="login-guest-btn"
-                      style={({ pressed }) => [
-                        styles.guestBtn,
-                        pressed && { opacity: 0.7 },
-                      ]}
-                      onPress={handleContinueAsGuest}
-                      android_ripple={rippleTokens.borderless}
-                      accessibilityLabel={i18n.t('extras.continueAsGuestA11y')}
-                    >
-                      <Ionicons name="eye-off-outline" size={15} color={colors.textMuted} style={{ marginRight: spacing.xs }} />
-                      <Text style={styles.guestBtnText}>{i18n.t('login.continueAsGuest')}</Text>
-                    </Pressable>
-                  </>
-                )}
-
-                {/* ── Local Username Form ───────────────────── */}
-                {showLocalForm && (
-                  <>
-                    <Pressable
-                      onPress={() => { setShowLocalForm(false); setUsernameError(''); setRestoreMode(false); }}
-                      style={styles.backRow}
-                      android_ripple={rippleTokens.borderless}
-                    >
-                      <Ionicons name="arrow-back" size={18} color={colors.textSecondary} />
-                      <Text style={styles.backText}>{i18n.t('login.back')}</Text>
-                    </Pressable>
-
-                    {/* ── Tab Switcher: Create | Restore ─── */}
-                    <View style={styles.localTabRow}>
-                      <Pressable
-                        id="login-tab-create"
-                        style={[styles.localTab, !restoreMode && styles.localTabActive]}
-                        onPress={() => { setRestoreMode(false); setUsernameError(''); }}
-                        android_ripple={rippleTokens.borderless}
-                      >
-                        <Ionicons name="person-add-outline" size={15} color={!restoreMode ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.localTabText, !restoreMode && styles.localTabTextActive]}>{i18n.t('login.newAccount')}</Text>
-                      </Pressable>
-                      <Pressable
-                        id="login-tab-restore"
-                        style={[styles.localTab, restoreMode && styles.localTabActive]}
-                        onPress={() => { setRestoreMode(true); setUsernameError(''); }}
-                        android_ripple={rippleTokens.borderless}
-                      >
-                        <Ionicons name="cloud-download-outline" size={15} color={restoreMode ? colors.accent : colors.textMuted} />
-                        <Text style={[styles.localTabText, restoreMode && styles.localTabTextActive]}>{i18n.t('login.restore')}</Text>
-                      </Pressable>
-                    </View>
-
-                    {!restoreMode ? (
-                      /* ── Create New Account ── */
-                      <>
-                        <Text style={styles.cardTitle}>{i18n.t('login.createAccount')}</Text>
-                        <Text style={styles.cardSubtitle}>
-                          {i18n.t('login.chooseName')}
-                        </Text>
-
-                        <View style={[styles.inputWrapper, usernameError ? styles.inputWrapperError : null]}>
-                          <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
-                          <TextInput
-                            id="login-username-input"
-                            style={styles.textInput}
-                            value={localUsername}
-                            onChangeText={(t) => { setLocalUsername(t); setUsernameError(''); }}
-                            placeholder={i18n.t('login.yourName')}
-                            placeholderTextColor={colors.textMuted}
-                            maxLength={32}
-                            returnKeyType="done"
-                            onSubmitEditing={handleLocalSubmit}
-                            autoFocus
-                            autoCapitalize="words"
-                          />
-                        </View>
-
-                        {usernameError ? (
-                          <Text style={styles.errorText}>{usernameError}</Text>
-                        ) : null}
-
-                        <Pressable
-                          id="login-local-submit"
-                          style={({ pressed }) => [
-                            styles.localBtn,
-                            pressed && { opacity: 0.8 },
-                            { marginTop: spacing.lg },
-                          ]}
-                          onPress={handleLocalSubmit}
-                          android_ripple={rippleTokens.accent}
-                        >
-                          <Text style={styles.localBtnText}>{i18n.t('login.continue')}</Text>
-                          <Ionicons name="arrow-forward" size={18} color={colors.textInverse} style={{ marginLeft: spacing.sm }} />
-                        </Pressable>
-                      </>
-                    ) : (
-                      /* ── Restore from Backup File ── */
-                      <>
-                        <Text style={styles.cardTitle}>{i18n.t('login.restoreAccount')}</Text>
-                        <Text style={styles.cardSubtitle}>
-                          {i18n.t('login.restoreDesc')}
-                        </Text>
-
-                        {/* Optional name hint */}
-                        <View style={styles.inputWrapper}>
-                          <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
-                          <TextInput
-                            id="login-restore-name-input"
-                            style={styles.textInput}
-                            value={localUsername}
-                            onChangeText={(t) => setLocalUsername(t)}
-                            placeholder={i18n.t('login.yourNameHint')}
-                            placeholderTextColor={colors.textMuted}
-                            maxLength={32}
-                            returnKeyType="done"
-                            autoCapitalize="words"
-                          />
-                        </View>
-
-                        <Text style={styles.restoreHint}>
-                          {i18n.t('login.restoreNameNote')}
-                        </Text>
-
-                        {isRestoring ? (
-                          <View style={styles.restoreLoadingRow}>
-                            <ActivityIndicator size="small" color={colors.accent} />
-                            <Text style={styles.restoreLoadingText}>{i18n.t('login.restoringData')}</Text>
+                          <View style={[styles.inputWrapper, usernameError ? styles.inputWrapperError : null]}>
+                            <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
+                            <TextInput
+                              id="login-username-input"
+                              style={styles.textInput}
+                              value={localUsername}
+                              onChangeText={(t) => { setLocalUsername(t); setUsernameError(''); }}
+                              placeholder={i18n.t('login.yourName')}
+                              placeholderTextColor={colors.textMuted}
+                              maxLength={32}
+                              returnKeyType="done"
+                              onSubmitEditing={handleLocalSubmit}
+                              autoFocus
+                              autoCapitalize="words"
+                            />
                           </View>
-                        ) : (
+
+                          {usernameError ? (
+                            <Text style={styles.errorText}>{usernameError}</Text>
+                          ) : null}
+
                           <Pressable
-                            id="login-restore-file-btn"
+                            id="login-local-submit"
                             style={({ pressed }) => [
-                              styles.restoreFileBtn,
+                              styles.localBtn,
                               pressed && { opacity: 0.8 },
+                              { marginTop: spacing.lg },
                             ]}
-                            onPress={handleRestoreFromFile}
+                            onPress={handleLocalSubmit}
                             android_ripple={rippleTokens.accent}
-                            accessibilityLabel="Pick backup file to restore"
                           >
-                            <Ionicons name="folder-open-outline" size={20} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
-                            <Text style={styles.restoreFileBtnText}>{i18n.t('login.pickBackupFile')}</Text>
+                            <Text style={styles.localBtnText}>{i18n.t('login.continue')}</Text>
+                            <Ionicons name="arrow-forward" size={18} color={colors.textInverse} style={{ marginLeft: spacing.sm }} />
                           </Pressable>
-                        )}
-                      </>
-                    )}
+                        </>
+                      ) : (
+                        /* ── Restore from Backup File ── */
+                        <>
+                          <Text style={styles.cardTitle}>{i18n.t('login.restoreAccount')}</Text>
+                          <Text style={styles.cardSubtitle}>
+                            {i18n.t('login.restoreDesc')}
+                          </Text>
 
-                    <Pressable
-                      id="login-local-guest-fallback"
-                      style={[styles.guestBtn, { marginTop: spacing.md }]}
-                      onPress={handleContinueAsGuest}
-                      android_ripple={rippleTokens.borderless}
-                    >
-                      <Text style={styles.guestBtnText}>{i18n.t('login.skipGuest')}</Text>
-                    </Pressable>
-                  </>
-                )}
-              </View>
+                          {/* Optional name hint */}
+                          <View style={styles.inputWrapper}>
+                            <Ionicons name="person-outline" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
+                            <TextInput
+                              id="login-restore-name-input"
+                              style={styles.textInput}
+                              value={localUsername}
+                              onChangeText={(t) => setLocalUsername(t)}
+                              placeholder={i18n.t('login.yourNameHint')}
+                              placeholderTextColor={colors.textMuted}
+                              maxLength={32}
+                              returnKeyType="done"
+                              autoCapitalize="words"
+                            />
+                          </View>
 
-              {/* ── Data Info Collapsible ─────────────────────── */}
-              <DataInfoCard />
+                          <Text style={styles.restoreHint}>
+                            {i18n.t('login.restoreNameNote')}
+                          </Text>
 
-              {/* ── Privacy note ─────────────────────────────── */}
-              <Text style={styles.privacyNote}>
-                {i18n.t('login.privacyNote')}
-              </Text>
-            </Animated.View>
+                          {isRestoring ? (
+                            <View style={styles.restoreLoadingRow}>
+                              <ActivityIndicator size="small" color={colors.accent} />
+                              <Text style={styles.restoreLoadingText}>{i18n.t('login.restoringData')}</Text>
+                            </View>
+                          ) : (
+                            <Pressable
+                              id="login-restore-file-btn"
+                              style={({ pressed }) => [
+                                styles.restoreFileBtn,
+                                pressed && { opacity: 0.8 },
+                              ]}
+                              onPress={handleRestoreFromFile}
+                              android_ripple={rippleTokens.accent}
+                              accessibilityLabel="Pick backup file to restore"
+                            >
+                              <Ionicons name="folder-open-outline" size={20} color={colors.textInverse} style={{ marginRight: spacing.sm }} />
+                              <Text style={styles.restoreFileBtnText}>{i18n.t('login.pickBackupFile')}</Text>
+                            </Pressable>
+                          )}
+                        </>
+                      )}
+
+                      <Pressable
+                        id="login-local-guest-fallback"
+                        style={[styles.guestBtn, { marginTop: spacing.md }]}
+                        onPress={handleContinueAsGuest}
+                        android_ripple={rippleTokens.borderless}
+                      >
+                        <Text style={styles.guestBtnText}>{i18n.t('login.skipGuest')}</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
+              </Animated.View>
+
+              {/* ── Tier 4: Data Info & Privacy Footer (150ms delay) ─ */}
+              <Animated.View style={[styles.tierContainer, footerEntranceStyle]}>
+                <DataInfoCard />
+                <Text style={styles.privacyNote}>
+                  {i18n.t('login.privacyNote')}
+                </Text>
+              </Animated.View>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -717,6 +770,10 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
     maxWidth: 400,
+    alignItems: 'center',
+  },
+  tierContainer: {
+    width: '100%',
     alignItems: 'center',
   },
 

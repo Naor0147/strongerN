@@ -18,7 +18,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Ellipse, Line, Defs, RadialGradient, Stop, G } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, spacing, radius, ripple as rippleTokens, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import ScreenHeader from '../components/layout/ScreenHeader';
 import i18n from '../utils/i18n';

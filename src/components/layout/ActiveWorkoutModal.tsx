@@ -41,7 +41,7 @@ import {
   showTimerComplete,
   stopWorkoutForeground,
 } from '../../utils/foregroundNotification';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import i18n from '../../utils/i18n';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../../theme';

@@ -1,6 +1,6 @@
 // App.tsx — Navigation root with font loading, live workout state, and completion celebrations
 import React from 'react';
-import { View, StyleSheet, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView, Platform, InteractionManager, unstable_batchedUpdates } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 
@@ -8,9 +8,16 @@ enableFreeze(true);
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar }                from 'expo-status-bar';
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { Rubik_400Regular, Rubik_500Medium, Rubik_600SemiBold, Rubik_700Bold } from '@expo-google-fonts/rubik';
-import { Ionicons }                 from '@expo/vector-icons';
+import { useFonts }                 from 'expo-font';
+import { Inter_400Regular }          from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium }           from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold }         from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold }             from '@expo-google-fonts/inter/700Bold';
+import { Rubik_400Regular }          from '@expo-google-fonts/rubik/400Regular';
+import { Rubik_500Medium }           from '@expo-google-fonts/rubik/500Medium';
+import { Rubik_600SemiBold }         from '@expo-google-fonts/rubik/600SemiBold';
+import { Rubik_700Bold }             from '@expo-google-fonts/rubik/700Bold';
+import Ionicons                     from '@expo/vector-icons/Ionicons';
 import * as googleDrive             from './utils/googleDrive';
 import { initDb, saveToDb, loadFromDb, deleteFromDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
@@ -44,29 +51,35 @@ import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 
-// Screens — Auth
+// Screens — Auth & Initial Screen (Eager)
 import LoginScreen from './screens/LoginScreen';
+import ProfileScreen from './screens/ProfileScreen';
+
+// Lazy Loaded Screens and Modals (Code Splitting for 120 FPS Startup)
+const HistoryScreen = React.lazy(() => import('./screens/HistoryScreen'));
+const WorkoutScreen = React.lazy(() => import('./screens/WorkoutScreen'));
+const ExercisesScreen = React.lazy(() => import('./screens/ExercisesScreen'));
+const MuscleMapScreen = React.lazy(() => import('./screens/MuscleMapScreen'));
+const MeasureScreen = React.lazy(() => import('./screens/MeasureScreen'));
+const ActiveWorkoutModal = React.lazy(() => import('./components/layout/ActiveWorkoutModal'));
+const WatchCompanionSimulator = React.lazy(() =>
+  import('./components/ui/WatchCompanionSimulator').then(m => ({ default: m.WatchCompanionSimulator }))
+);
 
 // Design tokens
 import { colors, spacing, radius, font, shadow, ripple as rippleTokens, globalAnimation } from './theme';
 
+// Fallback UI for React.Suspense
+const TabFallback: React.FC = React.memo(() => (
+  <View style={{ flex: 1, backgroundColor: colors.bg }} />
+));
+
 // Layout components
 import BottomTabBar      from './components/layout/BottomTabBar';
 import ActiveWorkoutBar  from './components/layout/ActiveWorkoutBar';
-import ActiveWorkoutModal from './components/layout/ActiveWorkoutModal';
 import { soundConfig, initSounds } from './utils/soundPlayer';
 import { initNotifications, getLastNotificationResponse, onNotificationTapped, isWorkoutNotificationResponse } from './utils/notifications';
 
-// Simulators
-import { WatchCompanionSimulator } from './components/ui/WatchCompanionSimulator';
-
-// Screens
-import ProfileScreen   from './screens/ProfileScreen';
-import HistoryScreen   from './screens/HistoryScreen';
-import WorkoutScreen   from './screens/WorkoutScreen';
-import ExercisesScreen from './screens/ExercisesScreen';
-import MeasureScreen   from './screens/MeasureScreen';
-import MuscleMapScreen from './screens/MuscleMapScreen';
 import E2EAppHarness from './screens/E2EAppHarness';
 import Toast from './components/ui/Toast';
 
@@ -161,6 +174,7 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
   onDeleteMetricLog,
 }) => {
   const insets = useSafeAreaInsets();
+  if (!visible) return null;
   return (
     <Modal
       visible={visible}
@@ -180,13 +194,15 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
             <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
           </Pressable>
         </View>
-        <MeasureScreen
-          primaryMetrics={primaryMetricsList}
-          bodyPartMetrics={bodyPartMetricsList}
-          onRecordMetric={onRecordMetric}
-          onAddMetric={onAddMetric}
-          onDeleteMetricLog={onDeleteMetricLog}
-        />
+        <React.Suspense fallback={<TabFallback />}>
+          <MeasureScreen
+            primaryMetrics={primaryMetricsList}
+            bodyPartMetrics={bodyPartMetricsList}
+            onRecordMetric={onRecordMetric}
+            onAddMetric={onAddMetric}
+            onDeleteMetricLog={onDeleteMetricLog}
+          />
+        </React.Suspense>
       </View>
     </Modal>
   );
@@ -230,6 +246,7 @@ function MainApp() {
     Rubik_500Medium,
     Rubik_600SemiBold,
     Rubik_700Bold,
+    ...Ionicons.font,
   });
 
   // â”€â”€ Synchronous Frame 0 MMKV Instant Hydration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -296,13 +313,32 @@ function MainApp() {
     })();
   }, [initialAuth]);
 
-  // Non-blocking initialization of sounds and notifications after first paint
+  // Non-blocking initialization of sounds and notifications after first paint & interactions
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      initSounds();
-      initNotifications();
-    }, 60);
-    return () => clearTimeout(timer);
+    let timer: NodeJS.Timeout | null = null;
+    let interactionTask: any = null;
+
+    if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions) {
+      interactionTask = InteractionManager.runAfterInteractions(() => {
+        initSounds();
+        initNotifications();
+      });
+      timer = setTimeout(() => {
+        interactionTask?.cancel?.();
+        initSounds();
+        initNotifications();
+      }, 500);
+    } else {
+      timer = setTimeout(() => {
+        initSounds();
+        initNotifications();
+      }, 60);
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (interactionTask) interactionTask.cancel?.();
+    };
   }, []);
 
   const handleAuthComplete = async (authMode: AuthMode, username: string) => {
@@ -463,7 +499,7 @@ function MainApp() {
 
   // Dynamically calculate weekly chart data based on sessionsList (with fast pre-cached fallback)
   const dynamicWeeklyChartData = React.useMemo(() => {
-    if (sessionsList.length === 0 && initialProfileSummaries?.dynamicWeeklyChartData) {
+    if ((!isDataLoaded || sessionsList.length === 0) && initialProfileSummaries?.dynamicWeeklyChartData) {
       return initialProfileSummaries.dynamicWeeklyChartData;
     }
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
@@ -495,7 +531,7 @@ function MainApp() {
     });
     
     return weeks.map(w => ({ weekLabel: w.label, count: w.count }));
-  }, [sessionsList, initialProfileSummaries]);
+  }, [sessionsList, initialProfileSummaries, isDataLoaded]);
 
   // Background Database & History Synchronization (non-blocking)
   React.useEffect(() => {
@@ -521,63 +557,20 @@ function MainApp() {
           const persistence = await bootstrapPersistence(parsed, legacyActiveWorkout);
           historyRepositoryReadyRef.current = persistence.historyReady;
 
-          if (parsed) {
-            if (parsed.user) {
-              const currentAuth = await loadAuthState();
-              const currentAuthMode = currentAuth?.authMode || parsed.authMode;
-              const isAuthed = currentAuthMode === 'google' || currentAuthMode === 'local';
-              const authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
-              
-              setUser(prev => ({
-                ...parsed.user,
-                name: (isAuthed && authedName) ? authedName : (parsed.user.name || prev.name),
-                avatarUri: (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : (parsed.user.avatarUri || prev.avatarUri),
-              }));
-            }
-            if (parsed.templatesList) {
-              setTemplatesList(parsed.templatesList.map((t: any) => ({
-                ...t,
-                lastUsed: new Date(t.lastUsed)
-              })));
-            }
-            if (parsed.exercisesList) {
-              const loadedIds = new Set();
-              const uniqueLoaded = parsed.exercisesList.map((e: any) => {
-                const safeVars = Array.isArray(e.variations) ? e.variations : [];
-                if (!e.id || loadedIds.has(e.id)) {
-                  const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-                  loadedIds.add(newId);
-                  return { ...e, variations: safeVars, id: newId };
-                }
-                loadedIds.add(e.id);
-                return { ...e, variations: safeVars };
-              });
+          // Pre-fetch auth and secure token before state updates to batch atomically
+          let authedName: string | undefined;
+          let authedAvatar: string | undefined;
+          if (parsed?.user) {
+            const currentAuth = await loadAuthState();
+            const currentAuthMode = currentAuth?.authMode || parsed.authMode;
+            const isAuthed = currentAuthMode === 'google' || currentAuthMode === 'local';
+            authedName = currentAuthMode === 'google' ? currentAuth?.googleProfile?.name : currentAuth?.localUsername;
+            authedAvatar = (currentAuthMode === 'google' && currentAuth?.googleProfile?.avatarUri) ? currentAuth.googleProfile.avatarUri : undefined;
+          }
 
-              const loadedNames = new Set(uniqueLoaded.map((e: any) => e.name.toLowerCase().trim()));
-              const merged = [...uniqueLoaded];
-              mockExercises.forEach((defaultEx) => {
-                if (!loadedIds.has(defaultEx.id) && !loadedNames.has(defaultEx.name.toLowerCase().trim())) {
-                  merged.push({ ...defaultEx, variations: Array.isArray(defaultEx.variations) ? defaultEx.variations : [] });
-                  loadedIds.add(defaultEx.id);
-                }
-              });
-              setExercisesList(merged);
-              exercisesListRef.current = merged;
-            }
-            if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
-            if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
-            if (parsed.googleUser !== undefined) {
-              const secureToken = await getSecureItem('google_oauth_token');
-              if (parsed.googleUser && secureToken) {
-                setGoogleUser({ ...parsed.googleUser, accessToken: secureToken });
-              } else {
-                setGoogleUser(parsed.googleUser);
-              }
-            }
-            if (parsed.lastSynced !== undefined) setLastSynced(parsed.lastSynced);
-            if (parsed.foldersList) setFoldersList(parsed.foldersList);
-            if (parsed.activeProgramId !== undefined) setActiveProgramId(parsed.activeProgramId);
-            if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
+          let secureToken: string | null = null;
+          if (parsed && parsed.googleUser !== undefined) {
+            secureToken = await getSecureItem('google_oauth_token').catch(() => null);
           }
 
           let loadedSessionsMapped: any[] | null = null;
@@ -590,56 +583,113 @@ function MainApp() {
             }));
           }
 
-          if (loadedSessionsMapped !== null) {
-            setSessionsList(loadedSessionsMapped);
-            setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
-            setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
-            setIsFullHistoryLoaded(true);
-          }
-
           // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
           const settings = persistence.settings || {};
           const st = (key: string) => settings[key as keyof typeof settings] !== undefined
             ? settings[key as keyof typeof settings]
             : (parsed ? parsed[key] : undefined);
 
-          if (st('isAutoTimerEnabled') !== undefined) setIsAutoTimerEnabled(st('isAutoTimerEnabled'));
-          if (st('animationSpeed') !== undefined) setAnimationSpeed(st('animationSpeed'));
-          if (st('isHealthSyncEnabled') !== undefined) setIsHealthSyncEnabled(st('isHealthSyncEnabled'));
-          if (st('isLiveHeartRateEnabled') !== undefined) setIsLiveHeartRateEnabled(st('isLiveHeartRateEnabled'));
-          if (st('isProgramsEnabled') !== undefined) setIsProgramsEnabled(st('isProgramsEnabled'));
-          if (st('isHistoryEnabled') !== undefined) setIsHistoryEnabled(st('isHistoryEnabled'));
-          if (st('isMusclesEnabled') !== undefined) setIsMusclesEnabled(st('isMusclesEnabled'));
-          if (st('enableRoutineFolders') !== undefined) setEnableRoutineFolders(st('enableRoutineFolders'));
-          if (st('isDeveloperModeEnabled') !== undefined) setIsDeveloperModeEnabled(st('isDeveloperModeEnabled'));
-          if (st('customAccentColor') !== undefined) setCustomAccentColor(st('customAccentColor'));
-          if (st('appTheme') !== undefined) {
-            setAppThemeState(st('appTheme'));
-            const { applyTheme } = require('./theme');
-            applyTheme(st('appTheme'), st('customAccentColor') || '#4F8EF7', parsedOverrides);
-          } else {
-            const { applyTheme } = require('./theme');
-            applyTheme('default', '#4F8EF7', parsedOverrides);
-          }
-          if (st('isProgressiveOverloadEnabled') !== undefined) setIsProgressiveOverloadEnabled(st('isProgressiveOverloadEnabled'));
-          if (st('isAutoFinishSetEnabled') !== undefined) setIsAutoFinishSetEnabled(st('isAutoFinishSetEnabled'));
-          if (st('isRpeMode') !== undefined) setIsRpeMode(st('isRpeMode'));
-          if (st('soundSetCompleted') !== undefined) setSoundSetCompleted(st('soundSetCompleted'));
-          if (st('soundWorkoutFinished') !== undefined) setSoundWorkoutFinished(st('soundWorkoutFinished'));
-          if (st('soundTimerCompleted') !== undefined) setSoundTimerCompleted(st('soundTimerCompleted'));
-          if (st('customSounds') !== undefined) setCustomSounds(st('customSounds'));
-          if (st('soundVolume') !== undefined) setSoundVolume(st('soundVolume'));
-          if (st('defaultRestDuration') !== undefined) setDefaultRestDuration(st('defaultRestDuration'));
-          if (st('showAchievementBadges') !== undefined) setShowAchievementBadges(st('showAchievementBadges'));
-          if (st('showSummaryWidgets') !== undefined) setShowSummaryWidgets(st('showSummaryWidgets'));
-          if (st('showWeeklyTonnage') !== undefined) setShowWeeklyTonnage(st('showWeeklyTonnage'));
-          if (st('showWorkoutsChart') !== undefined) setShowWorkoutsChart(st('showWorkoutsChart'));
-          if (st('showHighlights') !== undefined) setShowHighlights(st('showHighlights'));
-          if (st('showHypertrophyGoal') !== undefined) setShowHypertrophyGoal(st('showHypertrophyGoal'));
+          // Atomic batch state update: All state setters executed in one transaction
+          unstable_batchedUpdates(() => {
+            if (parsed) {
+              if (parsed.user) {
+                setUser(prev => ({
+                  ...parsed.user,
+                  name: authedName ? authedName : (parsed.user.name || prev.name),
+                  avatarUri: authedAvatar ? authedAvatar : (parsed.user.avatarUri || prev.avatarUri),
+                }));
+              }
+              if (parsed.templatesList) {
+                setTemplatesList(parsed.templatesList.map((t: any) => ({
+                  ...t,
+                  lastUsed: new Date(t.lastUsed)
+                })));
+              }
+              if (parsed.exercisesList) {
+                const loadedIds = new Set();
+                const uniqueLoaded = parsed.exercisesList.map((e: any) => {
+                  const safeVars = Array.isArray(e.variations) ? e.variations : [];
+                  if (!e.id || loadedIds.has(e.id)) {
+                    const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+                    loadedIds.add(newId);
+                    return { ...e, variations: safeVars, id: newId };
+                  }
+                  loadedIds.add(e.id);
+                  return { ...e, variations: safeVars };
+                });
 
-          useActiveWorkoutStore.getState().hydrate(persistence.activeDraft);
-          activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
-          setIsWorkoutRestored(true);
+                const loadedNames = new Set(uniqueLoaded.map((e: any) => e.name.toLowerCase().trim()));
+                const merged = [...uniqueLoaded];
+                mockExercises.forEach((defaultEx) => {
+                  if (!loadedIds.has(defaultEx.id) && !loadedNames.has(defaultEx.name.toLowerCase().trim())) {
+                    merged.push({ ...defaultEx, variations: Array.isArray(defaultEx.variations) ? defaultEx.variations : [] });
+                    loadedIds.add(defaultEx.id);
+                  }
+                });
+                setExercisesList(merged);
+                exercisesListRef.current = merged;
+              }
+              if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
+              if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+              if (parsed.googleUser !== undefined) {
+                if (parsed.googleUser && secureToken) {
+                  setGoogleUser({ ...parsed.googleUser, accessToken: secureToken });
+                } else {
+                  setGoogleUser(parsed.googleUser);
+                }
+              }
+              if (parsed.lastSynced !== undefined) setLastSynced(parsed.lastSynced);
+              if (parsed.foldersList) setFoldersList(parsed.foldersList);
+              if (parsed.activeProgramId !== undefined) setActiveProgramId(parsed.activeProgramId);
+              if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
+            }
+
+            if (loadedSessionsMapped !== null) {
+              setSessionsList(loadedSessionsMapped);
+              setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
+              setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
+              setIsFullHistoryLoaded(true);
+            }
+
+            if (st('isAutoTimerEnabled') !== undefined) setIsAutoTimerEnabled(st('isAutoTimerEnabled'));
+            if (st('animationSpeed') !== undefined) setAnimationSpeed(st('animationSpeed'));
+            if (st('isHealthSyncEnabled') !== undefined) setIsHealthSyncEnabled(st('isHealthSyncEnabled'));
+            if (st('isLiveHeartRateEnabled') !== undefined) setIsLiveHeartRateEnabled(st('isLiveHeartRateEnabled'));
+            if (st('isProgramsEnabled') !== undefined) setIsProgramsEnabled(st('isProgramsEnabled'));
+            if (st('isHistoryEnabled') !== undefined) setIsHistoryEnabled(st('isHistoryEnabled'));
+            if (st('isMusclesEnabled') !== undefined) setIsMusclesEnabled(st('isMusclesEnabled'));
+            if (st('enableRoutineFolders') !== undefined) setEnableRoutineFolders(st('enableRoutineFolders'));
+            if (st('isDeveloperModeEnabled') !== undefined) setIsDeveloperModeEnabled(st('isDeveloperModeEnabled'));
+            if (st('customAccentColor') !== undefined) setCustomAccentColor(st('customAccentColor'));
+            if (st('appTheme') !== undefined) {
+              setAppThemeState(st('appTheme'));
+              const { applyTheme } = require('./theme');
+              applyTheme(st('appTheme'), st('customAccentColor') || '#4F8EF7', parsedOverrides);
+            } else {
+              const { applyTheme } = require('./theme');
+              applyTheme('default', '#4F8EF7', parsedOverrides);
+            }
+            if (st('isProgressiveOverloadEnabled') !== undefined) setIsProgressiveOverloadEnabled(st('isProgressiveOverloadEnabled'));
+            if (st('isAutoFinishSetEnabled') !== undefined) setIsAutoFinishSetEnabled(st('isAutoFinishSetEnabled'));
+            if (st('isRpeMode') !== undefined) setIsRpeMode(st('isRpeMode'));
+            if (st('soundSetCompleted') !== undefined) setSoundSetCompleted(st('soundSetCompleted'));
+            if (st('soundWorkoutFinished') !== undefined) setSoundWorkoutFinished(st('soundWorkoutFinished'));
+            if (st('soundTimerCompleted') !== undefined) setSoundTimerCompleted(st('soundTimerCompleted'));
+            if (st('customSounds') !== undefined) setCustomSounds(st('customSounds'));
+            if (st('soundVolume') !== undefined) setSoundVolume(st('soundVolume'));
+            if (st('defaultRestDuration') !== undefined) setDefaultRestDuration(st('defaultRestDuration'));
+            if (st('showAchievementBadges') !== undefined) setShowAchievementBadges(st('showAchievementBadges'));
+            if (st('showSummaryWidgets') !== undefined) setShowSummaryWidgets(st('showSummaryWidgets'));
+            if (st('showWeeklyTonnage') !== undefined) setShowWeeklyTonnage(st('showWeeklyTonnage'));
+            if (st('showWorkoutsChart') !== undefined) setShowWorkoutsChart(st('showWorkoutsChart'));
+            if (st('showHighlights') !== undefined) setShowHighlights(st('showHighlights'));
+            if (st('showHypertrophyGoal') !== undefined) setShowHypertrophyGoal(st('showHypertrophyGoal'));
+
+            useActiveWorkoutStore.getState().hydrate(persistence.activeDraft);
+            activeWorkoutStateSavedRef.current = Boolean(persistence.activeDraft?.isWorkoutActive);
+            setIsWorkoutRestored(true);
+            setIsDataLoaded(true);
+          });
 
           if (__DEV__) {
             const now = Date.now();
@@ -654,17 +704,21 @@ function MainApp() {
           const fallbackSessions = await loadAllSessions();
           if (fallbackSessions) {
             const mapped = fallbackSessions.map(sessionV2ToLegacy);
-            setSessionsList(mapped);
-            setCachedRecentSessions(mapped, mapped.length);
-            setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
-            setIsFullHistoryLoaded(true);
+            unstable_batchedUpdates(() => {
+              setSessionsList(mapped);
+              setCachedRecentSessions(mapped, mapped.length);
+              setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
+              setIsFullHistoryLoaded(true);
+              setIsDataLoaded(true);
+            });
+          } else {
+            setIsDataLoaded(true);
           }
         } catch (fallbackErr: any) {
           console.error('[Persistence] Fallback loadAllSessions failed:', fallbackErr);
           saveCrashLogSync('Persistence Fallback Failure: ' + (fallbackErr?.message || fallbackErr), fallbackErr?.stack || '', false);
+          setIsDataLoaded(true);
         }
-      } finally {
-        setIsDataLoaded(true);
       }
     }
     loadData();
@@ -1803,7 +1857,7 @@ function MainApp() {
 
   // Compute weekly muscle sets from sessions in the last 7 days (with instant precomputed cache)
   const weeklyMuscleSets = React.useMemo(() => {
-    if (sessionsList.length === 0 && initialProfileSummaries?.weeklyMuscleSets) {
+    if ((!isDataLoaded || sessionsList.length === 0) && initialProfileSummaries?.weeklyMuscleSets) {
       return initialProfileSummaries.weeklyMuscleSets;
     }
     const exerciseMuscleMap: Record<string, string> = {};
@@ -1847,7 +1901,7 @@ function MainApp() {
       }
     });
     return sets;
-  }, [sessionsList, exercisesList, initialProfileSummaries]);
+  }, [sessionsList, exercisesList, initialProfileSummaries, isDataLoaded]);
 
   // Persist precomputed profile summaries (charts, muscle sets) to MMKV for Frame 0 zero-delay rendering
   React.useEffect(() => {
@@ -2438,9 +2492,9 @@ function MainApp() {
   ), [isWorkoutActive, workoutName, startTime]);
 
   // Memoize Tab screens to prevent them from unmounting/re-mounting or re-rendering on every App state change
-  const historyScreenElement = (
+  const historyScreenElement = React.useMemo(() => (
     <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />
-  );
+  ), [sessionsList, handleResumeWorkout, handleDeleteSession]);
 
   const workoutScreenElement = React.useMemo(() => {
     return (
@@ -2668,73 +2722,95 @@ function MainApp() {
 
             {isHistoryEnabled && (
               <Tab.Screen name="History">
-                {() => historyScreenElement}
+                {() => (
+                  <React.Suspense fallback={<TabFallback />}>
+                    {historyScreenElement}
+                  </React.Suspense>
+                )}
               </Tab.Screen>
             )}
 
             <Tab.Screen name="Workout">
-              {() => workoutScreenElement}
+              {() => (
+                <React.Suspense fallback={<TabFallback />}>
+                  {workoutScreenElement}
+                </React.Suspense>
+              )}
             </Tab.Screen>
 
             <Tab.Screen name="Exercises">
-              {() => exercisesScreenElement}
+              {() => (
+                <React.Suspense fallback={<TabFallback />}>
+                  {exercisesScreenElement}
+                </React.Suspense>
+              )}
             </Tab.Screen>
 
             {isMusclesEnabled && (
               <Tab.Screen name="Muscles">
-                {() => muscleMapScreenElement}
+                {() => (
+                  <React.Suspense fallback={<TabFallback />}>
+                    {muscleMapScreenElement}
+                  </React.Suspense>
+                )}
               </Tab.Screen>
             )}
           </Tab.Navigator>
 
           {isWatchSimulatorVisible && (
-            <WatchCompanionSimulator
-              workoutName={workoutName}
-              startTime={startTime}
-              activeExercises={workoutExercises}
-              onCheckSet={() => {
-                Alert.alert(i18n.t('alerts.wearableCompanion'), i18n.t('alerts.wearableCompanionMsg'));
-              }}
-              onClose={() => setIsWatchSimulatorVisible(false)}
-            />
+            <React.Suspense fallback={<TabFallback />}>
+              <WatchCompanionSimulator
+                workoutName={workoutName}
+                startTime={startTime}
+                activeExercises={workoutExercises}
+                onCheckSet={() => {
+                  Alert.alert(i18n.t('alerts.wearableCompanion'), i18n.t('alerts.wearableCompanionMsg'));
+                }}
+                onClose={() => setIsWatchSimulatorVisible(false)}
+              />
+            </React.Suspense>
           )}
 
           {/* Active Workout Interactive Modal Sheet — wrapped in ErrorBoundary (Phase A3) */}
-          <ErrorBoundary onReset={handleWorkoutCrashRecovery}>
-            <ActiveWorkoutModal
-              visible={isWorkoutModalVisible}
-              workoutName={workoutName}
-              startTime={startTime}
-              exercises={workoutExercises}
-              isAutoTimerEnabled={isAutoTimerEnabled}
-              onClose={handleCloseWorkoutModal}
-              onFinish={handleFinishWorkout}
-              onDiscard={handleDiscardWorkout}
-              exerciseLibrary={exercisesList}
-              onUpdateActiveExercises={setWorkoutExercisesAndRef}
-              onUpdateExerciseNotes={handleUpdateExerciseNotes}
-              onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
-              onUpdateExerciseVariations={handleUpdateExerciseVariations}
-              onAddCustomExercise={handleAddExercise}
-              isLiveHeartRateEnabled={isLiveHeartRateEnabled}
-              onUpdateExercise={handleUpdateExercise}
+          {isWorkoutModalVisible && (
+            <ErrorBoundary onReset={handleWorkoutCrashRecovery}>
+              <React.Suspense fallback={<TabFallback />}>
+                <ActiveWorkoutModal
+                  visible={isWorkoutModalVisible}
+                  workoutName={workoutName}
+                  startTime={startTime}
+                  exercises={workoutExercises}
+                  isAutoTimerEnabled={isAutoTimerEnabled}
+                  onClose={handleCloseWorkoutModal}
+                  onFinish={handleFinishWorkout}
+                  onDiscard={handleDiscardWorkout}
+                  exerciseLibrary={exercisesList}
+                  onUpdateActiveExercises={setWorkoutExercisesAndRef}
+                  onUpdateExerciseNotes={handleUpdateExerciseNotes}
+                  onUpdateExerciseInsightsNotes={handleUpdateExerciseInsightsNotes}
+                  onUpdateExerciseVariations={handleUpdateExerciseVariations}
+                  onAddCustomExercise={handleAddExercise}
+                  isLiveHeartRateEnabled={isLiveHeartRateEnabled}
+                  onUpdateExercise={handleUpdateExercise}
 
-              defaultRestDuration={defaultRestDuration}
-              onRenameWorkout={setWorkoutName}
-              sessions={sessionsList}
-              isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
-              isAutoFinishSetEnabled={isAutoFinishSetEnabled}
+                  defaultRestDuration={defaultRestDuration}
+                  onRenameWorkout={setWorkoutName}
+                  sessions={sessionsList}
+                  isProgressiveOverloadEnabled={isProgressiveOverloadEnabled}
+                  isAutoFinishSetEnabled={isAutoFinishSetEnabled}
 
-              isRpeMode={isRpeMode}
-              exerciseNameLanguage={exerciseNameLanguage}
-              isEditing={!!editingSessionId}
-              previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
-              editingComment={activeWorkoutComment}
-              onUpdateComment={handleUpdateWorkoutComment}
-              onUpdateStartTime={setStartTime}
-              onUpdateDefaultRestDuration={setDefaultRestDuration}
-            />
-          </ErrorBoundary>
+                  isRpeMode={isRpeMode}
+                  exerciseNameLanguage={exerciseNameLanguage}
+                  isEditing={!!editingSessionId}
+                  previousDurationMin={editingSessionId ? sessionsList.find(s => s.id === editingSessionId)?.durationMinutes : undefined}
+                  editingComment={activeWorkoutComment}
+                  onUpdateComment={handleUpdateWorkoutComment}
+                  onUpdateStartTime={setStartTime}
+                  onUpdateDefaultRestDuration={setDefaultRestDuration}
+                />
+              </React.Suspense>
+            </ErrorBoundary>
+          )}
 
           {/* Measure Modal Sheet (accessible from Profile) */}
           <MeasureModalSheet

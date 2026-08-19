@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Sortable from 'react-native-sortables';
 import { colors, spacing, ripple as rippleTokens } from '../../theme';
 import { SetRow, SetRowInputField } from './SetRow';

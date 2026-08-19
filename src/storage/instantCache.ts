@@ -120,7 +120,7 @@ export function setCachedAppData(data: InstantAppData): void {
 }
 
 /**
- * Synchronously retrieves cached recent sessions (up to 50) on Frame 0.
+ * Synchronously retrieves cached recent sessions (up to 20) on Frame 0.
  */
 export function getCachedRecentSessions(): any[] | null {
   const raw = safeMmkvGet(STORAGE_KEYS.INSTANT_RECENT_SESSIONS);

@@ -1,4 +1,4 @@
-import { Platform, Share, Clipboard } from 'react-native';
+import { Platform, Share, Clipboard, InteractionManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import * as Application from 'expo-application';
@@ -16,14 +16,115 @@ export interface CrashLog {
 const CRASH_LOGS_KEY = 'crash_logs';
 const CURRENT_APP_VERSION = Application.nativeApplicationVersion || '1.0.0.98';
 
+let memoryCrashQueue: CrashLog[] = [];
+let flushTimeout: any = null;
+let isFlushing = false;
+
+export function scheduleCrashQueueFlush(): void {
+  if (flushTimeout) return;
+
+  const triggerFlush = () => {
+    flushTimeout = null;
+    flushCrashQueueAsync().catch(() => {});
+  };
+
+  if (typeof InteractionManager !== 'undefined' && InteractionManager.runAfterInteractions) {
+    const handle = InteractionManager.runAfterInteractions(() => {
+      triggerFlush();
+    });
+    flushTimeout = setTimeout(() => {
+      handle?.cancel?.();
+      triggerFlush();
+    }, 2000);
+  } else {
+    flushTimeout = setTimeout(triggerFlush, 1500);
+  }
+}
+
+export async function flushCrashQueueAsync(): Promise<void> {
+  if (isFlushing || memoryCrashQueue.length === 0) return;
+  isFlushing = true;
+  const logsToFlush = [...memoryCrashQueue];
+  memoryCrashQueue = [];
+
+  try {
+    const isWeb = Platform.OS === 'web';
+    if (isWeb) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = window.localStorage.getItem(CRASH_LOGS_KEY);
+        const existing: CrashLog[] = saved ? JSON.parse(saved) : [];
+        const map = new Map<string, CrashLog>();
+        for (const l of [...logsToFlush, ...existing]) {
+          if (l && l.id) map.set(l.id, l);
+        }
+        const combined = Array.from(map.values())
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 100);
+        window.localStorage.setItem(CRASH_LOGS_KEY, JSON.stringify(combined));
+      }
+    } else {
+      let sqliteLogs: CrashLog[] = [];
+      try {
+        const sqliteDb = await SQLite.openDatabaseAsync('strongern_crashes.db');
+        await sqliteDb.execAsync(`
+          CREATE TABLE IF NOT EXISTS strongern_kv_store (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          );
+        `);
+        const row = await sqliteDb.getFirstAsync(
+          `SELECT value FROM strongern_kv_store WHERE key = ?;`,
+          [CRASH_LOGS_KEY]
+        );
+        if (row && (row as any).value) {
+          sqliteLogs = JSON.parse((row as any).value);
+        }
+      } catch (e) {}
+
+      let fileLogs: CrashLog[] = [];
+      try {
+        const fileUri = `${FileSystem.documentDirectory}strongern_crash_logs.json`;
+        const exists = await FileSystem.getInfoAsync(fileUri);
+        if (exists.exists) {
+          const content = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+          if (content) {
+            fileLogs = JSON.parse(content);
+          }
+        }
+      } catch (e) {}
+
+      const map = new Map<string, CrashLog>();
+      for (const l of [...logsToFlush, ...sqliteLogs, ...fileLogs]) {
+        if (l && l.id) map.set(l.id, l);
+      }
+      const combined = Array.from(map.values())
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 100);
+
+      await saveCrashLogs(combined);
+    }
+  } catch (e) {
+    memoryCrashQueue = [...logsToFlush, ...memoryCrashQueue].slice(0, 100);
+  } finally {
+    isFlushing = false;
+  }
+}
+
 export async function getCrashLogs(): Promise<CrashLog[]> {
   const isWeb = Platform.OS === 'web';
   if (isWeb) {
+    let savedLogs: CrashLog[] = [];
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = window.localStorage.getItem(CRASH_LOGS_KEY);
-      return saved ? JSON.parse(saved) : [];
+      savedLogs = saved ? JSON.parse(saved) : [];
     }
-    return [];
+    const map = new Map<string, CrashLog>();
+    for (const l of [...memoryCrashQueue, ...savedLogs]) {
+      if (l && l.id) map.set(l.id, l);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
   }
 
   let sqliteLogs: CrashLog[] = [];
@@ -59,7 +160,7 @@ export async function getCrashLogs(): Promise<CrashLog[]> {
   } catch (e) {}
 
   const map = new Map<string, CrashLog>();
-  for (const l of [...sqliteLogs, ...fileLogs]) {
+  for (const l of [...memoryCrashQueue, ...sqliteLogs, ...fileLogs]) {
     if (l && l.id) map.set(l.id, l);
   }
   const combined = Array.from(map.values()).sort(
@@ -206,12 +307,27 @@ export function saveCrashLogSync(message: string, stack: string, fatal: boolean)
 }
 
 export async function addCrashLog(message: string, stack: string, fatal: boolean): Promise<void> {
-  // Directly delegate to the synchronous method to ensure data safety
-  saveCrashLogSync(message, stack, fatal);
+  if (fatal) {
+    saveCrashLogSync(message, stack, true);
+  } else {
+    const newLog: CrashLog = {
+      id: Math.random().toString(36).substring(2, 9) + Date.now(),
+      timestamp: new Date().toISOString(),
+      message: message || 'Unknown Error',
+      stack: stack || 'No stack trace available',
+      fatal: false,
+      platform: Platform.OS,
+      version: CURRENT_APP_VERSION,
+    };
+    memoryCrashQueue.push(newLog);
+    if (memoryCrashQueue.length > 100) memoryCrashQueue.shift();
+    scheduleCrashQueueFlush();
+  }
 }
 
 export async function deleteCrashLog(id: string): Promise<void> {
   try {
+    memoryCrashQueue = memoryCrashQueue.filter((log) => log.id !== id);
     const logs = await getCrashLogs();
     const updated = logs.filter((log) => log.id !== id);
     await saveCrashLogs(updated);
@@ -221,6 +337,7 @@ export async function deleteCrashLog(id: string): Promise<void> {
 }
 
 export async function clearCrashLogs(): Promise<void> {
+  memoryCrashQueue = [];
   await saveCrashLogs([]);
 }
 
@@ -286,33 +403,31 @@ export function initCrashLogger(): void {
 
   console.log('[CrashLogger] Initializing global error catchers...');
 
-  // Hook console.error for debounced sync persistence
+  // Hook console.error for async queue persistence (zero JS-thread SQLite locking)
   const originalConsoleError = console.error;
   let lastLoggedMsg = '';
   let lastLoggedTime = 0;
-  // Re-entrancy guard: prevents saveCrashLogSync from recursively triggering this hook
-  // when SQLite itself fails (NullPointerException → console.error → saveCrashLogSync → loop).
-  let isSavingCrashLog = false;
 
   console.error = (...args: any[]) => {
     try {
-      // If we are already inside saveCrashLogSync, skip to avoid infinite recursion.
-      if (isSavingCrashLog) {
-        originalConsoleError.apply(console, args);
-        return;
-      }
       const msg = args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
       const now = Date.now();
       // Skip messages originating from the crash logger itself to avoid loops.
       if (!msg.startsWith('[CrashLogger]') && !msg.startsWith('[DB]') && (msg !== lastLoggedMsg || now - lastLoggedTime > 1000)) {
         lastLoggedMsg = msg;
         lastLoggedTime = now;
-        isSavingCrashLog = true;
-        try {
-          saveCrashLogSync('console.error: ' + msg, '', false);
-        } finally {
-          isSavingCrashLog = false;
-        }
+        const newLog: CrashLog = {
+          id: Math.random().toString(36).substring(2, 9) + Date.now(),
+          timestamp: new Date().toISOString(),
+          message: 'console.error: ' + msg,
+          stack: '',
+          fatal: false,
+          platform: Platform.OS,
+          version: CURRENT_APP_VERSION,
+        };
+        memoryCrashQueue.push(newLog);
+        if (memoryCrashQueue.length > 100) memoryCrashQueue.shift();
+        scheduleCrashQueueFlush();
       }
     } catch (e) {}
     originalConsoleError.apply(console, args);
@@ -325,8 +440,23 @@ export function initCrashLogger(): void {
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? (error.stack || '') : '';
       
-      // Synchronously write the crash log to guarantee it persists before termination
-      saveCrashLogSync(message, stack, !!isFatal);
+      if (isFatal) {
+        // Synchronously write the crash log strictly for fatal crashes to guarantee persistence before process exit
+        saveCrashLogSync(message, stack, true);
+      } else {
+        const newLog: CrashLog = {
+          id: Math.random().toString(36).substring(2, 9) + Date.now(),
+          timestamp: new Date().toISOString(),
+          message,
+          stack,
+          fatal: false,
+          platform: Platform.OS,
+          version: CURRENT_APP_VERSION,
+        };
+        memoryCrashQueue.push(newLog);
+        if (memoryCrashQueue.length > 100) memoryCrashQueue.shift();
+        scheduleCrashQueueFlush();
+      }
 
       // Call original handler (with a brief delay if fatal to let threads settle, or immediately in dev)
       if (isFatal && !__DEV__) {
@@ -343,7 +473,7 @@ export function initCrashLogger(): void {
     });
   }
 
-  // Hook Unhandled Promise Rejections
+  // Hook Unhandled Promise Rejections (non-fatal async queue)
   try {
     const tracking = require('promise/setimmediate/rejection-tracking');
     tracking.enable({
@@ -351,7 +481,18 @@ export function initCrashLogger(): void {
       onUnhandled: (id: number, error: any) => {
         const message = `Unhandled Rejection: ${error?.message || String(error)}`;
         const stack = error?.stack || '';
-        saveCrashLogSync(message, stack, false);
+        const newLog: CrashLog = {
+          id: Math.random().toString(36).substring(2, 9) + Date.now(),
+          timestamp: new Date().toISOString(),
+          message,
+          stack,
+          fatal: false,
+          platform: Platform.OS,
+          version: CURRENT_APP_VERSION,
+        };
+        memoryCrashQueue.push(newLog);
+        if (memoryCrashQueue.length > 100) memoryCrashQueue.shift();
+        scheduleCrashQueueFlush();
       },
       onHandled: () => {},
     });
@@ -362,3 +503,4 @@ export function initCrashLogger(): void {
 
 // Automatically initialize when imported
 initCrashLogger();
+

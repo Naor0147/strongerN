@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Text, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, ripple as rippleTokens } from '../../theme';
 import { styles } from './activeWorkoutStyles';
 import { restTimerEmitter } from './restTimerEmitter';

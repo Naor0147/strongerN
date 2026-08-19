@@ -105,6 +105,12 @@ jest.mock('react-native-svg', () => {
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
 }));
+jest.mock('@expo/vector-icons/Ionicons', () => ({
+  __esModule: true,
+  default: 'Ionicons',
+  font: { ionicons: 'Ionicons.ttf' },
+  glyphMap: {},
+}));
 
 describe('MuscleMapScreen', () => {
   it('renders correctly and handles pressing a muscle group', () => {

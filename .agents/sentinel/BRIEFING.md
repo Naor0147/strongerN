@@ -1,30 +1,32 @@
-# BRIEFING — 2026-08-18T19:42:40Z
+# BRIEFING — 2026-08-19T13:56:45Z
 
 ## Mission
-Fix the silent workout history load failure in StrongerN, recover soft-deleted or truncated local workouts (restoring full 300+ workout history), harden cloud sync against data poisoning, and add a developer diagnostic/repair panel.
+Sentinel monitoring and lifecycle orchestration for StrongerN 120 FPS Entry + Lightweight APK Optimization.
 
 ## 🔒 My Identity
 - Archetype: sentinel
-- Working directory: c:\Antigravity\strongerN\.agents\sentinel\
-- Orchestrator: b5551d07-52c4-4055-8613-600492c7c86c
-- Victory Auditor: [to be spawned on victory claim]
+- Working directory: c:\Antigravity\strongerN\.agents\sentinel
+- Orchestrator: 0a2a2035-e7bb-476b-9b98-46d1f766c65a
+- Victory Auditor: to be spawned on victory claim
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
-- Must route through Project Orchestrator (General path)
-- Keep sentinel context ultra-light
+- Must record user requests verbatim to ORIGINAL_REQUEST.md
+- Continuous progress reporting and liveness monitoring via scheduled cron jobs
+- Strictly follow production branch and APK release rules
 
 ## User Context
-- **Last user request**: Fix silent workout history load failure, recover soft-deleted workouts, harden cloud sync, add diagnostic/repair panel, add regression tests, verify release APK build.
+- **Last user request**: Optimize StrongerN for 120 FPS entry-to-interactive performance and reduce APK size from 32.1 MB down to <= 20 MB with zero visual or functional regressions.
 - **Pending clarifications**: none
 - **Delivered results**: none
 
 ## Project Status
 - **Phase**: in progress
-- **Route**: teamwork_preview_orchestrator (General)
-- **Active Orchestrator**: b5551d07-52c4-4055-8613-600492c7c86c
-- **Directory**: c:\Antigravity\strongerN\.agents\orchestrator_1\
+- **Active Agent**: teamwork_preview_orchestrator (ID: 0a2a2035-e7bb-476b-9b98-46d1f766c65a)
+- **Crons Active**:
+  - Task 11: Progress Reporting (`*/8 * * * *`)
+  - Task 13: Liveness Check (`*/10 * * * *`)
 
 ## Victory Audit Status
 - **Triggered**: no
@@ -32,4 +34,5 @@ Fix the silent workout history load failure in StrongerN, recover soft-deleted o
 - **Retry count**: 0
 
 ## Artifact Index
-- c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md — Authoritative user request
+- c:\Antigravity\strongerN\.agents\ORIGINAL_REQUEST.md — Verbatim user request record
+- c:\Antigravity\strongerN\.agents\orchestrator_1\ — Orchestrator workspace

@@ -1,7 +1,7 @@
 // components/ui/IconButton.tsx
 import React from 'react';
 import { StyleSheet, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, radius, ripple as rippleTokens } from '../../theme';
 import PressableRow from './PressableRow';
 

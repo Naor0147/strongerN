@@ -10,7 +10,7 @@ import {
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, spacing, radius, ripple as rippleTokens, animation, globalAnimation } from '../../theme';
 import i18n from '../../utils/i18n';
 import { I18nManager } from 'react-native';

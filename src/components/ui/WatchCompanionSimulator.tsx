@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import * as RN from 'react-native';
 const Animated = RN.Animated;
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, spacing, radius, shadow, globalAnimation, getScaledDuration } from '../../theme';
 import i18n from '../../utils/i18n';
 

@@ -53,9 +53,6 @@ export const soundConfig = {
 const webPlayersCache: Record<string, HTMLAudioElement> = {};
 
 const WEB_SOUND_ASSETS: Record<string, any> = {
-  'bell1': require('../../assets/sounds/bell1.mp3'),
-  'bell2': require('../../assets/sounds/bell2.mp3'),
-  'boxing-bell': require('../../assets/sounds/boxing-bell.mp3'),
   'satisfying-click': require('../../sound/00_satisfying_click_v3.wav'),
   'uncheck-click': require('../../sound/06_click_warm.wav'),
   'satisfying-click-finish': require('../../sound/00_satisfying_click_v3.wav'),

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 export const AnimatedCheckmark: React.FC<{ completed: boolean }> = ({ completed }) => {
   const scale = useSharedValue(completed ? 1 : 0);

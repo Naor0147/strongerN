@@ -204,10 +204,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -247,10 +249,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -290,10 +294,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -379,10 +385,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -422,10 +430,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -465,10 +475,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -508,10 +520,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -551,10 +565,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -640,10 +656,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },
@@ -683,10 +701,12 @@ exports[`UI Primitives Snapshot Tests BarChart Component renders bar chart with 
               {
                 "height": 24.666666666666668,
                 "marginVertical": 1.5,
+              },
+              {
                 "opacity": 0,
                 "transform": [
                   {
-                    "scale": 0,
+                    "scale": 0.3,
                   },
                 ],
               },

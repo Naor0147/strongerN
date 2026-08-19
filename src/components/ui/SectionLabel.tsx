@@ -2,7 +2,7 @@
 // Unified section heading with optional right-side CTA icon button.
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, spacing } from '../../theme';
 import PressableRow from './PressableRow';
 

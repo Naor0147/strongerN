@@ -1,16 +1,23 @@
 // components/ui/BarChart.tsx
-// Animated bar chart with two-tone gradient bars and value labels
-import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+// Animated bar chart with two-tone gradient bars and value labels (120 FPS Reanimated UI-thread worklets)
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   LayoutChangeEvent,
 } from 'react-native';
-import * as RN from 'react-native';
-const Animated = RN.Animated;
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withDelay,
+  withTiming,
+  interpolate,
+  Easing,
+  SharedValue,
+} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, font, spacing, radius, globalAnimation } from '../../theme';
+import { colors, font, spacing, radius, globalAnimation, getScaledDuration } from '../../theme';
 
 export interface BarDataPoint {
   label: string;
@@ -26,6 +33,107 @@ interface BarChartProps {
 const BAR_RADIUS     = 8;
 const X_LABEL_HEIGHT = 20;
 
+// Sub-component: Individual animated active block executed on UI thread
+const BarBlock: React.FC<{
+  index: number;
+  total: number;
+  blockHeight: number;
+  blockGap: number;
+  animProgress: SharedValue<number>;
+}> = ({ index: j, total, blockHeight, blockGap, animProgress }) => {
+  const start = total > 1 ? (j * 0.4) / (total - 1) : 0;
+  const end = start + 0.6;
+
+  const blockAnimStyle = useAnimatedStyle(() => {
+    const p = animProgress.value;
+    const opacity = interpolate(
+      p,
+      [0, Math.max(0, start), Math.min(1, end), 1],
+      [0, 0, 1, 1]
+    );
+    const scale = interpolate(
+      p,
+      [0, Math.max(0, start), Math.min(1, end), 1],
+      [0.3, 0.3, 1, 1]
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.barBlockActive,
+        {
+          height: blockHeight,
+          marginVertical: blockGap / 2,
+        },
+        blockAnimStyle,
+      ]}
+    >
+      <LinearGradient
+        colors={[colors.highlight, colors.accent]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
+    </Animated.View>
+  );
+};
+
+// Sub-component: Animated column with staggered entrance
+const BarColumn: React.FC<{
+  item: BarDataPoint;
+  index: number;
+  maxValue: number;
+  trackHeight: number;
+  chartReady: boolean;
+  speed: number;
+}> = React.memo(({ item, index, maxValue, trackHeight, chartReady, speed }) => {
+  const animProgress = useSharedValue(speed === 0 ? 1 : 0);
+
+  useEffect(() => {
+    if (!chartReady) return;
+    if (speed === 0) {
+      animProgress.value = 1;
+      return;
+    }
+    animProgress.value = 0;
+    animProgress.value = withDelay(
+      index * 35 * speed,
+      withTiming(1, {
+        duration: getScaledDuration(380),
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+  }, [item.value, chartReady, speed, index]);
+
+  const trackPadding = 3;
+  const blockGap = 3;
+  const totalGapsHeight = maxValue * blockGap;
+  const blockHeight = Math.max(0, (trackHeight - 2 * trackPadding - totalGapsHeight) / maxValue);
+
+  return (
+    <View style={styles.barCol}>
+      <View style={[styles.barTrack, { height: trackHeight }]}>
+        {Array.from({ length: item.value }).map((_, j) => (
+          <BarBlock
+            key={j}
+            index={j}
+            total={item.value}
+            blockHeight={blockHeight}
+            blockGap={blockGap}
+            animProgress={animProgress}
+          />
+        ))}
+      </View>
+      <Text style={styles.xLabel} numberOfLines={1}>{item.label}</Text>
+    </View>
+  );
+});
+
 const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) => {
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const chartHeight = fixedHeight ?? measuredHeight;
@@ -35,69 +143,24 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
     [data]
   );
 
-  const animValuesRef = useRef<any[]>([]);
-  if (animValuesRef.current.length !== data.length) {
-    animValuesRef.current = data.map((_, i) => animValuesRef.current[i] ?? new Animated.Value(0));
-  }
-  const animValues = animValuesRef.current;
-  const hasAnimated = useRef(false);
-  const activeAnimRef = useRef<any>(null);
-
-  const startAnimation = useCallback(() => {
-    if (hasAnimated.current || chartHeight === 0 || animValues.length === 0) return;
-    hasAnimated.current = true;
-
-    const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
-      ? globalAnimation.speed
-      : 1;
-
-    if (speed === 0) {
-      animValues.forEach(anim => anim.setValue(1));
-      return;
-    }
-
-    const anim = Animated.stagger(
-      60 * speed,
-      animValues.map((anim, i) =>
-        Animated.spring(anim, {
-          toValue:         1,
-          delay:           i * 30 * speed,
-          useNativeDriver: false,
-          stiffness:       130 / (speed || 1),
-          damping:         15,
-          mass:            0.8 * (speed || 1),
-        })
-      )
-    );
-    activeAnimRef.current = anim;
-    anim.start();
-  }, [chartHeight, animValues]);
-
-  useEffect(() => {
-    hasAnimated.current = false;
-    animValuesRef.current.forEach(anim => anim.setValue(0));
-    startAnimation();
-    const activeAnim = activeAnimRef.current;
-    return () => {
-      if (activeAnim) {
-        activeAnim.stop();
-      }
-    };
-  }, [data, startAnimation]);
-
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
     if (h > 0) setMeasuredHeight(h);
   }, []);
 
+  const speed = (typeof globalAnimation !== 'undefined' && globalAnimation && typeof globalAnimation.speed === 'number')
+    ? globalAnimation.speed
+    : 1;
+
   const trackHeight = chartHeight - X_LABEL_HEIGHT - spacing.sm;
+  const chartReady = chartHeight > 0;
 
   return (
     <View
       style={[styles.container, fixedHeight ? { height: fixedHeight } : {}]}
       onLayout={fixedHeight ? undefined : onLayout}
     >
-      {chartHeight > 0 && (
+      {chartReady && (
         <>
           {/* Y-axis */}
           <View style={[styles.yAxis, { height: chartHeight }]}>
@@ -108,57 +171,17 @@ const BarChart: React.FC<BarChartProps> = ({ data, chartHeight: fixedHeight }) =
 
           {/* Bars */}
           <View style={[styles.barsWrapper, { height: chartHeight }]}>
-            {data.map((item, i) => {
-              const trackPadding = 3;
-              const blockGap = 3;
-              const totalGapsHeight = maxValue * blockGap;
-              const blockHeight = (trackHeight - 2 * trackPadding - totalGapsHeight) / maxValue;
-
-              return (
-                <View key={item.label} style={styles.barCol}>
-                  <View style={[styles.barTrack, { height: trackHeight }]}>
-                    {Array.from({ length: item.value }).map((_, j) => {
-                      // Stagger active blocks from bottom to top within the column
-                      const start = item.value > 1 ? (j * 0.4) / (item.value - 1) : 0;
-                      const end = start + 0.6;
-                      
-                      const animOpacity = animValues[i].interpolate({
-                        inputRange:  [0, Math.max(0, start), Math.min(1, end), 1],
-                        outputRange: [0, 0, 1, 1],
-                      });
-                      
-                      const animScale = animValues[i].interpolate({
-                        inputRange:  [0, Math.max(0, start), Math.min(1, end), 1],
-                        outputRange: [0.3, 0.3, 1, 1],
-                      });
-
-                      return (
-                        <Animated.View
-                          key={j}
-                          style={[
-                            styles.barBlockActive,
-                            {
-                              height: blockHeight,
-                              marginVertical: blockGap / 2,
-                              opacity: animOpacity,
-                              transform: [{ scale: animScale }],
-                            }
-                          ]}
-                        >
-                          <LinearGradient
-                            colors={[colors.highlight, colors.accent]}
-                            style={StyleSheet.absoluteFill}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 0, y: 1 }}
-                          />
-                        </Animated.View>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.xLabel} numberOfLines={1}>{item.label}</Text>
-                </View>
-              );
-            })}
+            {data.map((item, i) => (
+              <BarColumn
+                key={item.label}
+                item={item}
+                index={i}
+                maxValue={maxValue}
+                trackHeight={trackHeight}
+                chartReady={chartReady}
+                speed={speed}
+              />
+            ))}
           </View>
         </>
       )}
@@ -222,4 +245,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BarChart;
+export default React.memo(BarChart);

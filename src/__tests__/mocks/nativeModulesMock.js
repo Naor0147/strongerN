@@ -9,13 +9,32 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 // Mock expo-sqlite
-jest.mock('expo-sqlite', () => ({
-  openDatabaseSync: jest.fn().mockReturnValue({
-    execSync: jest.fn(),
-    runSync: jest.fn(),
-    getFirstSync: jest.fn().mockReturnValue({ value: '{}' }),
-  }),
-}));
+jest.mock('expo-sqlite', () => {
+  const store = new Map();
+  return {
+    openDatabaseSync: jest.fn().mockReturnValue({
+      execSync: jest.fn(),
+      runSync: jest.fn((query, params) => {
+        if (params && params[0] && params[1] !== undefined) store.set(params[0], params[1]);
+      }),
+      getFirstSync: jest.fn((query, params) => {
+        const key = params ? params[0] : null;
+        return key && store.has(key) ? { value: store.get(key) } : null;
+      }),
+    }),
+    openDatabaseAsync: jest.fn().mockResolvedValue({
+      execAsync: jest.fn().mockResolvedValue(undefined),
+      runAsync: jest.fn((query, params) => {
+        if (params && params[0] && params[1] !== undefined) store.set(params[0], params[1]);
+        return Promise.resolve(undefined);
+      }),
+      getFirstAsync: jest.fn((query, params) => {
+        const key = params ? params[0] : null;
+        return Promise.resolve(key && store.has(key) ? { value: store.get(key) } : null);
+      }),
+    }),
+  };
+});
 
 // Mock expo-audio
 jest.mock('expo-audio', () => ({
@@ -37,8 +56,15 @@ jest.mock('expo-font', () => ({
 }));
 
 // Mock @expo/vector-icons
+const MockIonicons = 'Ionicons';
 jest.mock('@expo/vector-icons', () => ({
-  Ionicons: 'Ionicons',
+  Ionicons: MockIonicons,
+}));
+jest.mock('@expo/vector-icons/Ionicons', () => ({
+  __esModule: true,
+  default: MockIonicons,
+  font: { ionicons: 'Ionicons.ttf' },
+  glyphMap: {},
 }));
 
 // Mock expo-linear-gradient
@@ -106,9 +132,22 @@ jest.mock('react-native-reanimated', () => {
     useAnimatedStyle: (fn) => fn(),
     withSpring: (toValue) => toValue,
     withTiming: (toValue) => toValue,
+    withDelay: (_delay, anim) => anim,
+    withRepeat: (anim) => anim,
+    withSequence: (...anims) => anims[0],
+    Easing: {
+      linear: (t) => t,
+      ease: (t) => t,
+      quad: (t) => t,
+      cubic: (t) => t,
+      sin: (t) => t,
+      in: (fn) => fn,
+      out: (fn) => fn,
+      inOut: (fn) => fn,
+    },
     interpolate: (val, input, output) => {
       // Return a mocked interpolated value
-      return output[0];
+      return output ? output[0] : 0;
     },
     runOnJS: (fn) => fn,
     useEvent: (fn) => fn,
@@ -131,6 +170,20 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true }),
 }));
 
+// Mock expo-notifications
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn().mockResolvedValue(undefined),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  scheduleNotificationAsync: jest.fn().mockResolvedValue('mock-notif-id-123'),
+  cancelScheduledNotificationAsync: jest.fn().mockResolvedValue(undefined),
+  dismissNotificationAsync: jest.fn().mockResolvedValue(undefined),
+  getLastNotificationResponseAsync: jest.fn().mockResolvedValue(null),
+  addNotificationResponseReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  AndroidImportance: { DEFAULT: 3, HIGH: 4 },
+  SchedulableTriggerInputTypes: { TIME_INTERVAL: 'timeInterval', WEEKLY: 'weekly' },
+}));
+
 // Mock expo-application
 jest.mock('expo-application', () => ({
   nativeApplicationVersion: '1.0.0',
@@ -138,6 +191,7 @@ jest.mock('expo-application', () => ({
   applicationName: 'StrongerN',
   applicationId: 'com.strongern',
 }));
+
 
 
 

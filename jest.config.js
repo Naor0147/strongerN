@@ -9,7 +9,7 @@ module.exports = {
     "./src/__tests__/mocks/nativeModulesMock.js"
   ],
   moduleNameMapper: {
-    '\\.(wav|mp3|png|jpg|jpeg|gif)$': '<rootDir>/src/__tests__/mocks/fileMock.js',
+    '\\.(wav|mp3|png|jpg|jpeg|gif|ttf|otf)$': '<rootDir>/src/__tests__/mocks/fileMock.js',
   },
   testMatch: [
     "**/*.test.ts",

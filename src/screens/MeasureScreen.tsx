@@ -15,7 +15,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, can
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration, getSpringConfig } from '../theme';
 import { MeasureItem } from '../data/mockData';

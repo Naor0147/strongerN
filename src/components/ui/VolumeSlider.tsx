@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing } from '../../theme';
 import i18n from '../../utils/i18n';
 import { styles } from '../../screens/profileStyles';

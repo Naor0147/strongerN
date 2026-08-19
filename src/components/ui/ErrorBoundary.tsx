@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Platform, Clipboard, StatusBar, SafeAreaView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, shadow, ripple as rippleTokens } from '../../theme';
 import { saveCrashLogSync } from '../../utils/crashLogger';

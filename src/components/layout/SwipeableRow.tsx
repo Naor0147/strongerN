@@ -10,7 +10,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, globalAnimation, getScaledDuration, getSpringConfig } from '../../theme';
 import { ExerciseRowGesturesContext } from '../ui/gestureCoexistence';

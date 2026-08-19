@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, radius } from '../../theme';
 import { SwipeableRow } from './SwipeableRow';
 import { exerciseBlockStyles as s } from './exerciseBlockStyles';
