@@ -1,7 +1,17 @@
+param(
+    [string]$ApkPath = "apk/strongerN.apk",
+    [switch]$Assert
+)
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$apkPath = "apk/strongerN.apk"
-$item = Get-Item $apkPath
+if (-not (Test-Path $ApkPath)) {
+    Write-Error "APK not found at $ApkPath"
+    if ($Assert) { exit 1 }
+    return
+}
+
+$item = Get-Item $ApkPath
 $bytes = $item.Length
 $mb = [Math]::Round($bytes / 1MB, 2)
 $mbExact = $bytes / (1024 * 1024)
@@ -9,10 +19,10 @@ $mbExact = $bytes / (1024 * 1024)
 Write-Host "========================================="
 Write-Host "       RELEASE APK CENSUS & AUDIT        "
 Write-Host "========================================="
-Write-Host "APK Path: $apkPath"
+Write-Host "APK Path: $ApkPath"
 Write-Host "Exact Size: $bytes bytes ($mb MB / $([Math]::Round($mbExact, 3)) MiB)"
 
-$zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $apkPath))
+$zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $ApkPath))
 
 Write-Host "`n--- FONT CENSUS ---"
 $fonts = @($zip.Entries | Where-Object { $_.FullName -match '\.(ttf|otf)$' })
@@ -65,3 +75,36 @@ foreach ($entry in $topEntries) {
 }
 
 $zip.Dispose()
+
+if ($Assert) {
+    Write-Host "`n--- SIZE & QUALITY GATE ASSERTIONS ---"
+    $maxBytes = 20 * 1024 * 1024 # 20 MB
+    $maxFonts = 10
+    $maxDexComp = 6 * 1024 * 1024 # 6 MB
+
+    $failed = $false
+    if ($bytes -gt $maxBytes) {
+        Write-Host "❌ ASSERTION FAILED: APK size ($mb MB) exceeds maximum allowed 20 MB ($maxBytes bytes)" -ForegroundColor Red
+        $failed = $true
+    } else {
+        Write-Host "✅ APK size gate passed: $mb MB <= 20 MB" -ForegroundColor Green
+    }
+
+    if ($fonts.Count -gt $maxFonts) {
+        Write-Host "❌ ASSERTION FAILED: Font count ($($fonts.Count)) exceeds maximum allowed $maxFonts" -ForegroundColor Red
+        $failed = $true
+    } else {
+        Write-Host "✅ Font census gate passed: $($fonts.Count) <= $maxFonts" -ForegroundColor Green
+    }
+
+    if ($totalDexComp -gt $maxDexComp) {
+        Write-Host "❌ ASSERTION FAILED: Compressed DEX size ($([Math]::Round($totalDexComp / 1MB, 2)) MB) exceeds maximum allowed 6 MB" -ForegroundColor Red
+        $failed = $true
+    } else {
+        Write-Host "✅ DEX compression gate passed: $([Math]::Round($totalDexComp / 1MB, 2)) MB <= 6 MB" -ForegroundColor Green
+    }
+
+    if ($failed) {
+        exit 1
+    }
+}

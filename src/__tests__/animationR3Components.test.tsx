@@ -238,5 +238,45 @@ describe('Milestone 3 (R3) - 120 FPS UI-Thread Animations Suite', () => {
         tree.unmount();
       });
     });
+
+    test('re-runs rAF count-up when value prop changes', () => {
+      let tree: any;
+      renderer.act(() => {
+        tree = renderer.create(
+          <StatCard
+            value={10}
+            label="Workouts"
+            icon="barbell-outline"
+          />
+        );
+      });
+
+      renderer.act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(JSON.stringify(tree.toJSON())).toContain('10');
+
+      // Update value prop
+      renderer.act(() => {
+        tree.update(
+          <StatCard
+            value={25}
+            label="Workouts"
+            icon="barbell-outline"
+          />
+        );
+      });
+
+      renderer.act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(JSON.stringify(tree.toJSON())).toContain('25');
+
+      renderer.act(() => {
+        tree.unmount();
+      });
+    });
   });
 });

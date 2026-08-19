@@ -24,7 +24,7 @@ describe('Bundle & Asset Optimization Guard (M1 / R1)', () => {
   describe('Font Imports Tree-Shaking', () => {
     it('should have zero barrel imports of @expo/vector-icons across src files', () => {
       const srcFiles = getAllFiles(srcDir, ['.ts', '.tsx', '.js', '.jsx']);
-      const barrelRegex = /from\s+['"]@expo\/vector-icons['"](?!\/)/;
+      const barrelRegex = /(from\s+['"]@expo\/vector-icons['"](?!\/)|require\(['"]@expo\/vector-icons['"]\)|import\(['"]@expo\/vector-icons['"]\))/;
 
       const offendingFiles: string[] = [];
       for (const file of srcFiles) {
@@ -41,7 +41,7 @@ describe('Bundle & Asset Optimization Guard (M1 / R1)', () => {
 
     it('should have zero barrel imports of @expo-google-fonts/inter or rubik across src files', () => {
       const srcFiles = getAllFiles(srcDir, ['.ts', '.tsx', '.js', '.jsx']);
-      const barrelRegex = /from\s+['"]@expo-google-fonts\/(inter|rubik)['"](?!\/)/;
+      const barrelRegex = /(from\s+['"]@expo-google-fonts\/(inter|rubik)['"](?!\/)|require\(['"]@expo-google-fonts\/(inter|rubik)['"]\)|import\(['"]@expo-google-fonts\/(inter|rubik)['"]\))/;
 
       const offendingFiles: string[] = [];
       for (const file of srcFiles) {

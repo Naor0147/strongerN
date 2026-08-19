@@ -286,6 +286,17 @@ if (-not (Test-Path "apk")) {
 if (Test-Path $apkSrc) {
     Copy-Item $apkSrc $apkDest -Force
     Write-Host "`n[SUCCESS] Standalone APK successfully compiled: $apkDest (Took $buildTime seconds)" -ForegroundColor $SuccessColor
+
+    # Run Automated Release APK Census & Assertions
+    $inspectScript = Join-Path $PSScriptRoot "inspect-apk.ps1"
+    if (Test-Path $inspectScript) {
+        Write-Host "`n[CENSUS] Running Release APK Census & Quality Assertions..." -ForegroundColor $PrimaryColor
+        & $inspectScript -ApkPath $apkDest -Assert
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+            Write-Error "Release APK Census assertion failed!"
+            exit 1
+        }
+    }
 } else {
     Write-Error "Compiled APK could not be found at: $apkSrc (Took $buildTime seconds)"
     exit 1
