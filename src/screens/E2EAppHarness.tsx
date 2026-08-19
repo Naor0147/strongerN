@@ -27,6 +27,7 @@ import { mockExercises, mockSessions, mockTemplates, ExerciseSet, Exercise, Work
 import ActiveWorkoutModal from '../components/layout/ActiveWorkoutModal';
 import { initSounds } from '../utils/soundPlayer';
 import { initNotifications, getLastNotificationResponse, onNotificationTapped, isWorkoutNotificationResponse } from '../utils/notifications';
+import * as SplashScreen from 'expo-splash-screen';
 
 import { Platform } from 'react-native';
 import { initDb, saveToDb, loadFromDb, deleteFromDb } from '../utils/db';
@@ -56,12 +57,22 @@ export default function E2EAppHarness() {
     ...Ionicons.font,
   });
 
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
   // Eagerly activate the iOS audio session on mount so the first
   // set-complete chime has zero latency.
   useEffect(() => {
     initSounds();
     initNotifications();
   }, []);
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   // State for active workout
   const [isWorkoutModalVisible, setIsWorkoutModalVisible] = useState(false);

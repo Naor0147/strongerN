@@ -74,13 +74,17 @@ const TabFallback: React.FC = React.memo(() => (
   <View style={{ flex: 1, backgroundColor: colors.bg }} />
 ));
 
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 // Layout components
 import BottomTabBar      from './components/layout/BottomTabBar';
 import ActiveWorkoutBar  from './components/layout/ActiveWorkoutBar';
 import { soundConfig, initSounds } from './utils/soundPlayer';
 import { initNotifications, getLastNotificationResponse, onNotificationTapped, isWorkoutNotificationResponse } from './utils/notifications';
 
-import E2EAppHarness from './screens/E2EAppHarness';
+const E2EAppHarness = React.lazy(() => import('./screens/E2EAppHarness'));
 import Toast from './components/ui/Toast';
 
 // Mock data
@@ -206,9 +210,7 @@ const MeasureModalSheet: React.FC<MeasureModalSheetProps> = React.memo(({
       </View>
     </Modal>
   );
-});
-
-function App() {
+});function App() {
   const isE2E = Platform.OS === 'web' && (
     process.env.EXPO_PUBLIC_E2E === 'true' || (typeof window !== 'undefined' && (
       window.location?.search?.includes('e2e=true') ||
@@ -222,7 +224,11 @@ function App() {
         window.sessionStorage?.setItem('is_e2e_mode', 'true');
       } catch (e) {}
     }
-    return <E2EAppHarness />;
+    return (
+      <React.Suspense fallback={null}>
+        <E2EAppHarness />
+      </React.Suspense>
+    );
   }
 
   return <MainApp />;
@@ -249,11 +255,14 @@ function MainApp() {
     ...Ionicons.font,
   });
 
-  // â”€â”€ Synchronous Frame 0 MMKV Instant Hydration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  React.useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  // ── Synchronous Fast First-Render Checks ──
   const initialAuth = React.useMemo(() => getInitialAuthState(), []);
-  const initialAppData = React.useMemo(() => getCachedAppData(), []);
-  const initialRecentSessions = React.useMemo(() => getCachedRecentSessions(), []);
-  const initialProfileSummaries = React.useMemo(() => getCachedProfileSummaries(), []);
   const initialSettings = React.useMemo(() => loadCompactSettings(), []);
 
   // Performance telemetry marker
@@ -261,10 +270,10 @@ function MainApp() {
     (global as any).__HYDRATION_LOGGED__ = true;
     const now = Date.now();
     const t0 = (global as any).__STARTUP_T0__ || now;
-    console.log(`[PERF_BENCHMARK] Frame 0 Instant State Hydrated in ${now - t0}ms (cachedUser: ${Boolean(initialAppData?.user)}, cachedSessions: ${initialRecentSessions?.length ?? 0})`);
+    console.log(`[PERF_BENCHMARK] Fast Frame 0 Render Initialized in ${now - t0}ms`);
   }
 
-  // â”€â”€ Auth State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Auth State ──
 
   // null = loading from storage; false = needs onboarding; AuthState = loaded
   const [authState, setAuthState] = React.useState<{
@@ -275,7 +284,7 @@ function MainApp() {
   } | null>(() => initialAuth);
 
   // Guard to prevent overwriting stored data with defaults on mount
-  const [isDataLoaded, setIsDataLoaded] = React.useState(() => Boolean(initialAppData));
+  const [isDataLoaded, setIsDataLoaded] = React.useState(false);
   const [isFullHistoryLoaded, setIsFullHistoryLoaded] = React.useState(false);
   const [isWorkoutRestored, setIsWorkoutRestored] = React.useState(true);
 
@@ -307,7 +316,7 @@ function MainApp() {
           }));
         }
       } else if (!initialAuth) {
-        // First launch â€” show onboarding
+        // First launch — show onboarding
         setAuthState({ hasCompletedOnboarding: false, authMode: 'guest', localUsername: '' });
       }
     })();
@@ -361,42 +370,33 @@ function MainApp() {
   const STORAGE_KEY = 'strongern_app_data_v1';
   const CLOUD_PREFIX = 'strongern_cloud_backup_v1_';
 
-  // Dynamic States (Clean production-ready default state populated from synchronous instant cache)
-  const initialTotalCount = React.useMemo(() => getCachedTotalSessionsCount() ?? initialAppData?.user?.totalWorkouts ?? 0, []);
+  // Dynamic States
   const [user, setUser] = React.useState<{
     name: string;
     totalWorkouts: number;
     isPro: boolean;
     avatarUri?: string;
-  }>(() => {
-    if (initialAppData?.user) {
-      return {
-        ...initialAppData.user,
-        totalWorkouts: initialTotalCount,
-      };
-    }
-    return {
-      name: initialAuth?.authMode === 'local' && initialAuth.localUsername
-        ? initialAuth.localUsername
-        : initialAuth?.authMode === 'google' && initialAuth.googleProfile?.name
-        ? initialAuth.googleProfile.name
-        : 'Guest User',
-      totalWorkouts: initialTotalCount,
-      isPro: false,
-      avatarUri: initialAuth?.authMode === 'google' ? initialAuth.googleProfile?.avatarUri : undefined,
-    };
-  });
+  }>(() => ({
+    name: initialAuth?.authMode === 'local' && initialAuth.localUsername
+      ? initialAuth.localUsername
+      : initialAuth?.authMode === 'google' && initialAuth.googleProfile?.name
+      ? initialAuth.googleProfile.name
+      : 'Guest User',
+    totalWorkouts: 0,
+    isPro: false,
+    avatarUri: initialAuth?.authMode === 'google' ? initialAuth.googleProfile?.avatarUri : undefined,
+  }));
 
-  const [sessionsList, setSessionsList] = React.useState<any[]>(() => initialRecentSessions ?? []);
-  const [templatesList, setTemplatesList] = React.useState<any[]>(() => initialAppData?.templatesList ?? []);
-  const [exercisesList, setExercisesList] = React.useState<any[]>(() => initialAppData?.exercisesList ?? mockExercises);
+  const [sessionsList, setSessionsList] = React.useState<any[]>(() => []);
+  const [templatesList, setTemplatesList] = React.useState<any[]>(() => []);
+  const [exercisesList, setExercisesList] = React.useState<any[]>(() => mockExercises);
   const exercisesListRef = React.useRef(exercisesList);
 
   const [primaryMetricsList, setPrimaryMetricsList] = React.useState<any[]>(() =>
-    initialAppData?.primaryMetricsList ?? mockPrimaryMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
+    mockPrimaryMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
   );
   const [bodyPartMetricsList, setBodyPartMetricsList] = React.useState<any[]>(() =>
-    initialAppData?.bodyPartMetricsList ?? mockBodyPartMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
+    mockBodyPartMetrics.map(m => ({ ...m, lastValue: undefined, history: [] }))
   );
   const [isAutoTimerEnabled, setIsAutoTimerEnabled] = React.useState(() => initialSettings?.isAutoTimerEnabled ?? true);
   const [googleUser, setGoogleUser] = React.useState<{
@@ -406,7 +406,6 @@ function MainApp() {
     accessToken?: string;
     fileId?: string;
   } | null>(() => {
-    if (initialAppData?.googleUser) return initialAppData.googleUser;
     if (initialAuth?.authMode === 'google' && initialAuth.googleProfile) {
       return {
         email: initialAuth.googleProfile.email,
@@ -418,17 +417,70 @@ function MainApp() {
     return null;
   });
   const [animationSpeed, setAnimationSpeed] = React.useState(() => initialSettings?.animationSpeed ?? 1);
-  const [lastSynced, setLastSynced] = React.useState<string | null>(() => initialAppData?.lastSynced ?? null);
+  const [lastSynced, setLastSynced] = React.useState<string | null>(null);
 
   // Program & Folder States
-  const [foldersList, setFoldersList] = React.useState<string[]>(() => initialAppData?.foldersList ?? ['All', 'Bulking Splits', 'Home Workouts', 'Travel']);
-  const [activeProgramId, setActiveProgramId] = React.useState<string | null>(() => initialAppData?.activeProgramId ?? null);
-  const [programStartDate, setProgramStartDate] = React.useState<string | null>(() => initialAppData?.programStartDate ?? null);
+  const [foldersList, setFoldersList] = React.useState<string[]>(() => ['All', 'Bulking Splits', 'Home Workouts', 'Travel']);
+  const [activeProgramId, setActiveProgramId] = React.useState<string | null>(null);
+  const [programStartDate, setProgramStartDate] = React.useState<string | null>(null);
 
   // Smartwatch and Health States
   const [isWatchSimulatorVisible, setIsWatchSimulatorVisible] = React.useState(false);
   const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(() => initialSettings?.isHealthSyncEnabled ?? false);
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(() => initialSettings?.isLiveHeartRateEnabled ?? false);
+  const [profileSummaries, setProfileSummaries] = React.useState<InstantProfileSummaries | null>(null);
+
+  // Mount effect: load heavy JSON caches in a single batched update
+  React.useEffect(() => {
+    const cachedAppData = getCachedAppData();
+    const cachedRecentSessions = getCachedRecentSessions();
+    const cachedSummaries = getCachedProfileSummaries();
+    const cachedTotalCount = getCachedTotalSessionsCount();
+
+    if (cachedAppData || cachedRecentSessions || cachedSummaries || cachedTotalCount !== null) {
+      unstable_batchedUpdates(() => {
+        if (cachedAppData?.user) {
+          setUser({
+            ...cachedAppData.user,
+            totalWorkouts: cachedTotalCount ?? cachedAppData.user.totalWorkouts ?? 0,
+          });
+        } else if (cachedTotalCount !== null) {
+          setUser(prev => ({ ...prev, totalWorkouts: cachedTotalCount }));
+        }
+        if (cachedRecentSessions && cachedRecentSessions.length > 0) {
+          setSessionsList(cachedRecentSessions);
+        }
+        if (cachedAppData?.templatesList) {
+          setTemplatesList(cachedAppData.templatesList);
+        }
+        if (cachedAppData?.exercisesList) {
+          setExercisesList(cachedAppData.exercisesList);
+        }
+        if (cachedAppData?.primaryMetricsList) {
+          setPrimaryMetricsList(cachedAppData.primaryMetricsList);
+        }
+        if (cachedAppData?.bodyPartMetricsList) {
+          setBodyPartMetricsList(cachedAppData.bodyPartMetricsList);
+        }
+        if (cachedAppData?.foldersList) {
+          setFoldersList(cachedAppData.foldersList);
+        }
+        if (cachedAppData?.activeProgramId !== undefined) {
+          setActiveProgramId(cachedAppData.activeProgramId);
+        }
+        if (cachedAppData?.programStartDate !== undefined) {
+          setProgramStartDate(cachedAppData.programStartDate);
+        }
+        if (cachedAppData?.lastSynced) {
+          setLastSynced(cachedAppData.lastSynced);
+        }
+        if (cachedAppData?.googleUser) {
+          setGoogleUser(cachedAppData.googleUser);
+        }
+        setIsDataLoaded(true);
+      });
+    }
+  }, []);
 
   // Custom Alert Modal State
   const [activeAlert, setActiveAlert] = React.useState<CustomAlertConfig | null>(null);
@@ -499,8 +551,8 @@ function MainApp() {
 
   // Dynamically calculate weekly chart data based on sessionsList (with fast pre-cached fallback)
   const dynamicWeeklyChartData = React.useMemo(() => {
-    if ((!isDataLoaded || sessionsList.length === 0) && initialProfileSummaries?.dynamicWeeklyChartData) {
-      return initialProfileSummaries.dynamicWeeklyChartData;
+    if ((!isDataLoaded || sessionsList.length === 0) && profileSummaries?.dynamicWeeklyChartData) {
+      return profileSummaries.dynamicWeeklyChartData;
     }
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
     const oneDay = 24 * 60 * 60 * 1000;
@@ -531,7 +583,7 @@ function MainApp() {
     });
     
     return weeks.map(w => ({ weekLabel: w.label, count: w.count }));
-  }, [sessionsList, initialProfileSummaries, isDataLoaded]);
+  }, [sessionsList, profileSummaries, isDataLoaded]);
 
   // Background Database & History Synchronization (non-blocking)
   React.useEffect(() => {
@@ -1857,8 +1909,8 @@ function MainApp() {
 
   // Compute weekly muscle sets from sessions in the last 7 days (with instant precomputed cache)
   const weeklyMuscleSets = React.useMemo(() => {
-    if ((!isDataLoaded || sessionsList.length === 0) && initialProfileSummaries?.weeklyMuscleSets) {
-      return initialProfileSummaries.weeklyMuscleSets;
+    if ((!isDataLoaded || sessionsList.length === 0) && profileSummaries?.weeklyMuscleSets) {
+      return profileSummaries.weeklyMuscleSets;
     }
     const exerciseMuscleMap: Record<string, string> = {};
     exercisesList.forEach(ex => {
@@ -1901,7 +1953,7 @@ function MainApp() {
       }
     });
     return sets;
-  }, [sessionsList, exercisesList, initialProfileSummaries, isDataLoaded]);
+  }, [sessionsList, exercisesList, profileSummaries, isDataLoaded]);
 
   // Persist precomputed profile summaries (charts, muscle sets) to MMKV for Frame 0 zero-delay rendering
   React.useEffect(() => {
@@ -2616,6 +2668,10 @@ function MainApp() {
       notification: colors.accent,
     },
   }), []);
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   // Show login/onboarding if not yet completed
   return (
