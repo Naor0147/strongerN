@@ -27,6 +27,7 @@ export const STORAGE_KEYS = {
   INSTANT_RECENT_SESSIONS: 'strongern_instant_recent_sessions_v1',
   INSTANT_TOTAL_SESSIONS_COUNT: 'strongern_instant_total_sessions_count_v1',
   INSTANT_PROFILE_SUMMARIES: 'strongern_instant_profile_summaries_v1',
+  INSTANT_LIFETIME_STATS: 'strongern_instant_lifetime_stats_v1',
 
   // Database Names
   LEGACY_SQLITE_DB: 'strongern.db',

@@ -32,6 +32,7 @@ jest.mock('expo-sqlite', () => {
         const key = params ? params[0] : null;
         return Promise.resolve(key && store.has(key) ? { value: store.get(key) } : null);
       }),
+      getAllAsync: jest.fn().mockResolvedValue([]),
     }),
   };
 });

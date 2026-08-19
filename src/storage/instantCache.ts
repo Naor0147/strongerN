@@ -35,6 +35,13 @@ export interface InstantProfileSummaries {
   weeklyMuscleSets?: Record<string, number>;
 }
 
+export interface LifetimeStatsSummary {
+  totalCompletedSets: number;
+  muscleSets: Record<string, number>;
+  exerciseSets: Record<string, number>;
+  lastCalculatedMs: number;
+}
+
 function safeMmkvGet(key: string): string | null {
   try {
     initMMKVAdapter();
@@ -191,6 +198,26 @@ export function setCachedProfileSummaries(summaries: InstantProfileSummaries): v
 }
 
 /**
+ * Synchronously retrieves precomputed lifetime stats (completed sets, muscle group breakdown) on Frame 0.
+ */
+export function getCachedLifetimeStats(): LifetimeStatsSummary | null {
+  const raw = safeMmkvGet(STORAGE_KEYS.INSTANT_LIFETIME_STATS);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as LifetimeStatsSummary;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Synchronously saves precomputed lifetime stats in MMKV.
+ */
+export function setCachedLifetimeStats(stats: LifetimeStatsSummary): void {
+  safeMmkvSet(STORAGE_KEYS.INSTANT_LIFETIME_STATS, JSON.stringify(stats));
+}
+
+/**
  * Clears all instant cache keys (used during full app data reset).
  */
 export function clearInstantCache(): void {
@@ -199,4 +226,5 @@ export function clearInstantCache(): void {
   safeMmkvRemove(STORAGE_KEYS.INSTANT_RECENT_SESSIONS);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_TOTAL_SESSIONS_COUNT);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_PROFILE_SUMMARIES);
+  safeMmkvRemove(STORAGE_KEYS.INSTANT_LIFETIME_STATS);
 }
