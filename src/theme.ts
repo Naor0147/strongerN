@@ -51,6 +51,8 @@ export const colors = {
   surface:        '#161B24',
   surface2:       '#1E2633',   // pressed / hover state
   surfaceHigh:    '#242E3E',   // elevated modals / pills
+  surfaceCompleted: '#111A2E', // completed workout set row surface
+  setConnector:   '#253347',   // vertical connector line between active sets
 
   // Borders
   border:         '#252D3A',

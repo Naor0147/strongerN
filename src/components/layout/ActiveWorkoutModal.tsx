@@ -633,30 +633,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return map;
   }, [activeExercises]);
 
-  const [renderedCardLimit, setRenderedCardLimit] = useState(4);
+  const [renderedCardLimit, setRenderedCardLimit] = useState(
+    () => Math.max(10, activeExercises.length)
+  );
 
   useEffect(() => {
-    if (visible) {
-      setRenderedCardLimit(4);
-      let currentLimit = 4;
-      let animId: number;
-
-      const expandChunk = () => {
-        if (currentLimit < exercises.length) {
-          currentLimit = Math.min(exercises.length, currentLimit + 8);
-          setRenderedCardLimit(currentLimit);
-          if (currentLimit < exercises.length) {
-            animId = requestAnimationFrame(expandChunk);
-          }
-        }
-      };
-
-      animId = requestAnimationFrame(expandChunk);
-      return () => {
-        if (animId) cancelAnimationFrame(animId);
-      };
+    if (activeExercises.length > renderedCardLimit) {
+      setRenderedCardLimit(activeExercises.length);
     }
-  }, [visible, exercises.length]);
+  }, [activeExercises.length, renderedCardLimit]);
 
   const lastStartTimeRef = useRef<string | null>(null);
 

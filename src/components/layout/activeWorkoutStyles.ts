@@ -242,7 +242,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   setRowCompleted: {
-    backgroundColor: '#111A2E',
+    backgroundColor: colors.surfaceCompleted,
   },
   unilateralSetRow: {
     flexDirection:   'row',

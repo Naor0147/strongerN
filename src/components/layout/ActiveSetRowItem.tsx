@@ -255,7 +255,7 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
           </View>
         </SharedSwipeableRow>
         {showNextConnected && (
-          <View style={{ height: 4, backgroundColor: '#111A2E' }} />
+          <View style={{ height: 4, backgroundColor: colors.surfaceCompleted }} />
         )}
       </View>
     );
@@ -395,7 +395,7 @@ export const ActiveSetRowItem: React.FC<ActiveSetRowItemProps> = React.memo(({
         </View>
       </SharedSwipeableRow>
       {showNextConnected && (
-        <View style={{ height: 4, backgroundColor: '#111A2E' }} />
+        <View style={{ height: 4, backgroundColor: colors.surfaceCompleted }} />
       )}
     </View>
   );

@@ -121,80 +121,16 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
 
   const textRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (isActive) {
-      return keyboardValueStore.subscribe((newValue: string) => {
-        const currentActive = activeInputStore.getActiveInput();
-        if (
-          currentActive &&
-          exIdx !== undefined &&
-          setIdx !== undefined &&
-          fieldName !== undefined &&
-          ((currentActive.exerciseId && currentActive.setId)
-            ? currentActive.exerciseId !== exerciseId || currentActive.setId !== setId || currentActive.fieldName !== fieldName
-            : currentActive.exIdx !== exIdx || currentActive.setIdx !== setIdx || currentActive.fieldName !== fieldName)
-        ) {
-          return;
-        }
-
-        // Direct Native Element Ref Mutation (Instant Sub-millisecond Native Update)
-        if (textRef.current) {
-          const isValEmpty = newValue.trim() === '';
-          const targetColor = isValEmpty ? colors.textMuted : colors.textPrimary;
-          const targetOpacity = 1;
-          const targetText = isValEmpty ? placeholder : newValue;
-
-          // Native text inputs (Android/iOS)
-          if (typeof (textRef.current as any).setNativeProps === 'function') {
-            (textRef.current as any).setNativeProps({
-              text: targetText,
-              style: {
-                color: targetColor,
-                opacity: targetOpacity,
-              }
-            });
-          }
-          // Direct DOM node updates for web fallback
-          const element = (textRef.current as any)._node || textRef.current;
-          if (element) {
-            if (typeof element.value !== 'undefined') {
-              element.value = targetText;
-            }
-            if (typeof element.textContent !== 'undefined') {
-              element.textContent = targetText;
-            }
-            if (element.style) {
-              element.style.color = targetColor;
-              element.style.opacity = String(targetOpacity);
-            }
-          }
-        }
-
-        // Benchmark: measure keystroke render time
-        try {
-          if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
-            performance.mark('keystroke-end');
-            performance.measure('keystroke-render', 'keystroke-start', 'keystroke-end');
-            const measures = performance.getEntriesByName('keystroke-render');
-            if (measures.length > 0) {
-              const duration = measures[measures.length - 1].duration;
-              console.log(`[BENCHMARK] Keystroke render took: ${duration.toFixed(2)}ms`);
-            }
-            performance.clearMarks('keystroke-start');
-            performance.clearMarks('keystroke-end');
-            performance.clearMeasures('keystroke-render');
-          }
-        } catch (_) {}
-      });
-    }
-  }, [isActive, placeholder, exIdx, setIdx, fieldName, exerciseId, setId, isCompleted]);
-
-  useEffect(() => {
+  const updateNativeElement = (val: string) => {
     if (textRef.current) {
-      const isValEmpty = String(value ?? '').trim() === '';
-      const targetColor = isValEmpty ? colors.textMuted : colors.textPrimary;
-      const targetOpacity = 1;
-      const targetText = isValEmpty ? placeholder : value;
+      const isValEmpty = String(val ?? '').trim() === '';
+      const targetColor = isCompleted
+        ? colors.textMuted
+        : isValEmpty
+        ? colors.textMuted
+        : colors.textPrimary;
+      const targetOpacity = isCompleted ? 0.7 : 1;
+      const targetText = isValEmpty ? placeholder : val;
 
       if (typeof (textRef.current as any).setNativeProps === 'function') {
         (textRef.current as any).setNativeProps({
@@ -219,6 +155,46 @@ export const SetInputCell = React.memo(forwardRef<SetInputCellHandle, SetInputCe
         }
       }
     }
+  };
+
+  useEffect(() => {
+    if (isActive) {
+      return keyboardValueStore.subscribe((newValue: string) => {
+        const currentActive = activeInputStore.getActiveInput();
+        if (
+          currentActive &&
+          exIdx !== undefined &&
+          setIdx !== undefined &&
+          fieldName !== undefined &&
+          ((currentActive.exerciseId && currentActive.setId)
+            ? currentActive.exerciseId !== exerciseId || currentActive.setId !== setId || currentActive.fieldName !== fieldName
+            : currentActive.exIdx !== exIdx || currentActive.setIdx !== setIdx || currentActive.fieldName !== fieldName)
+        ) {
+          return;
+        }
+
+        updateNativeElement(newValue);
+
+        try {
+          if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+            performance.mark('keystroke-end');
+            performance.measure('keystroke-render', 'keystroke-start', 'keystroke-end');
+            const measures = performance.getEntriesByName('keystroke-render');
+            if (measures.length > 0) {
+              const duration = measures[measures.length - 1].duration;
+              console.log(`[BENCHMARK] Keystroke render took: ${duration.toFixed(2)}ms`);
+            }
+            performance.clearMarks('keystroke-start');
+            performance.clearMarks('keystroke-end');
+            performance.clearMeasures('keystroke-render');
+          }
+        } catch (_) {}
+      });
+    }
+  }, [isActive, placeholder, exIdx, setIdx, fieldName, exerciseId, setId, isCompleted]);
+
+  useEffect(() => {
+    updateNativeElement(value);
   }, [isCompleted, value, placeholder, isActive]);
 
   const showPlaceholder = String(value ?? '').trim() === '';
@@ -297,6 +273,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   completedText: {
+    color: colors.textMuted,
+    opacity: 0.7,
     textDecorationLine: 'line-through',
   },
   caret: {

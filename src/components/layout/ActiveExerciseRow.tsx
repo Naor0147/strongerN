@@ -108,14 +108,13 @@ export const ActiveExerciseRow: React.FC<ActiveExerciseRowProps> = React.memo(({
     };
   }, []);
 
-  const [renderedSetsLimit, setRenderedSetsLimit] = useState(4);
+  const [renderedSetsLimit, setRenderedSetsLimit] = useState(
+    () => Math.max(10, exercise.sets.length)
+  );
 
   useEffect(() => {
     if (exercise.sets.length > renderedSetsLimit) {
-      const animId = requestAnimationFrame(() => {
-        setRenderedSetsLimit(prev => Math.min(exercise.sets.length, prev + 8));
-      });
-      return () => cancelAnimationFrame(animId);
+      setRenderedSetsLimit(exercise.sets.length);
     }
   }, [exercise.sets.length, renderedSetsLimit]);
 
