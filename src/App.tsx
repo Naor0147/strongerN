@@ -52,6 +52,7 @@ import { loadCompactSettings, saveCompactSettings } from './storage/compactSetti
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
 import { historyHydrator } from './storage/history/historyHydrator';
+import { computeBackupFingerprint } from './utils/backupHash';
 
 // Screens — Auth & Initial Screen (Eager)
 import LoginScreen from './screens/LoginScreen';
@@ -961,6 +962,7 @@ function MainApp() {
 
   // Auto-sync state changes to Google Drive
   const isInitialLoadRef = React.useRef(true);
+  const lastUploadedFingerprintRef = React.useRef<string>('');
   
   const handleGoogleSessionExpired = React.useCallback(async () => {
     setGoogleUser(prev => prev ? { ...prev, accessToken: undefined } : null);
@@ -986,6 +988,19 @@ function MainApp() {
 
     if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) {
       console.warn('[Auto-Sync] Blocked upload: sessionsList is empty but totalWorkouts > 0');
+      return;
+    }
+
+    const currentFingerprint = computeBackupFingerprint({
+      user,
+      templatesList,
+      exercisesList,
+      sessionsList,
+      primaryMetricsList,
+      bodyPartMetricsList,
+    });
+
+    if (currentFingerprint === lastUploadedFingerprintRef.current) {
       return;
     }
 
@@ -1022,6 +1037,8 @@ function MainApp() {
           fileIdUpdated = true;
         }
 
+        lastUploadedFingerprintRef.current = currentFingerprint;
+
         if (fileIdUpdated) {
           const updatedFileId = fileId;
           setGoogleUser(prev => prev ? { ...prev, fileId: updatedFileId } : null);
@@ -1051,6 +1068,61 @@ function MainApp() {
     }, 2000);
 
     return () => clearTimeout(delayDebounceFn);
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded]);
+
+  // AppState background sync trigger
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (!isDataLoaded || !isFullHistoryLoaded || !googleUser?.accessToken) return;
+        if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return;
+
+        const currentFingerprint = computeBackupFingerprint({
+          user,
+          templatesList,
+          exercisesList,
+          sessionsList,
+          primaryMetricsList,
+          bodyPartMetricsList,
+        });
+
+        if (currentFingerprint !== lastUploadedFingerprintRef.current) {
+          (async () => {
+            try {
+              const nowStr = new Date().toISOString();
+              const backupData = {
+                user,
+                sessionsList,
+                templatesList,
+                exercisesList,
+                primaryMetricsList,
+                bodyPartMetricsList,
+                isAutoTimerEnabled,
+                timestamp: nowStr,
+                lastSynced: nowStr,
+              };
+              let fileId: string | null | undefined = googleUser.fileId;
+              if (!fileId) {
+                fileId = await googleDrive.findBackupFile(googleUser.accessToken!);
+              }
+              if (fileId) {
+                await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
+              } else {
+                fileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
+              }
+              lastUploadedFingerprintRef.current = currentFingerprint;
+              setLastSynced(nowStr);
+            } catch (err) {
+              console.warn('[AppState Cloud Backup Warning]', err);
+            }
+          })();
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded]);
 
   // Synchronize audio preferences to soundConfig helper
