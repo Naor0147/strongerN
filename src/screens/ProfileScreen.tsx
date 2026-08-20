@@ -425,64 +425,26 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ],
   });
 
-  const resolveTokenFromAuthResponse = async (authRes: any): Promise<string | null> => {
-    if (!authRes || authRes.type !== 'success') return null;
-    const directToken =
-      authRes.authentication?.accessToken ||
-      authRes.params?.access_token ||
-      authRes.params?.token;
-    if (directToken) return directToken;
-
-    const code = authRes.params?.code;
-    if (code && request?.codeVerifier) {
-      try {
-        const discovery = {
-          authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-          tokenEndpoint: 'https://oauth2.googleapis.com/token',
-          revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-          userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
-        };
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: ANDROID_CLIENT_ID,
-            redirectUri: androidRedirectUri,
-            code,
-            extraParams: {
-              code_verifier: request.codeVerifier,
-            },
-          },
-          discovery
-        );
-        if (tokenResult?.accessToken) {
-          return tokenResult.accessToken;
-        }
-      } catch (e) {
-        console.warn('[ProfileScreen] exchangeCodeAsync failed:', e);
-      }
-    }
-    return null;
-  };
-
   // React to the auth response from Google in Profile Settings
   React.useEffect(() => {
-    if (response) {
-      if (response.type === 'success') {
-        resolveTokenFromAuthResponse(response).then((token) => {
-          if (token) {
-            handleConnectWithToken(token);
-          } else if (!((response.params as any)?.code && !response.authentication)) {
-            setIsSyncing(false);
-            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
-          }
-        });
-      } else if (response.type === 'error') {
-        setIsSyncing(false);
-        Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: response.error?.message || 'Unknown error' }));
-      } else if (response.type === 'cancel' || response.type === 'dismiss') {
-        setIsSyncing(false);
-      } else {
-        setIsSyncing(false);
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const token =
+        response.authentication?.accessToken ||
+        (response.params as any)?.access_token ||
+        (response.params as any)?.token;
+
+      if (token) {
+        handleConnectWithToken(token);
       }
+    } else if (response.type === 'error') {
+      setIsSyncing(false);
+      Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: response.error?.message || 'Unknown error' }));
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
+      setIsSyncing(false);
+    } else {
+      setIsSyncing(false);
     }
   }, [response]);
 
@@ -603,7 +565,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     setIsSyncing(true);
     try {
       const profile = await googleDrive.fetchUserProfile(token);
-      const fileId = await googleDrive.findBackupFile(token);
+      let fileId: string | null = null;
+      try {
+        fileId = await googleDrive.findBackupFile(token);
+      } catch (driveErr) {
+        console.warn('[ProfileScreen] Backup file search skipped:', driveErr);
+      }
 
       const isRestored = await onGoogleLogin(
         profile.email,
@@ -655,24 +622,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     setIsSyncing(true);
     try {
       const res = await promptAsync();
-      if (res.type === 'success') {
-        const token = await resolveTokenFromAuthResponse(res);
-        if (token) {
-          await handleConnectWithToken(token);
-        } else {
-          // If code exchange is running in useEffect, wait for it; otherwise reset
-          if (!((res.params as any)?.code && !res.authentication)) {
-            setIsSyncing(false);
-            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
-          }
-        }
-      } else if (res.type === 'cancel' || res.type === 'dismiss') {
+      if (res?.type === 'cancel' || res?.type === 'dismiss') {
         setIsSyncing(false);
-      } else if (res.type === 'error') {
+      } else if (res?.type === 'error') {
         setIsSyncing(false);
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: res.error?.message || 'Unknown error' }));
-      } else {
-        setIsSyncing(false);
       }
     } catch (err: any) {
       console.error('[ProfileScreen] promptAsync error', err);

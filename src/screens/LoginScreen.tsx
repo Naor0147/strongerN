@@ -252,64 +252,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     ],
   });
 
-  const resolveTokenFromAuthResponse = async (authRes: any): Promise<string | null> => {
-    if (!authRes || authRes.type !== 'success') return null;
-    const directToken =
-      authRes.authentication?.accessToken ||
-      authRes.params?.access_token ||
-      authRes.params?.token;
-    if (directToken) return directToken;
-
-    const code = authRes.params?.code;
-    if (code && request?.codeVerifier) {
-      try {
-        const discovery = {
-          authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-          tokenEndpoint: 'https://oauth2.googleapis.com/token',
-          revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-          userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
-        };
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: ANDROID_CLIENT_ID,
-            redirectUri: ANDROID_REDIRECT_URI,
-            code,
-            extraParams: {
-              code_verifier: request.codeVerifier,
-            },
-          },
-          discovery
-        );
-        if (tokenResult?.accessToken) {
-          return tokenResult.accessToken;
-        }
-      } catch (e) {
-        console.warn('[LoginScreen] exchangeCodeAsync failed:', e);
-      }
-    }
-    return null;
-  };
-
   // React to the auth response from Google
   useEffect(() => {
-    if (response) {
-      if (response.type === 'success') {
-        resolveTokenFromAuthResponse(response).then((token) => {
-          if (token) {
-            handleGoogleConnectWithToken(token);
-          } else if (!((response.params as any)?.code && !response.authentication)) {
-            setIsGoogleLoading(false);
-            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
-          }
-        });
-      } else if (response.type === 'error') {
-        setIsGoogleLoading(false);
-        Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
-      } else if (response.type === 'cancel' || response.type === 'dismiss') {
-        setIsGoogleLoading(false);
-      } else {
-        setIsGoogleLoading(false);
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const token =
+        response.authentication?.accessToken ||
+        (response.params as any)?.access_token ||
+        (response.params as any)?.token;
+
+      if (token) {
+        handleGoogleConnectWithToken(token);
       }
+      // If response.params.code is present but token is not yet exchanged,
+      // Google.useAuthRequest is currently exchanging the code in the background.
+    } else if (response.type === 'error') {
+      setIsGoogleLoading(false);
+      Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
+      setIsGoogleLoading(false);
+    } else {
+      setIsGoogleLoading(false);
     }
   }, [response]);
 
@@ -459,7 +423,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     try {
       const { fetchUserProfile, findBackupFile } = await import('../utils/googleDrive');
       const profile = await fetchUserProfile(token);
-      const fileId = await findBackupFile(token);
+      let fileId: string | null = null;
+      try {
+        fileId = await findBackupFile(token);
+      } catch (driveErr) {
+        console.warn('[LoginScreen] Backup file check skipped:', driveErr);
+      }
 
       await onGoogleLogin(
         profile.email,
@@ -469,12 +438,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
         profile.avatarUri,
       );
 
-      // Auth is complete — notify parent. Restore message shown in App.tsx.
+      // Auth is complete — notify parent.
       onComplete('google', profile.name);
     } catch (err: any) {
       console.error('[LoginScreen] Google connect error', err);
-      // If token fails, fall back to guest
-      onComplete('guest', 'Guest');
+      Alert.alert(
+        i18n.t('login.googleSignInError'),
+        err?.message || 'Failed to authenticate Google profile'
+      );
     } finally {
       setIsGoogleLoading(false);
       isConnectingRef.current = false;
@@ -483,32 +454,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
   const handleGoogleOAuth = async () => {
     if (!request) {
-      // Request not ready yet — fallback to token input
       setShowTokenInput(true);
       return;
     }
     setIsGoogleLoading(true);
     try {
       const res = await promptAsync();
-      if (res.type === 'success') {
-        const token = await resolveTokenFromAuthResponse(res);
-        if (token) {
-          await handleGoogleConnectWithToken(token);
-        } else {
-          // If code exchange is running in useEffect, wait for it; otherwise reset
-          if (!((res.params as any)?.code && !res.authentication)) {
-            setIsGoogleLoading(false);
-            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
-          }
-        }
-      } else if (res.type === 'cancel' || res.type === 'dismiss') {
+      if (res?.type === 'cancel' || res?.type === 'dismiss') {
         setIsGoogleLoading(false);
-      } else if (res.type === 'error') {
+      } else if (res?.type === 'error') {
         setIsGoogleLoading(false);
         Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${res.error?.message || 'Unknown error'}`);
-      } else {
-        setIsGoogleLoading(false);
       }
+      // If res.type === 'success', the `response` state from Google.useAuthRequest
+      // will update with the exchanged access token and trigger useEffect above.
     } catch (err) {
       console.error('[LoginScreen] promptAsync error', err);
       setIsGoogleLoading(false);

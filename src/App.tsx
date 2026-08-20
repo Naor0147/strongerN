@@ -378,6 +378,13 @@ function MainApp() {
       };
       setAuthState(newState);
       await saveAuthState(newState);
+    } else {
+      setAuthState(prev => prev ? { ...prev, hasCompletedOnboarding: true } : {
+        hasCompletedOnboarding: true,
+        authMode: 'google',
+        localUsername: username,
+        googleProfile: null,
+      });
     }
     // Set user display name
     if (username && username !== 'Guest') {
