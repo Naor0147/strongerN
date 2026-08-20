@@ -35,10 +35,18 @@ export interface InstantProfileSummaries {
   weeklyMuscleSets?: Record<string, number>;
 }
 
+export interface ExerciseLifetimeDetail {
+  sets: number;
+  volumeKg: number;
+  lastPerformedMs: number;
+}
+
 export interface LifetimeStatsSummary {
   totalCompletedSets: number;
+  totalVolumeKg: number;
   muscleSets: Record<string, number>;
-  exerciseSets: Record<string, number>;
+  muscleVolumeKg?: Record<string, number>;
+  exerciseSets: Record<string, number | ExerciseLifetimeDetail>;
   lastCalculatedMs: number;
 }
 
@@ -217,6 +225,28 @@ export function setCachedLifetimeStats(stats: LifetimeStatsSummary): void {
   safeMmkvSet(STORAGE_KEYS.INSTANT_LIFETIME_STATS, JSON.stringify(stats));
 }
 
+export function getCachedLifetimeSets(): LifetimeStatsSummary | null {
+  return getCachedLifetimeStats();
+}
+
+export function setCachedLifetimeSets(stats: LifetimeStatsSummary): void {
+  setCachedLifetimeStats(stats);
+}
+
+/**
+ * Synchronously retrieves last cloud backup hash.
+ */
+export function getCachedBackupHash(): string | null {
+  return safeMmkvGet(STORAGE_KEYS.BACKUP_HASH);
+}
+
+/**
+ * Synchronously sets last cloud backup hash.
+ */
+export function setCachedBackupHash(hash: string): void {
+  safeMmkvSet(STORAGE_KEYS.BACKUP_HASH, hash);
+}
+
 /**
  * Clears all instant cache keys (used during full app data reset).
  */
@@ -227,4 +257,6 @@ export function clearInstantCache(): void {
   safeMmkvRemove(STORAGE_KEYS.INSTANT_TOTAL_SESSIONS_COUNT);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_PROFILE_SUMMARIES);
   safeMmkvRemove(STORAGE_KEYS.INSTANT_LIFETIME_STATS);
+  safeMmkvRemove(STORAGE_KEYS.INSTANT_LIFETIME_SETS);
+  safeMmkvRemove(STORAGE_KEYS.BACKUP_HASH);
 }

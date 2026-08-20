@@ -38,6 +38,7 @@ describe('R3 Lifetime Sets Cache & SQL Query Layer', () => {
   it('sets and gets cached lifetime stats synchronously from MMKV', () => {
     const mockSummary: LifetimeStatsSummary = {
       totalCompletedSets: 142,
+      totalVolumeKg: 5000,
       muscleSets: { Chest: 50, Back: 45, Quads: 47 },
       exerciseSets: { 'bench press': 50, 'lat pulldown': 45, 'barbell squat': 47 },
       lastCalculatedMs: Date.now(),
@@ -47,6 +48,7 @@ describe('R3 Lifetime Sets Cache & SQL Query Layer', () => {
     const cached = getCachedLifetimeStats();
     expect(cached).not.toBeNull();
     expect(cached?.totalCompletedSets).toBe(142);
+    expect(cached?.totalVolumeKg).toBe(5000);
     expect(cached?.muscleSets['Chest']).toBe(50);
     expect(cached?.exerciseSets['bench press']).toBe(50);
   });
@@ -54,6 +56,7 @@ describe('R3 Lifetime Sets Cache & SQL Query Layer', () => {
   it('clearInstantCache removes lifetime stats key', () => {
     const mockSummary: LifetimeStatsSummary = {
       totalCompletedSets: 10,
+      totalVolumeKg: 500,
       muscleSets: { Chest: 10 },
       exerciseSets: { 'bench press': 10 },
       lastCalculatedMs: Date.now(),
@@ -143,7 +146,9 @@ describe('R3 Lifetime Sets Cache & SQL Query Layer', () => {
 
     const stats = await loadLifetimeSetsStats();
     expect(stats.totalCompletedSets).toBe(4);
-    expect(stats.exerciseSets['bench press barbell']).toBe(4);
+    const exEntry = stats.exerciseSets['bench press barbell'];
+    const setsVal = typeof exEntry === 'number' ? exEntry : exEntry?.sets;
+    expect(setsVal).toBe(4);
     expect(stats.muscleSets['Chest']).toBe(4);
 
     // Verify it was cached in MMKV

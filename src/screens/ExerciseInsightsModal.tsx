@@ -155,8 +155,8 @@ const ExerciseInsightsModal: React.FC<ExerciseInsightsModalProps> = ({
   onUpdateExerciseVariations,
   onDeleteExercise,
   exerciseNameLanguage = 'en',
-  userBodyweight = 75,
-  userGender = 'male',
+  userBodyweight,
+  userGender,
 }) => {
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<'info' | 'data' | 'history'>('info');

@@ -157,14 +157,9 @@ interface ProfileScreenProps {
   setAppTheme?:               (theme: string) => void;
   customAccentColor?:         string;
   setCustomAccentColor?:     (color: string) => void;
-
+  lifetimeStats?:             any;
+  totalSessionsCount?:        number;
 }
-
-
-
-
-
-
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ 
   isHydrating = false,
@@ -172,6 +167,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   weeklyChartData, 
   sessions,
   onRefreshSessions,
+  lifetimeStats,
+  totalSessionsCount,
   isAutoTimerEnabled, 
   setIsAutoTimerEnabled,
   onMeasurePress,

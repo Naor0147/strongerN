@@ -57,6 +57,9 @@ interface ExercisesScreenProps {
   onUpdateExerciseVariations?: (id: string, variations: string[]) => void;
   sessions?: any[];
   exerciseNameLanguage?: 'en' | 'he';
+  userBodyweight?: number;
+  userGender?: 'male' | 'female';
+  lifetimeExerciseSets?: Record<string, any>;
 }
 
 interface AlphaSection {
@@ -111,7 +114,11 @@ const getSecondaryMuscles = (primary: string): string => {
 // Pure function — extracted at module scope so it is never re-created and
 // can be called from both InteractionManager callbacks and unit tests.
 // ─────────────────────────────────────────────────────────────────────────────
-export function computeEnrichedExercises(exercises: Exercise[], sessions: any[]): Exercise[] {
+export function computeEnrichedExercises(
+  exercises: Exercise[],
+  sessions: any[],
+  lifetimeExerciseSets?: Record<string, any>
+): Exercise[] {
   const weeklyCounts: Record<string, number> = {};
   const allTimeCounts: Record<string, number> = {};
   const now = Date.now();
@@ -128,7 +135,7 @@ export function computeEnrichedExercises(exercises: Exercise[], sessions: any[])
   };
 
   sessions.forEach((session: any) => {
-    const sessDate = new Date(session.datetime).getTime();
+    const sessDate = new Date(session.datetime || session.date || 0).getTime();
     const isLast7Days = sessDate >= sevenDaysAgo;
 
     if (session.exercises) {
@@ -148,10 +155,16 @@ export function computeEnrichedExercises(exercises: Exercise[], sessions: any[])
 
   return exercises.map(ex => {
     const exKey = getNormalizedKey(ex.name);
+    let cachedAllTime = 0;
+    if (lifetimeExerciseSets && lifetimeExerciseSets[exKey] !== undefined) {
+      const entry = lifetimeExerciseSets[exKey];
+      cachedAllTime = typeof entry === 'number' ? entry : (entry?.sets || 0);
+    }
+
     return {
       ...ex,
       weeklySets: weeklyCounts[exKey] || 0,
-      allTimeSets: allTimeCounts[exKey] || 0,
+      allTimeSets: cachedAllTime > 0 ? cachedAllTime : (allTimeCounts[exKey] || 0),
     };
   });
 }
@@ -320,6 +333,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   onUpdateExerciseVariations,
   sessions = EMPTY_SESSIONS,
   exerciseNameLanguage = 'en',
+  userBodyweight,
+  userGender,
+  lifetimeExerciseSets,
 }) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
@@ -338,8 +354,8 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
   const [isDataReady, setIsDataReady] = useState(true);
 
   const enrichedExercises = useMemo(() => {
-    return computeEnrichedExercises(exercises, sessions);
-  }, [exercises, sessions]);
+    return computeEnrichedExercises(exercises, sessions, lifetimeExerciseSets);
+  }, [exercises, sessions, lifetimeExerciseSets]);
 
   const selectedExercise = useMemo(() => {
     if (!selectedExerciseState) return null;
@@ -1061,6 +1077,8 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           onUpdateExerciseVariations={onUpdateExerciseVariations}
           onDeleteExercise={handleDeletePress}
           exerciseNameLanguage={exerciseNameLanguage}
+          userBodyweight={userBodyweight}
+          userGender={userGender}
         />
       )}
 

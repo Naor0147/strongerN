@@ -45,10 +45,15 @@ export function buildExerciseSessionHistory(
   const targetName = exerciseName.toLowerCase().trim();
   const rawList: ExerciseHistorySession[] = [];
 
+  const validSessions = sessions.filter((s) => s != null && typeof s === 'object');
+  if (validSessions.length === 0) {
+    return [];
+  }
+
   // Iterate chronologically first to compute PR progression accurately
-  const chronologicalSessions = [...sessions].sort((a, b) => {
-    const tA = new Date(a.datetime || a.date || 0).getTime();
-    const tB = new Date(b.datetime || b.date || 0).getTime();
+  const chronologicalSessions = [...validSessions].sort((a, b) => {
+    const tA = new Date(a?.datetime || a?.date || 0).getTime() || 0;
+    const tB = new Date(b?.datetime || b?.date || 0).getTime() || 0;
     return tA - tB;
   });
 

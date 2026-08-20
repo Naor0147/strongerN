@@ -12,6 +12,8 @@ import {
   InteractionManager,
   Platform,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -42,6 +44,11 @@ interface HistoryScreenProps {
   sessions: WorkoutSession[];
   onResumeWorkout?: (session: WorkoutSession) => void;
   onDeleteSession: (sessionId: string) => void;
+  onRefresh?: () => Promise<void> | void;
+  onRefreshSessions?: () => Promise<void> | void;
+  isRefreshing?: boolean;
+  isHydrating?: boolean;
+  totalSessionsCount?: number;
 }
 
 interface SectionData {
@@ -291,7 +298,16 @@ const SessionCard: React.FC<{
 );
 
 // ─── Screen ────────────────────────────────────────────────────────
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout, onDeleteSession }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({
+  sessions,
+  onResumeWorkout,
+  onDeleteSession,
+  onRefresh,
+  onRefreshSessions,
+  isRefreshing,
+  isHydrating,
+  totalSessionsCount,
+}) => {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -502,10 +518,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
 
   const subtitle = useMemo(() => {
     const isFiltered = searchQuery.trim() || rangeStart !== null;
+    const effectiveTotal = typeof totalSessionsCount === 'number' && totalSessionsCount > 0 ? totalSessionsCount : sessions.length;
     return isFiltered
       ? i18n.t('history.foundResults', { count: filteredCount })
-      : i18n.t('history.totalSessions', { count: sessions.length });
-  }, [sessions.length, filteredCount, searchQuery, rangeStart]);
+      : i18n.t('history.totalSessions', { count: effectiveTotal });
+  }, [sessions.length, totalSessionsCount, filteredCount, searchQuery, rangeStart]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -637,7 +654,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
             renderItem={renderItem}
             renderSectionHeader={renderSectionHeader}
             getItemLayout={getItemLayout}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, sections.length === 0 && styles.listEmptyContent]}
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
@@ -646,6 +663,37 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onResumeWorkout
             maxToRenderPerBatch={4}
             updateCellsBatchingPeriod={50}
             windowSize={5}
+            refreshControl={
+              (onRefreshSessions || onRefresh) ? (
+                <RefreshControl
+                  refreshing={!!isRefreshing}
+                  onRefresh={onRefreshSessions || onRefresh}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              ) : undefined
+            }
+            ListFooterComponent={
+              isHydrating ? (
+                <View style={styles.hydratingFooter}>
+                  <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: spacing.sm }} />
+                  <Text style={styles.hydratingFooterText}>
+                    {i18n.t('history.syncingHistory', { defaultValue: 'Syncing history...' })}
+                  </Text>
+                </View>
+              ) : null
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>
+                  {i18n.t('history.noHistoryTitle', { defaultValue: 'No workouts logged yet' })}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {i18n.t('history.noHistorySubtitle', { defaultValue: 'Start an empty workout or routine to build your training history.' })}
+                </Text>
+              </View>
+            }
           />
         )}
       </Animated.View>
@@ -971,6 +1019,42 @@ const styles = StyleSheet.create({
     fontSize: font.sizes.xs - 2,
     fontFamily: font.bold,
     letterSpacing: 0.5,
+  },
+  listEmptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  hydratingFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  hydratingFooterText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyTitle: {
+    color: colors.textPrimary,
+    fontSize: font.sizes.md,
+    fontFamily: font.bold,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: colors.textMuted,
+    fontSize: font.sizes.sm,
+    fontFamily: font.regular,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

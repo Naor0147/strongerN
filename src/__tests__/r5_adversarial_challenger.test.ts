@@ -30,7 +30,7 @@ describe('R5 Adversarial & Empirical Stress Suite', () => {
       }
     });
 
-    it('evaluates behavior on null or undefined items within sessions array', () => {
+    it('handles null or undefined items within sessions array safely without crashing', () => {
       const corruptSessions = [
         null,
         undefined,
@@ -42,13 +42,9 @@ describe('R5 Adversarial & Empirical Stress Suite', () => {
         },
       ];
 
-      try {
-        const result = buildExerciseSessionHistory('Bench Press', corruptSessions as any);
-        expect(result.length).toBe(1);
-      } catch (e: any) {
-        // Document empirical error: sort comparator accesses a.datetime without optional chaining
-        expect(e.message).toMatch(/Cannot read properties of null/);
-      }
+      const result = buildExerciseSessionHistory('Bench Press', corruptSessions as any);
+      expect(result.length).toBe(1);
+      expect(result[0].id).toBe('valid-1');
     });
 
     it('handles corrupt exercise objects (nulls, missing names, non-array exercises)', () => {

@@ -79,6 +79,10 @@ export const colors = {
   errorGlow:      '#F0506E20',
   success:        '#22D97A',
   successGlow:    '#22D97A20',
+  plate15:        '#FBBF24', // Standard Gym Yellow/Amber for 15kg plate
+  plate25:        '#EF4444', // Red for 25kg plate
+  plate20:        '#3B82F6', // Blue for 20kg plate
+  plate10:        '#22C55E', // Green for 10kg plate
 
   // Text
   textPrimary:    '#EEF1F6',

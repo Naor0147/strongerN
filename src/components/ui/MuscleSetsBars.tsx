@@ -80,7 +80,7 @@ export const MuscleSetsBars: React.FC<MuscleSetsBarsProps> = ({
             <View style={styles.labelRow}>
               <Text style={styles.muscleName}>{muscleLabel}</Text>
               <Text style={styles.setsCount}>
-                {item.sets} {i18n.t('common.sets', { count: item.sets }) || 'sets'}
+                {item.sets} {i18n.t('common.sets', { defaultValue: 'sets' })}
               </Text>
             </View>
             <View style={styles.track}>

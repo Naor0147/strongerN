@@ -33,9 +33,14 @@ import {
   setCachedTotalSessionsCount,
   getCachedProfileSummaries,
   setCachedProfileSummaries,
+  getCachedLifetimeStats,
+  setCachedLifetimeStats,
+  getCachedBackupHash,
+  setCachedBackupHash,
   clearInstantCache,
   InstantAppData,
   InstantProfileSummaries,
+  LifetimeStatsSummary,
 } from './storage/instantCache';
 import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
 import { getSessionsForExerciseVariation } from './utils/variationUtils';
@@ -47,12 +52,12 @@ import { saveCrashLogSync } from './utils/crashLogger';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, insertMissingSessionsOnly } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, insertMissingSessionsOnly, loadLifetimeSetsStats, normalizeLookupKey } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
 import { historyHydrator } from './storage/history/historyHydrator';
-import { computeBackupFingerprint } from './utils/backupHash';
+import { computeBackupFingerprint, computeStringHash } from './utils/backupHash';
 
 // Screens — Auth & Initial Screen (Eager)
 import LoginScreen from './screens/LoginScreen';
@@ -439,6 +444,8 @@ function MainApp() {
   const [isHealthSyncEnabled, setIsHealthSyncEnabled] = React.useState(() => initialSettings?.isHealthSyncEnabled ?? false);
   const [isLiveHeartRateEnabled, setIsLiveHeartRateEnabled] = React.useState(() => initialSettings?.isLiveHeartRateEnabled ?? false);
   const [profileSummaries, setProfileSummaries] = React.useState<InstantProfileSummaries | null>(null);
+  const [lifetimeStats, setLifetimeStats] = React.useState<LifetimeStatsSummary | null>(() => getCachedLifetimeStats());
+  const deletedIdsRef = React.useRef<Set<string>>(new Set());
 
   // Mount effect: load heavy JSON caches in a single batched update
   React.useEffect(() => {
@@ -726,9 +733,10 @@ function MainApp() {
                   setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
                   if (isComplete) {
                     setIsFullHistoryLoaded(true);
+                    refreshLifetimeStats().catch(() => {});
                   }
                 });
-                historyHydrator.start(persistence.sessions).catch(() => {});
+                historyHydrator.start(persistence.sessions, (id) => deletedIdsRef.current.has(id)).catch(() => {});
               }
             }
 
@@ -960,9 +968,8 @@ function MainApp() {
     return () => clearTimeout(timer);
   }, [sessionsList, isFullHistoryLoaded]);
 
-  // Auto-sync state changes to Google Drive
-  const isInitialLoadRef = React.useRef(true);
-  const lastUploadedFingerprintRef = React.useRef<string>('');
+  // Auto-sync and Cloud Backup with FNV Hash Caching & Mutex Guard
+  const isCloudSyncInProgressRef = React.useRef(false);
   
   const handleGoogleSessionExpired = React.useCallback(async () => {
     setGoogleUser(prev => prev ? { ...prev, accessToken: undefined } : null);
@@ -976,154 +983,120 @@ function MainApp() {
     }
   }, []);
 
-  React.useEffect(() => {
-    if (!isDataLoaded || !isFullHistoryLoaded) return;
-    
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    if (!googleUser || !googleUser.accessToken) return;
-
-    if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) {
-      console.warn('[Auto-Sync] Blocked upload: sessionsList is empty but totalWorkouts > 0');
-      return;
-    }
-
-    const currentFingerprint = computeBackupFingerprint({
-      user,
-      templatesList,
-      exercisesList,
-      sessionsList,
-      primaryMetricsList,
-      bodyPartMetricsList,
-    });
-
-    if (currentFingerprint === lastUploadedFingerprintRef.current) {
-      return;
-    }
-
-    const delayDebounceFn = setTimeout(async () => {
-      console.log('[Auto-Sync] Commencing automatic Google Drive backup update...');
-      try {
-        const nowStr = new Date().toISOString();
-        const backupData = {
-          user,
-          sessionsList,
-          templatesList,
-          exercisesList,
-          primaryMetricsList,
-          bodyPartMetricsList,
-          isAutoTimerEnabled,
-          timestamp: nowStr,
-          lastSynced: nowStr,
-        };
-
-        let fileId = googleUser.fileId;
-        let fileIdUpdated = false;
-        if (!fileId) {
-          const foundId = await googleDrive.findBackupFile(googleUser.accessToken!);
-          if (foundId) {
-            fileId = foundId;
-            fileIdUpdated = true;
+  const refreshLifetimeStats = React.useCallback(async () => {
+    try {
+      const exerciseMuscleMap: Record<string, string> = {};
+      (exercisesList || []).forEach((e: any) => {
+        if (e && e.name) {
+          const norm = normalizeLookupKey(e.name);
+          if (norm && e.muscleGroup) {
+            exerciseMuscleMap[norm] = e.muscleGroup;
           }
         }
+      });
+      const summary = await loadLifetimeSetsStats(exerciseMuscleMap);
+      setLifetimeStats(summary);
+    } catch (e) {
+      console.warn('[LifetimeStats] Failed to refresh stats:', e);
+    }
+  }, [exercisesList]);
 
-        if (fileId) {
-          await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
-        } else {
-          fileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
+  const triggerCloudSync = React.useCallback(async (force = false): Promise<boolean> => {
+    if (!isDataLoaded || !isFullHistoryLoaded) return false;
+    if (!googleUser || !googleUser.accessToken) return false;
+    if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return false;
+    if (isCloudSyncInProgressRef.current) return false;
+
+    isCloudSyncInProgressRef.current = true;
+    try {
+      const nowStr = new Date().toISOString();
+      const backupData = {
+        user: {
+          ...user,
+          totalWorkouts: sessionsList.length,
+        },
+        sessionsList,
+        templatesList,
+        exercisesList,
+        primaryMetricsList,
+        bodyPartMetricsList,
+        isAutoTimerEnabled,
+        timestamp: nowStr,
+        lastSynced: nowStr,
+      };
+
+      const payloadStr = JSON.stringify(backupData);
+      const currentHash = computeStringHash(payloadStr);
+      const lastHash = getCachedBackupHash();
+
+      if (!force && lastHash === currentHash) {
+        return true;
+      }
+
+      let fileId = googleUser.fileId;
+      let fileIdUpdated = false;
+      if (!fileId) {
+        const foundId = await googleDrive.findBackupFile(googleUser.accessToken);
+        if (foundId) {
+          fileId = foundId;
           fileIdUpdated = true;
         }
+      }
 
-        lastUploadedFingerprintRef.current = currentFingerprint;
+      if (fileId) {
+        await googleDrive.updateBackupFile(googleUser.accessToken, fileId, backupData);
+      } else {
+        const newFileId = await googleDrive.createBackupFile(googleUser.accessToken, backupData);
+        fileId = newFileId;
+        fileIdUpdated = true;
+      }
 
-        if (fileIdUpdated) {
-          const updatedFileId = fileId;
-          setGoogleUser(prev => prev ? { ...prev, fileId: updatedFileId } : null);
-          const currentAuth = await loadAuthState();
-          if (currentAuth && currentAuth.googleProfile) {
-            await saveGoogleProfile({
-              ...currentAuth.googleProfile,
-              fileId: updatedFileId,
-            });
-          }
-        }
+      setCachedBackupHash(currentHash);
 
-        setLastSynced(nowStr);
-        console.log('[Auto-Sync] Automatic backup completed successfully.');
-      } catch (e: any) {
-        console.warn('[Auto-Sync Error]', e);
-        if (e.message && (
-          e.message.includes('401') || 
-          e.message.toLowerCase().includes('unauthorized') || 
-          e.message.toLowerCase().includes('invalid credentials') || 
-          e.message.toLowerCase().includes('auth')
-        )) {
-          console.warn('[Auto-Sync] Access token invalid or expired. Triggering reconnect.');
-          await handleGoogleSessionExpired();
+      if (fileIdUpdated && fileId) {
+        const updatedFileId = fileId;
+        setGoogleUser(prev => prev ? { ...prev, fileId: updatedFileId } : null);
+        const currentAuth = await loadAuthState();
+        if (currentAuth && currentAuth.googleProfile) {
+          await saveGoogleProfile({
+            ...currentAuth.googleProfile,
+            fileId: updatedFileId,
+          });
         }
       }
-    }, 2000);
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded]);
+      setLastSynced(nowStr);
+      return true;
+    } catch (e: any) {
+      console.warn('[Cloud Sync Error]', e);
+      if (e?.message && (
+        e.message.includes('401') || 
+        e.message.toLowerCase().includes('unauthorized') || 
+        e.message.toLowerCase().includes('invalid credentials') || 
+        e.message.toLowerCase().includes('auth')
+      )) {
+        await handleGoogleSessionExpired();
+      }
+      return false;
+    } finally {
+      isCloudSyncInProgressRef.current = false;
+    }
+  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded, handleGoogleSessionExpired]);
 
   // AppState background sync trigger
   React.useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (!isDataLoaded || !isFullHistoryLoaded || !googleUser?.accessToken) return;
-        if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return;
-
-        const currentFingerprint = computeBackupFingerprint({
-          user,
-          templatesList,
-          exercisesList,
-          sessionsList,
-          primaryMetricsList,
-          bodyPartMetricsList,
+        InteractionManager.runAfterInteractions(() => {
+          triggerCloudSync(false).catch(() => {});
         });
-
-        if (currentFingerprint !== lastUploadedFingerprintRef.current) {
-          (async () => {
-            try {
-              const nowStr = new Date().toISOString();
-              const backupData = {
-                user,
-                sessionsList,
-                templatesList,
-                exercisesList,
-                primaryMetricsList,
-                bodyPartMetricsList,
-                isAutoTimerEnabled,
-                timestamp: nowStr,
-                lastSynced: nowStr,
-              };
-              let fileId: string | null | undefined = googleUser.fileId;
-              if (!fileId) {
-                fileId = await googleDrive.findBackupFile(googleUser.accessToken!);
-              }
-              if (fileId) {
-                await googleDrive.updateBackupFile(googleUser.accessToken!, fileId, backupData);
-              } else {
-                fileId = await googleDrive.createBackupFile(googleUser.accessToken!, backupData);
-              }
-              lastUploadedFingerprintRef.current = currentFingerprint;
-              setLastSynced(nowStr);
-            } catch (err) {
-              console.warn('[AppState Cloud Backup Warning]', err);
-            }
-          })();
-        }
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded]);
+  }, [triggerCloudSync]);
 
   // Synchronize audio preferences to soundConfig helper
   React.useEffect(() => {
@@ -1655,6 +1628,7 @@ function MainApp() {
               setCachedRecentSessions(fullLegacy, fullLegacy.length);
               setIsFullHistoryLoaded(true);
               setUser(prev => ({ ...prev, totalWorkouts: fullLegacy.length }));
+              refreshLifetimeStats().catch(() => {});
             })
             .catch((err) => {
               console.error('[HistoryRepository] Backup restore merge failed:', err);
@@ -1667,6 +1641,7 @@ function MainApp() {
               setSessionsList(merged);
               setCachedRecentSessions(merged, merged.length);
               setIsFullHistoryLoaded(true);
+              refreshLifetimeStats().catch(() => {});
             });
         } else {
           const local = sessionsList || [];
@@ -1678,6 +1653,7 @@ function MainApp() {
           setSessionsList(merged);
           setCachedRecentSessions(merged, merged.length);
           setIsFullHistoryLoaded(true);
+          refreshLifetimeStats().catch(() => {});
         }
       }
       if (parsed.templatesList) {
@@ -1760,9 +1736,14 @@ function MainApp() {
       if (importedSessions.length > 0) {
         setSessionsList(prev => [...importedSessions, ...prev]);
         if (historyRepositoryReadyRef.current) {
-          bulkImportSessions(importedSessions.map((s, idx) => legacySessionToV2(s, idx))).catch((err) => {
+          bulkImportSessions(importedSessions.map((s, idx) => legacySessionToV2(s, idx))).then(() => {
+            refreshLifetimeStats().catch(() => {});
+          }).catch((err) => {
             console.error('[HistoryRepository] Bulk import sessions failed:', err);
+            refreshLifetimeStats().catch(() => {});
           });
+        } else {
+          refreshLifetimeStats().catch(() => {});
         }
         setUser(prev => ({
           ...prev,
@@ -2474,7 +2455,8 @@ function MainApp() {
     setSessionsList(updatedSessions);
     setUser(nextUser);
     
-    // Insights calculation removed (completion insights feature removed)
+    refreshLifetimeStats().catch(() => {});
+    triggerCloudSync(false).catch(() => {});
     
     // Show celebratory screen
     setCompletionData({
@@ -2484,7 +2466,7 @@ function MainApp() {
       name: workoutNameRef.current,
     });
 
-  }, [handleDiscardWorkout, endActiveWorkout]);
+  }, [handleDiscardWorkout, endActiveWorkout, refreshLifetimeStats, triggerCloudSync]);
 
   const handleCloseWorkoutModal = React.useCallback(() => {
     setIsWorkoutModalVisible(false);
@@ -2505,16 +2487,19 @@ function MainApp() {
   // totalWorkouts is now kept in sync via a separate useEffect below.
   const handleDeleteSession = React.useCallback(async (sessionId: string) => {
     try {
+      deletedIdsRef.current.add(sessionId);
       const nextSessions = sessionsListRef.current.filter(s => s.id !== sessionId);
       if (historyRepositoryReadyRef.current) {
         await softDeleteSession(sessionId);
       }
       setSessionsList(nextSessions);
+      refreshLifetimeStats().catch(() => {});
+      triggerCloudSync(false).catch(() => {});
     } catch (error) {
       console.error('[HistoryRepository] Refusing non-durable history deletion:', error);
       Alert.alert(i18n.t('common.error'), 'The workout could not be safely deleted. Please try again.');
     }
-  }, []);
+  }, [refreshLifetimeStats, triggerCloudSync]);
 
   // Keep totalWorkouts derived from sessionsList length (avoids nested setState crash)
   // When isFullHistoryLoaded is true, sync exact length (covers additions and deletions).
@@ -2650,8 +2635,15 @@ function MainApp() {
 
   // Memoize Tab screens to prevent them from unmounting/re-mounting or re-rendering on every App state change
   const historyScreenElement = React.useMemo(() => (
-    <HistoryScreen sessions={sessionsList} onResumeWorkout={handleResumeWorkout} onDeleteSession={handleDeleteSession} />
-  ), [sessionsList, handleResumeWorkout, handleDeleteSession]);
+    <HistoryScreen
+      sessions={sessionsList}
+      onResumeWorkout={handleResumeWorkout}
+      onDeleteSession={handleDeleteSession}
+      onRefreshSessions={handleRefreshSessions}
+      isHydrating={!isFullHistoryLoaded}
+      totalSessionsCount={user.totalWorkouts || sessionsList.length}
+    />
+  ), [sessionsList, handleResumeWorkout, handleDeleteSession, handleRefreshSessions, isFullHistoryLoaded, user.totalWorkouts]);
 
   const workoutScreenElement = React.useMemo(() => {
     return (
@@ -2700,7 +2692,8 @@ function MainApp() {
     isProgramsEnabled,
     enableRoutineFolders,
     handleAddExercise,
-    sessionsList
+    sessionsList,
+    exerciseNameLanguage
   ]);
 
   const exercisesScreenElement = React.useMemo(() => {
@@ -2714,6 +2707,9 @@ function MainApp() {
         onUpdateExerciseVariations={handleUpdateExerciseVariations}
         sessions={sessionsList}
         exerciseNameLanguage={exerciseNameLanguage}
+        userBodyweight={primaryMetricsList?.find((m: any) => m.id === 'bodyweight' || m.name?.toLowerCase() === 'bodyweight')?.lastValue ?? (user as any)?.weight}
+        userGender={(user as any)?.gender}
+        lifetimeExerciseSets={lifetimeStats?.exerciseSets}
       />
     );
   }, [
@@ -2722,7 +2718,12 @@ function MainApp() {
     handleDeleteExercise,
     handleUpdateExerciseNotes,
     handleUpdateExercise,
-    sessionsList
+    handleUpdateExerciseVariations,
+    sessionsList,
+    exerciseNameLanguage,
+    primaryMetricsList,
+    user,
+    lifetimeStats?.exerciseSets
   ]);
 
   const muscleMapScreenElement = React.useMemo(() => {
@@ -2805,6 +2806,8 @@ function MainApp() {
                   weeklyChartData={dynamicWeeklyChartData}
                   sessions={sessionsList}
                   onRefreshSessions={handleRefreshSessions}
+                  lifetimeStats={lifetimeStats}
+                  totalSessionsCount={user.totalWorkouts || sessionsList.length}
                   isAutoTimerEnabled={isAutoTimerEnabled}
                   setIsAutoTimerEnabled={setIsAutoTimerEnabled}
                   onMeasurePress={handleMeasurePress}
@@ -2976,6 +2979,8 @@ function MainApp() {
                   onUpdateComment={handleUpdateWorkoutComment}
                   onUpdateStartTime={setStartTime}
                   onUpdateDefaultRestDuration={setDefaultRestDuration}
+                  userBodyweight={primaryMetricsList?.find((m: any) => m.id === 'bodyweight' || m.name?.toLowerCase() === 'bodyweight')?.lastValue ?? (user as any)?.weight}
+                  userGender={(user as any)?.gender}
                 />
               </React.Suspense>
             </ErrorBoundary>

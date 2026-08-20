@@ -79,7 +79,7 @@ describe('R2 Scale-Invariant Chunked History Hydration', () => {
 
   describe('HistoryHydrator', () => {
     it('initializes and manages subscriber callbacks', async () => {
-      const hydrator = new HistoryHydrator({ initialChunkSize: 10, chunkSize: 10 });
+      const hydrator = new HistoryHydrator({ chunkSize: 10 });
       const initial = [createMockSessionV2('s1', 1000, 1000)];
       await hydrator.start(initial);
 

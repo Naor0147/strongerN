@@ -4,6 +4,7 @@ import { validateWorkoutSessionV2 } from '../contracts/validators';
 import { getV2Database } from '../dbSingleton';
 import { ensureHistorySchema } from './schema';
 import { normalizeLookupKey } from './legacySessionMapper';
+export { normalizeLookupKey };
 import { getCachedRecentSessions, getCachedTotalSessionsCount, LifetimeStatsSummary, setCachedLifetimeStats, getCachedLifetimeStats } from '../instantCache';
 
 export interface DatabaseDiagnostics {
@@ -254,14 +255,129 @@ export async function loadAllSessions(): Promise<WorkoutSessionV2[]> {
   return sessions;
 }
 
-export const loadSessionsChunk = listSessions;
+export async function loadSessionsChunk(
+  offset = 0,
+  limit = 30
+): Promise<{ sessions: WorkoutSessionV2[]; hasMore: boolean }> {
+  const list = await listSessions(limit, offset);
+  return {
+    sessions: list,
+    hasMore: list.length === limit,
+  };
+}
+
+export async function loadSessionsCursorChunk(
+  lastStartedAtMs?: number,
+  lastId?: string,
+  limit = 30
+): Promise<{ sessions: WorkoutSessionV2[]; hasMore: boolean }> {
+  const db = await requireDb();
+  let query = `SELECT * FROM workout_sessions WHERE deleted_at_ms IS NULL`;
+  const params: any[] = [];
+  
+  if (lastStartedAtMs !== undefined && lastId !== undefined) {
+    query += ` AND (started_at_ms < ? OR (started_at_ms = ? AND id < ?))`;
+    params.push(lastStartedAtMs, lastStartedAtMs, lastId);
+  }
+  
+  query += ` ORDER BY started_at_ms DESC, id DESC LIMIT ?;`;
+  params.push(Math.max(1, Math.min(limit, 5000)));
+
+  const sessionRows: any[] = await db.getAllAsync(query, params);
+  if (sessionRows.length === 0) return { sessions: [], hasMore: false };
+
+  const sessionIds = sessionRows.map((row) => row.id);
+  const placeholders = sessionIds.map(() => '?').join(',');
+
+  const [exerciseRows, setRows]: [any[], any[]] = await Promise.all([
+    db.getAllAsync(
+      `SELECT * FROM session_exercises WHERE session_id IN (${placeholders}) ORDER BY session_id, position;`,
+      sessionIds
+    ),
+    db.getAllAsync(
+      `SELECT sl.* FROM set_logs sl
+       JOIN session_exercises se ON se.id = sl.session_exercise_id
+       WHERE se.session_id IN (${placeholders})
+       ORDER BY sl.session_exercise_id, sl.position;`,
+      sessionIds
+    ),
+  ]);
+
+  const setsByExercise = new Map<string, SetLogV2[]>();
+  for (let i = 0; i < setRows.length; i++) {
+    const row = setRows[i];
+    let list = setsByExercise.get(row.session_exercise_id);
+    if (!list) {
+      list = [];
+      setsByExercise.set(row.session_exercise_id, list);
+    }
+    list.push({
+      id: row.id,
+      position: row.position,
+      category: row.category,
+      completed: row.completed === 1,
+      weightMilliKg: row.weight_milli_kg,
+      reps: row.reps,
+      rpeTenths: row.rpe_tenths ?? null,
+      isUnilateral: row.is_unilateral === 1,
+      leftWeightMilliKg: row.left_weight_milli_kg ?? null,
+      leftReps: row.left_reps ?? null,
+      rightWeightMilliKg: row.right_weight_milli_kg ?? null,
+      rightReps: row.right_reps ?? null,
+    });
+  }
+
+  const exercisesBySession = new Map<string, SessionExerciseV2[]>();
+  for (let i = 0; i < exerciseRows.length; i++) {
+    const row = exerciseRows[i];
+    let list = exercisesBySession.get(row.session_id);
+    if (!list) {
+      list = [];
+      exercisesBySession.set(row.session_id, list);
+    }
+    list.push({
+      id: row.id,
+      sessionId: row.session_id,
+      exerciseId: row.exercise_id ?? null,
+      nameSnapshot: row.name_snapshot,
+      nameNorm: row.name_norm,
+      variationKey: row.variation_key ?? null,
+      position: row.position,
+      supersetGroupId: row.superset_group_id ?? null,
+      note: row.note ?? null,
+      sets: setsByExercise.get(row.id) ?? [],
+    });
+  }
+
+  const sessions: WorkoutSessionV2[] = sessionRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    titleNorm: row.title_norm,
+    startedAtMs: row.started_at_ms,
+    endedAtMs: row.ended_at_ms ?? null,
+    durationSec: row.duration_sec,
+    comment: row.comment ?? null,
+    totalVolumeMilliKg: row.total_volume_milli_kg,
+    prs: row.prs,
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+    revision: row.revision,
+    deletedAtMs: row.deleted_at_ms ?? null,
+    exercises: exercisesBySession.get(row.id) ?? [],
+  }));
+
+  return {
+    sessions,
+    hasMore: sessionRows.length === limit,
+  };
+}
 
 export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
   const sessionRows: any[] = await db.getAllAsync(
     `SELECT * FROM workout_sessions WHERE deleted_at_ms IS NULL
      ORDER BY started_at_ms DESC, id DESC LIMIT ? OFFSET ?;`,
-    [Math.max(1, Math.min(limit, 500)), Math.max(0, offset)]
+    [Math.max(1, Math.min(limit, 5000)), Math.max(0, offset)]
   );
   if (sessionRows.length === 0) return [];
 
@@ -381,19 +497,20 @@ export const recoverTombstonedSessions = restoreAllTombstonedSessions;
 
 const exerciseNameToMuscle = (name: string): string => {
   if (!name) return 'Other';
-  const n = name.toLowerCase();
-  if (n.includes('squat') || n.includes('leg press') || n.includes('quad') || n.includes('hack')) return 'Quads';
-  if (n.includes('deadlift') || n.includes('row') || n.includes('pull') || n.includes('lat')) return 'Back';
-  if (n.includes('bench') || n.includes('fly') || n.includes('chest') || n.includes('pec') || n.includes('pushup') || n.includes('push up')) return 'Chest';
-  if (n.includes('press') && (n.includes('overhead') || n.includes('shoulder') || n.includes('military') || n.includes('arnold') || n.includes('db shoulder'))) return 'Shoulders';
-  if (n.includes('curl') || n.includes('bicep')) return 'Biceps';
-  if (n.includes('tricep') || n.includes('pushdown') || n.includes('dip') || n.includes('skull') || n.includes('close grip')) return 'Triceps';
-  if (n.includes('hamstring') || n.includes('nordic') || n.includes('leg curl') || n.includes('romanian') || n.includes('rdl')) return 'Hamstrings';
-  if (n.includes('glute') || n.includes('hip thrust') || n.includes('kickback')) return 'Glutes';
-  if (n.includes('lateral raise') || n.includes('rear delt') || n.includes('face pull')) return 'Rear Delts';
+  const n = name.toLowerCase().trim();
+  
+  if (n.includes('lateral raise') || n.includes('side delt') || n.includes('overhead press') || n.includes('shoulder press') || n.includes('military press') || n.includes('arnold press') || n.includes('front raise')) return 'Shoulders';
+  if (n.includes('rear delt') || n.includes('face pull') || n.includes('reverse fly')) return 'Rear Delts';
+  if (n.includes('squat') || n.includes('leg press') || n.includes('quad') || n.includes('hack squat') || n.includes('lunge') || n.includes('leg extension')) return 'Quads';
+  if (n.includes('hamstring') || n.includes('nordic') || n.includes('leg curl') || n.includes('romanian') || n.includes('rdl') || n.includes('good morning')) return 'Hamstrings';
+  if (n.includes('hip thrust') || n.includes('glute') || n.includes('kickback') || n.includes('abductor')) return 'Glutes';
+  if (n.includes('deadlift') || n.includes('row') || n.includes('pull up') || n.includes('pull-up') || n.includes('pullup') || n.includes('lat pulldown') || n.includes('lat pull') || n.includes('chin up') || n.includes('chin-up') || n.includes('shrug') || n.includes('back extension')) return 'Back';
+  if (n.includes('bench') || n.includes('chest fly') || n.includes('chest press') || n.includes('pec') || n.includes('pushup') || n.includes('push-up') || n.includes('push up') || n.includes('incline press') || n.includes('decline press') || n.includes('cable crossover')) return 'Chest';
+  if (n.includes('bicep') || n.includes('curl') || n.includes('preacher') || n.includes('hammer curl')) return 'Biceps';
+  if (n.includes('tricep') || n.includes('pushdown') || n.includes('dip') || n.includes('skull crusher') || n.includes('skullcrusher') || n.includes('close grip') || n.includes('overhead extension')) return 'Triceps';
   if (n.includes('calf') || n.includes('calves')) return 'Calves';
-  if (n.includes('forearm') || n.includes('wrist') || n.includes('roller')) return 'Forearms';
-  if (n.includes('ab ') || n.includes('abs') || n.includes('crunch') || n.includes('plank') || n.includes('sit up') || n.includes('twist') || n.includes('leg raise')) return 'Abs';
+  if (n.includes('forearm') || n.includes('wrist') || n.includes('farmer') || n.includes('roller')) return 'Forearms';
+  if (n.includes('ab ') || n.includes('abs') || n.includes('crunch') || n.includes('plank') || n.includes('sit up') || n.includes('sit-up') || n.includes('twist') || n.includes('leg raise') || n.includes('core')) return 'Abs';
   return 'Other';
 };
 
@@ -403,7 +520,17 @@ export async function loadLifetimeSetsStats(exerciseMuscleMap?: Record<string, s
     SELECT 
       se.name_norm,
       se.name_snapshot,
-      COUNT(sl.id) AS completed_sets
+      COUNT(sl.id) AS completed_sets,
+      COALESCE(SUM(
+        CASE 
+          WHEN sl.is_unilateral = 1 THEN 
+            ((COALESCE(sl.left_weight_milli_kg, sl.weight_milli_kg, 0) * COALESCE(sl.left_reps, 0)) + 
+             (COALESCE(sl.right_weight_milli_kg, sl.weight_milli_kg, 0) * COALESCE(sl.right_reps, 0))) / 1000.0
+          ELSE 
+            (COALESCE(sl.weight_milli_kg, 0) * COALESCE(sl.reps, 0)) / 1000.0
+        END
+      ), 0) AS volume_kg,
+      COALESCE(MAX(ws.started_at_ms), 0) AS last_performed_ms
     FROM set_logs sl
     JOIN session_exercises se ON se.id = sl.session_exercise_id
     JOIN workout_sessions ws ON ws.id = se.session_id
@@ -411,29 +538,41 @@ export async function loadLifetimeSetsStats(exerciseMuscleMap?: Record<string, s
     GROUP BY se.name_norm;
   `);
 
-  const exerciseSets: Record<string, number> = {};
+  const exerciseSets: Record<string, any> = {};
   const muscleSets: Record<string, number> = {};
+  const muscleVolumeKg: Record<string, number> = {};
   let totalCompletedSets = 0;
+  let totalVolumeKg = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const nameNorm = row.name_norm || normalizeLookupKey(row.name_snapshot || '');
     const count = Number(row.completed_sets || 0);
+    const volume = Math.round(Number(row.volume_kg || 0));
+    const lastMs = Number(row.last_performed_ms || 0);
     if (!nameNorm || count <= 0) continue;
 
-    exerciseSets[nameNorm] = (exerciseSets[nameNorm] || 0) + count;
+    exerciseSets[nameNorm] = {
+      sets: count,
+      volumeKg: volume,
+      lastPerformedMs: lastMs,
+    };
     totalCompletedSets += count;
+    totalVolumeKg += volume;
 
     const muscle = (exerciseMuscleMap && exerciseMuscleMap[nameNorm])
       ? (exerciseMuscleMap[nameNorm] === 'Core' ? 'Abs' : exerciseMuscleMap[nameNorm])
       : exerciseNameToMuscle(row.name_snapshot || nameNorm);
 
     muscleSets[muscle] = (muscleSets[muscle] || 0) + count;
+    muscleVolumeKg[muscle] = (muscleVolumeKg[muscle] || 0) + volume;
   }
 
   const summary: LifetimeStatsSummary = {
     totalCompletedSets,
+    totalVolumeKg,
     muscleSets,
+    muscleVolumeKg,
     exerciseSets,
     lastCalculatedMs: Date.now(),
   };

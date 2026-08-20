@@ -82,4 +82,6 @@ export interface ActiveWorkoutModalProps {
   onUpdateDefaultRestDuration?: (durationSec: number) => void;
   isPlateCalculatorEnabled?: boolean;
   isKeyboardDismissOnNextEnabled?: boolean;
+  userBodyweight?: number;
+  userGender?: 'male' | 'female';
 }

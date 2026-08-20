@@ -1082,7 +1082,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                     <Text style={styles.progCardWeeks}>{i18n.t('workout.subscribeToSplits')}</Text>
                   </View>
                 </View>
-                <Text style={styles.progCardDesc}>{i18n.t('workout.noProgramsMessage') || 'Custom routines let you organize your training splits with automatic progression tracking.'}</Text>
+                <Text style={styles.progCardDesc}>{i18n.t('workout.noProgramsMessage', { defaultValue: 'Custom routines let you organize your training splits with automatic progression tracking.' })}</Text>
               </Card>
             </>
           )}

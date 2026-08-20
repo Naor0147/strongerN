@@ -16,6 +16,7 @@ import {
   initHistoryRepository,
   insertMissingSessionsOnly,
   loadAllSessions,
+  loadSessionsChunk,
   restoreAllTombstonedSessions,
   setPersistenceMeta,
   upsertSession,
@@ -108,7 +109,6 @@ export async function bootstrapPersistence(
 
       if (isAlreadyMigrated) {
         // FAST-PATH HYDRATION: Relational SQLite V2 is verified and marked ready.
-        // Bypass legacy JSON stringify & DJB2 character checksumming routine on cold start.
         sessions = await loadAllSessions();
 
         // Tombstone self-healing: automatically recover any soft-deleted sessions

@@ -147,6 +147,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onUpdateStartTime,
   onUpdateDefaultRestDuration,
   onUpdateExercise,
+  userBodyweight,
+  userGender,
 }) => {
   useTrackRender('ActiveWorkoutModal');
   const insets = useSafeAreaInsets();
@@ -500,10 +502,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     
     let sideWeight = (target - barWeight) / 2;
     const availablePlates = [
-      { size: 25, color: colors.error, textColor: colors.textPrimary },
-      { size: 20, color: colors.accent, textColor: colors.textPrimary },
-      { size: 15, color: colors.gold, textColor: colors.bg },
-      { size: 10, color: colors.success, textColor: colors.textPrimary },
+      { size: 25, color: colors.plate25 || colors.error, textColor: colors.textPrimary },
+      { size: 20, color: colors.plate20 || colors.accent, textColor: colors.textPrimary },
+      { size: 15, color: colors.plate15, textColor: colors.bg },
+      { size: 10, color: colors.plate10 || colors.success, textColor: colors.textPrimary },
       { size: 5,  color: colors.textPrimary, textColor: colors.bg },
       { size: 2.5, color: colors.surfaceHigh, textColor: colors.textPrimary },
       { size: 1.25, color: colors.borderStrong, textColor: colors.textPrimary },
@@ -1711,6 +1713,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 onClose={() => setIsExerciseInsightsVisible(false)}
                 onUpdateExerciseInsightsNotes={onUpdateExerciseInsightsNotes}
                 onUpdateExerciseVariations={onUpdateExerciseVariations}
+                exerciseNameLanguage={exerciseNameLanguage}
+                userBodyweight={userBodyweight}
+                userGender={userGender}
               />
             )}
 
