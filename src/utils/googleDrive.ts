@@ -8,10 +8,32 @@ export interface GoogleUserProfile {
 }
 
 /**
+ * Helper to execute fetch with a strict timeout to prevent infinite loading.
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/**
  * Parses rich Google API error message.
  */
 async function handleApiError(res: Response, prefix: string): Promise<never> {
-  const errorText = await res.text();
+  const errorText = await res.text().catch(() => '');
   console.error(`[Google API Error] ${prefix}:`, errorText);
   let errMsg = res.statusText || '';
   try {
@@ -27,7 +49,7 @@ async function handleApiError(res: Response, prefix: string): Promise<never> {
  * Fetch the authenticated user's profile info from Google OAuth2 UserInfo endpoint.
  */
 export async function fetchUserProfile(token: string): Promise<GoogleUserProfile> {
-  const res = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+  const res = await fetchWithTimeout('https://www.googleapis.com/userinfo/v2/me', {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -39,8 +61,8 @@ export async function fetchUserProfile(token: string): Promise<GoogleUserProfile
 
   const data = await res.json();
   return {
-    email: data.email,
-    name: data.name || data.given_name || 'Google User',
+    email: data.email || 'user@gmail.com',
+    name: data.name || data.given_name || (data.email ? data.email.split('@')[0] : 'Google User'),
     avatarUri: data.picture,
   };
 }
@@ -53,7 +75,7 @@ export async function findBackupFile(token: string): Promise<string | null> {
   const query = encodeURIComponent("name='strongern_backup.json' and trashed=false");
   const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -76,7 +98,7 @@ export async function findBackupFile(token: string): Promise<string | null> {
 export async function downloadBackupFile(token: string, fileId: string): Promise<any> {
   const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -115,7 +137,7 @@ export async function createBackupFile(token: string, data: any): Promise<string
 
   const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -138,7 +160,7 @@ export async function createBackupFile(token: string, data: any): Promise<string
 export async function updateBackupFile(token: string, fileId: string, data: any): Promise<boolean> {
   const url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${token}`,

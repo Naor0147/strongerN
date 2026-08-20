@@ -409,6 +409,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '';
   const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CLIENT_ID;
   const androidRedirectUri = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
+  const isConnectingRef = React.useRef(false);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -416,6 +417,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     androidClientId: ANDROID_CLIENT_ID,
     webClientId: WEB_CLIENT_ID,
     redirectUri: androidRedirectUri,
+    responseType: AuthSession.ResponseType?.Token ?? 'token',
     scopes: [
       'openid',
       'profile',
@@ -428,7 +430,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   React.useEffect(() => {
     if (response) {
       if (response.type === 'success') {
-        const token = response.authentication?.accessToken;
+        const token =
+          response.authentication?.accessToken ||
+          (response.params as any)?.access_token ||
+          (response.params as any)?.token;
         if (token) {
           handleConnectWithToken(token);
         } else {
@@ -438,9 +443,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       } else if (response.type === 'error') {
         setIsSyncing(false);
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: response.error?.message || 'Unknown error' }));
-      } else if (response.type === 'cancel') {
+      } else if (response.type === 'cancel' || response.type === 'dismiss') {
         setIsSyncing(false);
-        Alert.alert(i18n.t('login.googleSignInCancelled'), i18n.t('login.googleCancelledMsg'));
+      } else {
+        setIsSyncing(false);
       }
     }
   }, [response]);
@@ -557,6 +563,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Real Google token authentication
   const handleConnectWithToken = async (token: string) => {
+    if (!token || isConnectingRef.current) return;
+    isConnectingRef.current = true;
     setIsSyncing(true);
     try {
       const profile = await googleDrive.fetchUserProfile(token);
@@ -586,9 +594,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         );
       }
     } catch (err: any) {
-      setIsSyncing(false);
       console.error('[Google Connect Error]', err);
       Alert.alert(i18n.t('profile.connectionFailed'), `Failed to connect: ${err.message || err}`);
+    } finally {
+      setIsSyncing(false);
+      isConnectingRef.current = false;
     }
   };
 
@@ -609,7 +619,26 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
     setIsSyncing(true);
     try {
-      await promptAsync();
+      const res = await promptAsync();
+      if (res.type === 'success') {
+        const token =
+          res.authentication?.accessToken ||
+          (res.params as any)?.access_token ||
+          (res.params as any)?.token;
+        if (token) {
+          await handleConnectWithToken(token);
+        } else {
+          setIsSyncing(false);
+          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+        }
+      } else if (res.type === 'cancel' || res.type === 'dismiss') {
+        setIsSyncing(false);
+      } else if (res.type === 'error') {
+        setIsSyncing(false);
+        Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: res.error?.message || 'Unknown error' }));
+      } else {
+        setIsSyncing(false);
+      }
     } catch (err: any) {
       console.error('[ProfileScreen] promptAsync error', err);
       setIsSyncing(false);

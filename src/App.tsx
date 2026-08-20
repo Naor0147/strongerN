@@ -18,7 +18,10 @@ import { Rubik_500Medium }           from '@expo-google-fonts/rubik/500Medium';
 import { Rubik_600SemiBold }         from '@expo-google-fonts/rubik/600SemiBold';
 import { Rubik_700Bold }             from '@expo-google-fonts/rubik/700Bold';
 import Ionicons                     from '@expo/vector-icons/Ionicons';
+import * as WebBrowser             from 'expo-web-browser';
 import * as googleDrive             from './utils/googleDrive';
+
+WebBrowser.maybeCompleteAuthSession();
 import { initDb, saveToDb, loadFromDb, deleteFromDb } from './utils/db';
 import { importStrongCSV } from './utils/csvImporter';
 import { setSecureItem, getSecureItem, deleteSecureItem } from './utils/secureStore';
@@ -1337,7 +1340,13 @@ function MainApp() {
 
   // ── Deep Link OAuth Parser ──
   const parseAndHandleOAuthLink = async (url: string) => {
-    if (!url || !url.includes('strongern://oauth-callback')) return;
+    if (!url) return;
+    const isGoogleRedirect =
+      url.includes('com.googleusercontent.apps') ||
+      url.includes('/oauth2redirect') ||
+      url.includes('/oauthredirect');
+    const isCustomCallback = url.includes('strongern://');
+    if (!isGoogleRedirect && !isCustomCallback) return;
     
     let accessToken = '';
     const hashSplit = url.split('#');
@@ -1383,10 +1392,6 @@ function MainApp() {
         );
       } catch (err) {
         console.error('[App] Failed to handle Google OAuth from deep link:', err);
-        const newState = { hasCompletedOnboarding: true, authMode: 'guest' as AuthMode, localUsername: 'Guest' };
-        setAuthState(newState);
-        await saveAuthState(newState);
-        setUser(prev => ({ ...prev, name: 'Guest User' }));
       }
     }
   };
@@ -1419,9 +1424,7 @@ function MainApp() {
     await deleteSecureItem('google_oauth_token');
   };
   const handleAppLogout = async () => {
-    if (googleUser) {
-      await handleGoogleLogout();
-    }
+    await handleGoogleLogout();
     const { resetAuthState } = await import('./utils/authStore');
     await resetAuthState();
     clearInstantCache();

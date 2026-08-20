@@ -236,6 +236,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [googleToken, setGoogleToken] = useState('');
+  const isConnectingRef = useRef(false);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -243,6 +244,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     androidClientId: ANDROID_CLIENT_ID,
     webClientId: WEB_CLIENT_ID,
     redirectUri: ANDROID_REDIRECT_URI,
+    responseType: AuthSession.ResponseType?.Token ?? 'token',
     scopes: [
       'openid',
       'profile',
@@ -255,7 +257,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   useEffect(() => {
     if (response) {
       if (response.type === 'success') {
-        const token = response.authentication?.accessToken;
+        const token =
+          response.authentication?.accessToken ||
+          (response.params as any)?.access_token ||
+          (response.params as any)?.token;
         if (token) {
           handleGoogleConnectWithToken(token);
         } else {
@@ -265,9 +270,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       } else if (response.type === 'error') {
         setIsGoogleLoading(false);
         Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
-      } else if (response.type === 'cancel') {
+      } else if (response.type === 'cancel' || response.type === 'dismiss') {
         setIsGoogleLoading(false);
-        Alert.alert(i18n.t('login.googleSignInCancelled'), i18n.t('login.googleCancelledMsg'));
+      } else {
+        setIsGoogleLoading(false);
       }
     }
   }, [response]);
@@ -412,13 +418,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   };
 
   const handleGoogleConnectWithToken = async (token: string) => {
+    if (!token || isConnectingRef.current) return;
+    isConnectingRef.current = true;
     setIsGoogleLoading(true);
     try {
       const { fetchUserProfile, findBackupFile } = await import('../utils/googleDrive');
       const profile = await fetchUserProfile(token);
       const fileId = await findBackupFile(token);
 
-      const restored = await onGoogleLogin(
+      await onGoogleLogin(
         profile.email,
         profile.name,
         token,
@@ -434,21 +442,38 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
       onComplete('guest', 'Guest');
     } finally {
       setIsGoogleLoading(false);
+      isConnectingRef.current = false;
     }
   };
 
   const handleGoogleOAuth = async () => {
     if (!request) {
-      // Request not ready yet — should not happen in practice
+      // Request not ready yet — fallback to token input
       setShowTokenInput(true);
       return;
     }
     setIsGoogleLoading(true);
     try {
-      // promptAsync opens the Google sign-in page in a secure in-app browser.
-      // The PKCE code exchange happens automatically — no redirect URI 404.
-      await promptAsync();
-      // Response is handled by the useEffect above (watches `response`)
+      const res = await promptAsync();
+      if (res.type === 'success') {
+        const token =
+          res.authentication?.accessToken ||
+          (res.params as any)?.access_token ||
+          (res.params as any)?.token;
+        if (token) {
+          await handleGoogleConnectWithToken(token);
+        } else {
+          setIsGoogleLoading(false);
+          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+        }
+      } else if (res.type === 'cancel' || res.type === 'dismiss') {
+        setIsGoogleLoading(false);
+      } else if (res.type === 'error') {
+        setIsGoogleLoading(false);
+        Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${res.error?.message || 'Unknown error'}`);
+      } else {
+        setIsGoogleLoading(false);
+      }
     } catch (err) {
       console.error('[LoginScreen] promptAsync error', err);
       setIsGoogleLoading(false);
