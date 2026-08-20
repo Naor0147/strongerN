@@ -244,7 +244,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     androidClientId: ANDROID_CLIENT_ID,
     webClientId: WEB_CLIENT_ID,
     redirectUri: ANDROID_REDIRECT_URI,
-    responseType: AuthSession.ResponseType?.Token ?? 'token',
     scopes: [
       'openid',
       'profile',
@@ -253,20 +252,56 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     ],
   });
 
+  const resolveTokenFromAuthResponse = async (authRes: any): Promise<string | null> => {
+    if (!authRes || authRes.type !== 'success') return null;
+    const directToken =
+      authRes.authentication?.accessToken ||
+      authRes.params?.access_token ||
+      authRes.params?.token;
+    if (directToken) return directToken;
+
+    const code = authRes.params?.code;
+    if (code && request?.codeVerifier) {
+      try {
+        const discovery = {
+          authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+          tokenEndpoint: 'https://oauth2.googleapis.com/token',
+          revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+          userInfoEndpoint: 'https://openidconnect.googleapis.com/v1/userinfo',
+        };
+        const tokenResult = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: ANDROID_CLIENT_ID,
+            redirectUri: ANDROID_REDIRECT_URI,
+            code,
+            extraParams: {
+              code_verifier: request.codeVerifier,
+            },
+          },
+          discovery
+        );
+        if (tokenResult?.accessToken) {
+          return tokenResult.accessToken;
+        }
+      } catch (e) {
+        console.warn('[LoginScreen] exchangeCodeAsync failed:', e);
+      }
+    }
+    return null;
+  };
+
   // React to the auth response from Google
   useEffect(() => {
     if (response) {
       if (response.type === 'success') {
-        const token =
-          response.authentication?.accessToken ||
-          (response.params as any)?.access_token ||
-          (response.params as any)?.token;
-        if (token) {
-          handleGoogleConnectWithToken(token);
-        } else {
-          setIsGoogleLoading(false);
-          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
-        }
+        resolveTokenFromAuthResponse(response).then((token) => {
+          if (token) {
+            handleGoogleConnectWithToken(token);
+          } else if (!((response.params as any)?.code && !response.authentication)) {
+            setIsGoogleLoading(false);
+            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+          }
+        });
       } else if (response.type === 'error') {
         setIsGoogleLoading(false);
         Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
@@ -456,15 +491,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     try {
       const res = await promptAsync();
       if (res.type === 'success') {
-        const token =
-          res.authentication?.accessToken ||
-          (res.params as any)?.access_token ||
-          (res.params as any)?.token;
+        const token = await resolveTokenFromAuthResponse(res);
         if (token) {
           await handleGoogleConnectWithToken(token);
         } else {
-          setIsGoogleLoading(false);
-          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+          // If code exchange is running in useEffect, wait for it; otherwise reset
+          if (!((res.params as any)?.code && !res.authentication)) {
+            setIsGoogleLoading(false);
+            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+          }
         }
       } else if (res.type === 'cancel' || res.type === 'dismiss') {
         setIsGoogleLoading(false);
