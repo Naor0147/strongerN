@@ -6,6 +6,13 @@ import * as Google from 'expo-auth-session/providers/google';
 
 // Required: warm up the browser so Google sign-in opens instantly on Android
 WebBrowser.maybeCompleteAuthSession();
+
+// Google OAuth discovery endpoints (static — avoids network discovery round-trip)
+const GOOGLE_DISCOVERY = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+};
 import {
   View,
   Text,
@@ -410,6 +417,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CLIENT_ID;
   const androidRedirectUri = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
   const isConnectingRef = React.useRef(false);
+  const codeExchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -425,9 +433,58 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ],
   });
 
+  // Manual PKCE code exchange — fallback for when expo-auth-session's
+  // background auto-exchange fails silently (no .catch in the library),
+  // which would otherwise leave the sign-in spinner stuck forever.
+  const exchangeCodeForToken = async (code: string): Promise<string | null> => {
+    if (!request?.codeVerifier) {
+      console.warn('[ProfileScreen] No codeVerifier available for manual exchange');
+      return null;
+    }
+    try {
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: ANDROID_CLIENT_ID,
+          redirectUri: androidRedirectUri,
+          code,
+          extraParams: { code_verifier: request.codeVerifier },
+        },
+        GOOGLE_DISCOVERY,
+      );
+      return tokenResult?.accessToken ?? null;
+    } catch (e) {
+      console.error('[ProfileScreen] Manual code exchange failed:', e);
+      return null;
+    }
+  };
+
+  // Give the hook's built-in exchange time to finish before intervening,
+  // so we never race/double-spend the single-use authorization code.
+  const scheduleCodeExchangeFallback = (code: string, delayMs = 3500) => {
+    if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+    codeExchangeTimerRef.current = setTimeout(async () => {
+      codeExchangeTimerRef.current = null;
+      if (isConnectingRef.current) return; // hook's exchange already connected us
+      console.log('[ProfileScreen] Auto token exchange did not complete — running manual PKCE exchange');
+      const token = await exchangeCodeForToken(code);
+      if (token) {
+        handleConnectWithToken(token);
+      } else if (!isConnectingRef.current) {
+        setIsSyncing(false);
+        Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+      }
+    }, delayMs);
+  };
+
+  // Clear any pending exchange fallback on unmount
+  React.useEffect(() => () => {
+    if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+  }, []);
+
   // React to the auth response from Google in Profile Settings
   React.useEffect(() => {
     if (!response) return;
+    console.log('[ProfileScreen] Auth response received:', response.type);
 
     if (response.type === 'success') {
       const token =
@@ -437,6 +494,16 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       if (token) {
         handleConnectWithToken(token);
+      } else {
+        const code = (response.params as any)?.code;
+        if (code) {
+          // Hook exchanges the code in the background; schedule a fallback
+          // in case that exchange fails silently.
+          scheduleCodeExchangeFallback(code);
+        } else {
+          setIsSyncing(false);
+          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+        }
       }
     } else if (response.type === 'error') {
       setIsSyncing(false);
@@ -562,7 +629,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handleConnectWithToken = async (token: string) => {
     if (!token || isConnectingRef.current) return;
     isConnectingRef.current = true;
+    if (codeExchangeTimerRef.current) {
+      clearTimeout(codeExchangeTimerRef.current);
+      codeExchangeTimerRef.current = null;
+    }
     setIsSyncing(true);
+    console.log('[ProfileScreen] Connecting with Google token…');
     try {
       const profile = await googleDrive.fetchUserProfile(token);
       let fileId: string | null = null;
@@ -622,11 +694,31 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     setIsSyncing(true);
     try {
       const res = await promptAsync();
-      if (res?.type === 'cancel' || res?.type === 'dismiss') {
-        setIsSyncing(false);
+      console.log('[ProfileScreen] promptAsync resolved:', res?.type);
+      if (res?.type === 'success') {
+        const token =
+          res.authentication?.accessToken ||
+          (res.params as any)?.access_token ||
+          (res.params as any)?.token;
+        if (token) {
+          handleConnectWithToken(token);
+        } else {
+          const code = (res.params as any)?.code;
+          if (code) {
+            // Token exchange is running in the background (hook or `response`
+            // effect). Schedule a manual PKCE fallback in case it never lands.
+            scheduleCodeExchangeFallback(code);
+          } else {
+            setIsSyncing(false);
+            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+          }
+        }
       } else if (res?.type === 'error') {
         setIsSyncing(false);
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: res.error?.message || 'Unknown error' }));
+      } else {
+        // cancel / dismiss / locked / anything else — always release the spinner
+        setIsSyncing(false);
       }
     } catch (err: any) {
       console.error('[ProfileScreen] promptAsync error', err);

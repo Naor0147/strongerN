@@ -57,6 +57,13 @@ const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CL
 // Reverse client ID redirect URI — registered in AndroidManifest.xml as an intent filter
 const ANDROID_REDIRECT_URI = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
 
+// Google OAuth discovery endpoints (static — avoids network discovery round-trip)
+const GOOGLE_DISCOVERY = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+};
+
 
 
 
@@ -237,6 +244,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [googleToken, setGoogleToken] = useState('');
   const isConnectingRef = useRef(false);
+  const codeExchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -252,9 +260,59 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     ],
   });
 
+  // Manual PKCE code exchange — fallback for when expo-auth-session's
+  // background auto-exchange fails SILENTLY (the library has no .catch
+  // around its exchange, leaving `response` null forever and the login
+  // screen stuck on the spinner after a successful Google sign-in).
+  const exchangeCodeForToken = async (code: string): Promise<string | null> => {
+    if (!request?.codeVerifier) {
+      console.warn('[LoginScreen] No codeVerifier available for manual exchange');
+      return null;
+    }
+    try {
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: ANDROID_CLIENT_ID,
+          redirectUri: ANDROID_REDIRECT_URI,
+          code,
+          extraParams: { code_verifier: request.codeVerifier },
+        },
+        GOOGLE_DISCOVERY,
+      );
+      return tokenResult?.accessToken ?? null;
+    } catch (e) {
+      console.error('[LoginScreen] Manual code exchange failed:', e);
+      return null;
+    }
+  };
+
+  // Give the hook's built-in exchange time to finish before intervening,
+  // so we never race/double-spend the single-use authorization code.
+  const scheduleCodeExchangeFallback = (code: string, delayMs = 3500) => {
+    if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+    codeExchangeTimerRef.current = setTimeout(async () => {
+      codeExchangeTimerRef.current = null;
+      if (isConnectingRef.current) return; // hook's exchange already connected us
+      console.log('[LoginScreen] Auto token exchange did not complete — running manual PKCE exchange');
+      const token = await exchangeCodeForToken(code);
+      if (token) {
+        handleGoogleConnectWithToken(token);
+      } else if (!isConnectingRef.current) {
+        setIsGoogleLoading(false);
+        Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+      }
+    }, delayMs);
+  };
+
+  // Clear any pending exchange fallback on unmount
+  useEffect(() => () => {
+    if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+  }, []);
+
   // React to the auth response from Google
   useEffect(() => {
     if (!response) return;
+    console.log('[LoginScreen] Auth response received:', response.type);
 
     if (response.type === 'success') {
       const token =
@@ -264,9 +322,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
       if (token) {
         handleGoogleConnectWithToken(token);
+      } else {
+        const code = (response.params as any)?.code;
+        if (code) {
+          // Hook exchanges the code in the background; schedule a fallback
+          // in case that exchange fails silently.
+          scheduleCodeExchangeFallback(code);
+        } else {
+          setIsGoogleLoading(false);
+          Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+        }
       }
-      // If response.params.code is present but token is not yet exchanged,
-      // Google.useAuthRequest is currently exchanging the code in the background.
     } else if (response.type === 'error') {
       setIsGoogleLoading(false);
       Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
@@ -419,7 +485,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const handleGoogleConnectWithToken = async (token: string) => {
     if (!token || isConnectingRef.current) return;
     isConnectingRef.current = true;
+    if (codeExchangeTimerRef.current) {
+      clearTimeout(codeExchangeTimerRef.current);
+      codeExchangeTimerRef.current = null;
+    }
     setIsGoogleLoading(true);
+    console.log('[LoginScreen] Connecting with Google token…');
     try {
       const { fetchUserProfile, findBackupFile } = await import('../utils/googleDrive');
       const profile = await fetchUserProfile(token);
@@ -460,14 +531,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     setIsGoogleLoading(true);
     try {
       const res = await promptAsync();
-      if (res?.type === 'cancel' || res?.type === 'dismiss') {
-        setIsGoogleLoading(false);
+      console.log('[LoginScreen] promptAsync resolved:', res?.type);
+      if (res?.type === 'success') {
+        const token =
+          res.authentication?.accessToken ||
+          (res.params as any)?.access_token ||
+          (res.params as any)?.token;
+        if (token) {
+          handleGoogleConnectWithToken(token);
+        } else {
+          const code = (res.params as any)?.code;
+          if (code) {
+            // Token exchange is running in the background (hook or `response`
+            // effect). Schedule a manual PKCE fallback in case it never lands.
+            scheduleCodeExchangeFallback(code);
+          } else {
+            setIsGoogleLoading(false);
+            Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
+          }
+        }
       } else if (res?.type === 'error') {
         setIsGoogleLoading(false);
         Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${res.error?.message || 'Unknown error'}`);
+      } else {
+        // cancel / dismiss / locked / anything else — always release the spinner
+        setIsGoogleLoading(false);
       }
-      // If res.type === 'success', the `response` state from Google.useAuthRequest
-      // will update with the exchanged access token and trigger useEffect above.
     } catch (err) {
       console.error('[LoginScreen] promptAsync error', err);
       setIsGoogleLoading(false);
