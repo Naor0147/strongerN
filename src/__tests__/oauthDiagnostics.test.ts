@@ -1,3 +1,4 @@
+import * as WebBrowser from 'expo-web-browser';
 import {
   logOauthEvent,
   getOauthLogs,
@@ -5,8 +6,10 @@ import {
   subscribeOauthLogs,
   formatOauthLogsText,
   copyOauthLogsToClipboard,
+  getPreferredOAuthBrowserPackage,
+  warmUpOAuthBrowser,
 } from '../utils/oauthDiagnostics';
-import { Clipboard } from 'react-native';
+import { Clipboard, Platform } from 'react-native';
 
 describe('OAuth Diagnostics Telemetry Utility', () => {
   beforeEach(() => {
@@ -85,5 +88,50 @@ describe('OAuth Diagnostics Telemetry Utility', () => {
     expect(setStringSpy).toHaveBeenCalledWith(expect.stringContaining('=== StrongerN OAuth Diagnostics Log ==='));
     expect(setStringSpy).toHaveBeenCalledWith(expect.stringContaining('[OK]    request loaded'));
     expect(setStringSpy).toHaveBeenCalledWith(expect.stringContaining('[ERROR] watchdog timeout -> 2.5s expired'));
+  });
+
+  it('selects Chrome Custom Tab package on Android when available', async () => {
+    const originalOS = Platform.OS;
+    (Platform as any).OS = 'android';
+
+    const getBrowsersSpy = jest.spyOn(WebBrowser, 'getCustomTabsSupportingBrowsersAsync').mockResolvedValue({
+      browserPackages: ['com.brave.browser', 'com.android.chrome'],
+      servicePackages: ['com.android.chrome'],
+      defaultBrowserPackage: 'com.brave.browser',
+      preferredBrowserPackage: 'com.brave.browser',
+    });
+    const warmUpSpy = jest.spyOn(WebBrowser, 'warmUpAsync').mockResolvedValue({ servicePackage: 'com.android.chrome' });
+
+    try {
+      const pkg = await getPreferredOAuthBrowserPackage();
+      expect(pkg).toBe('com.android.chrome');
+
+      await warmUpOAuthBrowser(pkg);
+      expect(warmUpSpy).toHaveBeenCalledWith('com.android.chrome');
+    } finally {
+      getBrowsersSpy.mockRestore();
+      warmUpSpy.mockRestore();
+      (Platform as any).OS = originalOS;
+    }
+  });
+
+  it('falls back to default/preferred browser if Chrome is not installed', async () => {
+    const originalOS = Platform.OS;
+    (Platform as any).OS = 'android';
+
+    const getBrowsersSpy = jest.spyOn(WebBrowser, 'getCustomTabsSupportingBrowsersAsync').mockResolvedValue({
+      browserPackages: ['com.brave.browser'],
+      servicePackages: ['com.brave.browser'],
+      defaultBrowserPackage: 'com.brave.browser',
+      preferredBrowserPackage: 'com.brave.browser',
+    });
+
+    try {
+      const pkg = await getPreferredOAuthBrowserPackage();
+      expect(pkg).toBe('com.brave.browser');
+    } finally {
+      getBrowsersSpy.mockRestore();
+      (Platform as any).OS = originalOS;
+    }
   });
 });

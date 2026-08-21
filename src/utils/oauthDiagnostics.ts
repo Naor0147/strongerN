@@ -2,7 +2,8 @@
 // Ring-buffer telemetry logger for Google OAuth and sign-in lifecycle events.
 // Persists the last ~50 events to durable storage so logs survive app reloads/crashes.
 
-import { Clipboard } from 'react-native';
+import { Clipboard, Platform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { safeMmkvGet, safeMmkvSet } from '../storage/instantCache';
 import { saveToDb, loadFromDb } from './db';
 import { STORAGE_KEYS } from '../storage/keys';
@@ -191,3 +192,63 @@ export function copyOauthLogsToClipboard(): boolean {
     return false;
   }
 }
+
+/**
+ * Known package identifiers for Google Chrome on Android in priority order.
+ */
+export const CHROME_PACKAGE_NAMES = [
+  'com.android.chrome',
+  'com.chrome.beta',
+  'com.chrome.dev',
+  'com.chrome.canary',
+  'com.google.android.apps.chrome',
+];
+
+/**
+ * Determines the best Custom Tabs browser package on Android.
+ * Prioritizes Google Chrome to guarantee reliable deep-link and custom-scheme OAuth redirects,
+ * preventing privacy browsers like Brave from swallowing the redirect callback.
+ */
+export async function getPreferredOAuthBrowserPackage(): Promise<string | undefined> {
+  if (Platform.OS !== 'android') return undefined;
+
+  try {
+    if (typeof WebBrowser.getCustomTabsSupportingBrowsersAsync === 'function') {
+      const result = await WebBrowser.getCustomTabsSupportingBrowsersAsync();
+      const allAvailable = [
+        ...(result.browserPackages || []),
+        ...(result.servicePackages || []),
+        result.defaultBrowserPackage,
+        result.preferredBrowserPackage,
+      ].filter(Boolean) as string[];
+
+      const matchedChrome = CHROME_PACKAGE_NAMES.find((pkg) => allAvailable.includes(pkg));
+      if (matchedChrome) {
+        return matchedChrome;
+      }
+
+      // If Chrome is not detected in supported browsers list, check preferred / default
+      if (result.preferredBrowserPackage) return result.preferredBrowserPackage;
+      if (result.defaultBrowserPackage) return result.defaultBrowserPackage;
+      if (result.browserPackages && result.browserPackages.length > 0) return result.browserPackages[0];
+    }
+  } catch (err) {
+    console.warn('[OAuthDiagnostics] Could not query custom tabs browsers:', err);
+  }
+
+  // Best-effort Android default: Chrome
+  return 'com.android.chrome';
+}
+
+/**
+ * Warms up the selected browser for instant Custom Tab presentation.
+ */
+export async function warmUpOAuthBrowser(browserPackage?: string): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    if (typeof WebBrowser.warmUpAsync === 'function') {
+      await WebBrowser.warmUpAsync(browserPackage);
+    }
+  } catch {}
+}
+

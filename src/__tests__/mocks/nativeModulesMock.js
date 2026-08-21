@@ -87,6 +87,24 @@ jest.mock('@expo/vector-icons/Ionicons', () => ({
   glyphMap: {},
 }));
 
+// Mock expo-web-browser
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'dismiss' }),
+  openBrowserAsync: jest.fn().mockResolvedValue({ type: 'opened' }),
+  dismissBrowser: jest.fn().mockResolvedValue({ type: 'dismiss' }),
+  dismissAuthSession: jest.fn(),
+  getCustomTabsSupportingBrowsersAsync: jest.fn().mockResolvedValue({
+    browserPackages: ['com.android.chrome'],
+    servicePackages: ['com.android.chrome'],
+    defaultBrowserPackage: 'com.android.chrome',
+    preferredBrowserPackage: 'com.android.chrome',
+  }),
+  warmUpAsync: jest.fn().mockResolvedValue({ servicePackage: 'com.android.chrome' }),
+  coolDownAsync: jest.fn().mockResolvedValue({}),
+  mayInitWithUrlAsync: jest.fn().mockResolvedValue({}),
+}));
+
 // Mock expo-linear-gradient
 jest.mock('expo-linear-gradient', () => ({
   LinearGradient: 'LinearGradient',

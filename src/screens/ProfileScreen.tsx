@@ -34,7 +34,7 @@ import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { logOauthEvent } from '../utils/oauthDiagnostics';
+import { logOauthEvent, getPreferredOAuthBrowserPackage, warmUpOAuthBrowser } from '../utils/oauthDiagnostics';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
@@ -790,9 +790,24 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
     isOAuthPendingRef.current = true;
     setIsSyncing(true);
-    logOauthEvent('browser opened [profile]', 'Launching OAuth browser flow from Profile Settings', 'info');
+
+    const browserPackage = await getPreferredOAuthBrowserPackage();
+    logOauthEvent(
+      'browser opened [profile]',
+      browserPackage ? `Targeting browser package: ${browserPackage}` : 'Launching OAuth browser flow from Profile Settings',
+      'info'
+    );
+    if (browserPackage) {
+      warmUpOAuthBrowser(browserPackage).catch(() => {});
+    }
+
     try {
-      const res = await promptAsync();
+      const res = await promptAsync({
+        browserPackage,
+        createTask: false,
+        showTitle: true,
+        enableBarCollapsing: false,
+      });
       logOauthEvent(
         'browser returned [profile]',
         `promptAsync result type: ${res?.type || 'undefined'}`,

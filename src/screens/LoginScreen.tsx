@@ -38,6 +38,8 @@ import {
   clearOauthLogs,
   subscribeOauthLogs,
   copyOauthLogsToClipboard,
+  getPreferredOAuthBrowserPackage,
+  warmUpOAuthBrowser,
   OAuthLogEvent,
 } from '../utils/oauthDiagnostics';
 
@@ -564,6 +566,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     const frameId = requestAnimationFrame(() => {
       setIsReadyToAnimate(true);
     });
+
+    if (Platform.OS === 'android') {
+      getPreferredOAuthBrowserPackage().then((pkg) => {
+        if (pkg) warmUpOAuthBrowser(pkg).catch(() => {});
+      }).catch(() => {});
+    }
+
     return () => cancelAnimationFrame(frameId);
   }, []);
 
@@ -762,9 +771,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
     isOAuthPendingRef.current = true;
     setIsGoogleLoading(true);
-    logOauthEvent('browser opened', 'Launching OAuth browser flow with Google', 'info');
+
+    const browserPackage = await getPreferredOAuthBrowserPackage();
+    logOauthEvent(
+      'browser opened',
+      browserPackage ? `Targeting browser package: ${browserPackage}` : 'Launching OAuth browser flow with Google',
+      'info'
+    );
+    if (browserPackage) {
+      warmUpOAuthBrowser(browserPackage).catch(() => {});
+    }
+
     try {
-      const res = await promptAsync();
+      const res = await promptAsync({
+        browserPackage,
+        createTask: false,
+        showTitle: true,
+        enableBarCollapsing: false,
+      });
       logOauthEvent(
         'browser returned',
         `promptAsync result type: ${res?.type || 'undefined'}`,
