@@ -1,0 +1,52 @@
+# Muse / Muse Spark Contributor Ignore Configuration
+# Shields all secrets, credentials, internal agent memories, keystores, and private configs.
+
+# Environment & Secrets (Strictly Private)
+.env
+.env.*
+.env*.local
+*.env
+*.key
+*.pem
+*.p12
+*.p8
+*.jks
+*.keystore
+debug.keystore
+google-services.json
+credentials.json
+service-account*.json
+token*.json
+
+# Machine & SDK Configs
+android/local.properties
+local.properties
+.idea/
+.vscode/
+
+# Agent Internal Memories, Audits & Transcripts
+.agents/
+.claude/
+.junie/
+.fallow/
+.system_generated/
+graphify-out/
+
+# Build & Release Artifacts
+apk/
+android/app/build/
+android/build/
+dist/
+web-build/
+.expo/
+.expo-shared/
+
+# Test Reports, Logs & Dumps
+test-results/
+playwright-report/
+*.log
+npm-debug.log*
+yarn-debug.log*
+expo-e2e.log
+*.heapsnapshot
+*.cpuprofile

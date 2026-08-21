@@ -75,8 +75,8 @@
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "health-check": "node scripts/health-check.js",
-    "self-check": "npm run typecheck && npm test && echo '✅ All checks passed!'",
+    "check:security": "node scripts/check-secrets.js",
+    "self-check": "node scripts/check-secrets.js && npm run typecheck && npm test && echo '✅ All checks passed!'",
     "doctor": "npx react-doctor@latest"
   },
   "private": true

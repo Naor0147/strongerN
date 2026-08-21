@@ -42,6 +42,13 @@ This compiles the release app and exits cleanly. If a USB device is connected, i
 
 Every time you make any change or complete a task, increment the app version in `app.json` and in the translation keys `profile.version` in `src/utils/i18n.ts` (both English and Hebrew), and report the new version at the end of the task.
 
+# AI & Contributor Security Protection (Muse Spark, Copilot, Cursor)
+
+- **Zero-Trust Data Protection**: Never index, read, or commit `.env`, keystores, credentials, or private configuration files.
+- **Strict Permission Boundary**: AI contributors (including Muse Spark 1.2-contributor) must never access or exfiltrate private credentials, user data, or keystores without explicit permission.
+- **Automated Security Scan**: Run `npm run check:security` to ensure zero secret leakage.
+
 # Git Auto-Commit & Push
 
 After making any changes or completing a task, stage, commit, and push the changes to the Git repository on `master` (e.g., using `git add .`, `git commit -m "<message>"`, and `git push`). This ensures each task or feature has its own clean, separated commit and push history on the main production branch.
+
