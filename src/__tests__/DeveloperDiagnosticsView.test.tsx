@@ -70,8 +70,8 @@ describe('DeveloperDiagnosticsView', () => {
     const root = tree.root;
     const pressableNodes = root.findAll((el: any) => el.props && typeof el.props.onPress === 'function');
 
-    // Find the repair button (the pressable containing repair text)
-    const repairButton = pressableNodes[pressableNodes.length - 1];
+    // Find the repair button (the second pressable on the screen: 0 = toolbar refresh, 1 = repair)
+    const repairButton = pressableNodes[1];
     expect(repairButton).toBeDefined();
 
     await renderer.act(async () => {

@@ -17,6 +17,7 @@ import {
   Dimensions,
   Image,
   useWindowDimensions,
+  AppState,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withRepeat, withSequence, cancelAnimation, interpolate, Easing } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,11 +26,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
+import * as Haptics from 'expo-haptics';
 
 import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAnimation, getScaledDuration } from '../theme';
 import { AuthMode } from '../utils/authStore';
 import { pickAndReadBackupFile } from '../utils/backupManager';
 import i18n from '../utils/i18n';
+import {
+  logOauthEvent,
+  getOauthLogs,
+  clearOauthLogs,
+  subscribeOauthLogs,
+  copyOauthLogsToClipboard,
+  OAuthLogEvent,
+} from '../utils/oauthDiagnostics';
 
 // Required: warm up the browser so Google sign-in opens instantly on Android
 WebBrowser.maybeCompleteAuthSession();
@@ -64,10 +74,6 @@ const GOOGLE_DISCOVERY = {
   revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
 };
 
-
-
-
-
 interface LoginScreenProps {
   onComplete: (authMode: AuthMode, username: string) => void;
   onGoogleLogin: (
@@ -79,12 +85,13 @@ interface LoginScreenProps {
   ) => Promise<boolean> | boolean;
   /** Called when user restores a backup file on login. Returns true if restore succeeded. */
   onRestoreBackup?: (backupData: any, username: string) => Promise<boolean>;
+  isDeveloperModeEnabled?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Sub-component: Animated pulsing dumbbell logo
 // ─────────────────────────────────────────────────────────────────
-const AnimatedLogo: React.FC = () => {
+const AnimatedLogo: React.FC<{ onPress?: () => void }> = ({ onPress }) => {
   const pulseAnim = useSharedValue(1);
   const glowAnim = useSharedValue(0);
 
@@ -129,7 +136,12 @@ const AnimatedLogo: React.FC = () => {
   }));
 
   return (
-    <View style={styles.logoContainer}>
+    <Pressable
+      onPress={onPress}
+      style={styles.logoContainer}
+      accessibilityRole="button"
+      accessibilityLabel="StrongerN Logo"
+    >
       {/* Outer glow ring */}
       <Animated.View style={[styles.logoGlowWrapper, glowStyle]}>
         <Animated.View style={[styles.logoGlow, pulseStyle]} />
@@ -141,7 +153,7 @@ const AnimatedLogo: React.FC = () => {
           style={styles.logoImage}
         />
       </Animated.View>
-    </View>
+    </Pressable>
   );
 };
 
@@ -214,11 +226,135 @@ const DataInfoRow: React.FC<{ icon: string; text: string }> = ({ icon, text }) =
 );
 
 // ─────────────────────────────────────────────────────────────────
+// Sub-component: OAuth Diagnostics & Telemetry Panel (monospace console)
+// ─────────────────────────────────────────────────────────────────
+const OAuthDiagnosticsPanel: React.FC = () => {
+  const [logs, setLogs] = useState<OAuthLogEvent[]>(() => getOauthLogs());
+
+  useEffect(() => {
+    const unsub = subscribeOauthLogs((updatedLogs) => {
+      setLogs(updatedLogs);
+    });
+    return unsub;
+  }, []);
+
+  const handleCopy = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const ok = copyOauthLogsToClipboard();
+    if (ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert(i18n.t('common.info'), i18n.t('login.copiedLogs'));
+    }
+  };
+
+  const handleClear = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    clearOauthLogs();
+  };
+
+  return (
+    <View style={styles.diagContainer}>
+      <View style={styles.diagHeader}>
+        <View style={styles.diagHeaderLeft}>
+          <Ionicons name="terminal-outline" size={14} color={colors.accent} />
+          <Text style={styles.diagTitle}>{i18n.t('login.diagnosticsTitle')}</Text>
+        </View>
+        <View style={styles.diagActions}>
+          <Pressable
+            style={styles.diagBtn}
+            onPress={handleCopy}
+            android_ripple={rippleTokens.surface}
+          >
+            <Ionicons name="copy-outline" size={12} color={colors.textSecondary} />
+            <Text style={styles.diagBtnText}>{i18n.t('login.copyLogs')}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.diagBtn, { marginLeft: spacing.xs }]}
+            onPress={handleClear}
+            android_ripple={rippleTokens.surface}
+          >
+            <Ionicons name="trash-outline" size={12} color={colors.textMuted} />
+            <Text style={styles.diagBtnText}>{i18n.t('login.clearLogs')}</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Pressable
+        onLongPress={handleCopy}
+        delayLongPress={400}
+        style={styles.diagConsole}
+      >
+        <ScrollView
+          style={styles.diagScroll}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {logs.length === 0 ? (
+            <Text style={styles.diagEmptyText}>{i18n.t('login.noLogs')}</Text>
+          ) : (
+            logs.map((log) => {
+              const color =
+                log.level === 'ok'
+                  ? colors.success
+                  : log.level === 'error'
+                  ? colors.error
+                  : colors.accent;
+              return (
+                <View key={log.id} style={styles.diagRow}>
+                  <View style={styles.diagRowHeader}>
+                    <Text style={styles.diagTime}>{log.formattedTime}</Text>
+                    <Text style={[styles.diagStep, { color }]}>{log.step}</Text>
+                  </View>
+                  {log.detail ? (
+                    <Text style={styles.diagDetail}>{log.detail}</Text>
+                  ) : null}
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+      </Pressable>
+    </View>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────
-const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, onRestoreBackup }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({
+  onComplete,
+  onGoogleLogin,
+  onRestoreBackup,
+  isDeveloperModeEnabled = false,
+}) => {
   const insets = useSafeAreaInsets();
   const { height: layoutHeight } = useWindowDimensions();
+
+  // Diagnostics unlock via triple-tap StrongerN logo (works in release builds)
+  const logoTapCount = useRef(0);
+  const lastLogoTapTime = useRef(0);
+  const [diagnosticsUnlocked, setDiagnosticsUnlocked] = useState(false);
+  const isDiagnosticsVisible = isDeveloperModeEnabled || diagnosticsUnlocked;
+
+  const handleLogoPress = () => {
+    const now = Date.now();
+    if (now - lastLogoTapTime.current > 2000) {
+      logoTapCount.current = 1;
+    } else {
+      logoTapCount.current += 1;
+    }
+    lastLogoTapTime.current = now;
+
+    if (logoTapCount.current >= 3) {
+      setDiagnosticsUnlocked(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert(
+        i18n.t('login.diagnosticsUnlocked'),
+        i18n.t('login.diagnosticsUnlockedDesc')
+      );
+      logoTapCount.current = 0;
+    }
+  };
 
   // 4-tier entrance animation shared values (Logo -> Title -> Card -> Footer)
   const isInstant = typeof globalAnimation !== 'undefined' && globalAnimation && globalAnimation.speed === 0;
@@ -244,7 +380,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [googleToken, setGoogleToken] = useState('');
   const isConnectingRef = useRef(false);
+  const isOAuthPendingRef = useRef(false);
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeExchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loggedInitialRequest = useRef(false);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -260,15 +399,70 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
     ],
   });
 
+  // Log OAuth request initialization
+  useEffect(() => {
+    if (request && !loggedInitialRequest.current) {
+      loggedInitialRequest.current = true;
+      logOauthEvent(
+        'request loaded',
+        `redirectUri: ${request.redirectUri}, client: ${ANDROID_CLIENT_ID ? 'configured' : 'missing'}`,
+        'ok'
+      );
+    }
+  }, [request]);
+
+  // Foreground watchdog (always active, everyone benefits):
+  // If app regains focus while OAuth is pending and no redirect arrives within ~2.5s,
+  // cancel the spinner and display clear guidance to the user.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isOAuthPendingRef.current) {
+        logOauthEvent(
+          'app foregrounded',
+          'App resumed to foreground while OAuth is pending. Starting 2.5s watchdog.',
+          'info'
+        );
+        if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = setTimeout(() => {
+          if (isOAuthPendingRef.current) {
+            isOAuthPendingRef.current = false;
+            isConnectingRef.current = false;
+            setIsGoogleLoading(false);
+            if (codeExchangeTimerRef.current) {
+              clearTimeout(codeExchangeTimerRef.current);
+              codeExchangeTimerRef.current = null;
+            }
+            logOauthEvent(
+              'watchdog timeout',
+              'App resumed without OAuth redirect received within 2.5s',
+              'error'
+            );
+            Alert.alert(
+              i18n.t('login.signInInterrupted'),
+              i18n.t('login.signInInterruptedDesc')
+            );
+          }
+        }, 2500);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    };
+  }, []);
+
   // Manual PKCE code exchange — fallback for when expo-auth-session's
   // background auto-exchange fails SILENTLY (the library has no .catch
   // around its exchange, leaving `response` null forever and the login
   // screen stuck on the spinner after a successful Google sign-in).
   const exchangeCodeForToken = async (code: string): Promise<string | null> => {
     if (!request?.codeVerifier) {
+      logOauthEvent('manual exchange failed', 'No codeVerifier available on request', 'error');
       console.warn('[LoginScreen] No codeVerifier available for manual exchange');
       return null;
     }
+    logOauthEvent('manual exchange', 'Executing manual PKCE token exchange fallback', 'info');
     try {
       const tokenResult = await AuthSession.exchangeCodeAsync(
         {
@@ -279,8 +473,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
         },
         GOOGLE_DISCOVERY,
       );
-      return tokenResult?.accessToken ?? null;
-    } catch (e) {
+      const token = tokenResult?.accessToken ?? null;
+      if (token) {
+        logOauthEvent('token exchanged', 'Manual PKCE token exchange succeeded', 'ok');
+      } else {
+        logOauthEvent('exchange failed', 'exchangeCodeAsync returned null accessToken', 'error');
+      }
+      return token;
+    } catch (e: any) {
+      logOauthEvent('exchange failed', `Manual exchange error: ${e?.message || String(e)}`, 'error');
       console.error('[LoginScreen] Manual code exchange failed:', e);
       return null;
     }
@@ -289,6 +490,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   // Give the hook's built-in exchange time to finish before intervening,
   // so we never race/double-spend the single-use authorization code.
   const scheduleCodeExchangeFallback = (code: string, delayMs = 3500) => {
+    logOauthEvent('library exchange pending', `Waiting ${delayMs}ms for expo-auth-session auto-exchange...`, 'info');
     if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
     codeExchangeTimerRef.current = setTimeout(async () => {
       codeExchangeTimerRef.current = null;
@@ -299,6 +501,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
         handleGoogleConnectWithToken(token);
       } else if (!isConnectingRef.current) {
         setIsGoogleLoading(false);
+        isOAuthPendingRef.current = false;
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
       }
     }, delayMs);
@@ -307,11 +510,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   // Clear any pending exchange fallback on unmount
   useEffect(() => () => {
     if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+    if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
   }, []);
 
   // React to the auth response from Google
   useEffect(() => {
     if (!response) return;
+    logOauthEvent(
+      'response received',
+      `AuthSession response type: ${response.type}`,
+      response.type === 'success' ? 'ok' : response.type === 'error' ? 'error' : 'info'
+    );
     console.log('[LoginScreen] Auth response received:', response.type);
 
     if (response.type === 'success') {
@@ -321,25 +530,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
         (response.params as any)?.token;
 
       if (token) {
+        logOauthEvent('token ready', 'Direct access token found in AuthSession response', 'ok');
         handleGoogleConnectWithToken(token);
       } else {
         const code = (response.params as any)?.code;
         if (code) {
-          // Hook exchanges the code in the background; schedule a fallback
-          // in case that exchange fails silently.
+          logOauthEvent('code received', 'Authorization code found in AuthSession response', 'ok');
           scheduleCodeExchangeFallback(code);
         } else {
           setIsGoogleLoading(false);
+          isOAuthPendingRef.current = false;
+          logOauthEvent('token missing', 'Success response without token or code', 'error');
           Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
         }
       }
     } else if (response.type === 'error') {
       setIsGoogleLoading(false);
+      isOAuthPendingRef.current = false;
+      logOauthEvent('exchange failed', response.error?.message || 'OAuth error in response', 'error');
       Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${response.error?.message || 'Unknown error'}`);
     } else if (response.type === 'cancel' || response.type === 'dismiss') {
       setIsGoogleLoading(false);
+      isOAuthPendingRef.current = false;
+      logOauthEvent('browser dismissed', `User dismissed or closed auth browser (${response.type})`, 'info');
     } else {
       setIsGoogleLoading(false);
+      isOAuthPendingRef.current = false;
     }
   }, [response]);
 
@@ -485,19 +701,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
   const handleGoogleConnectWithToken = async (token: string) => {
     if (!token || isConnectingRef.current) return;
     isConnectingRef.current = true;
+    isOAuthPendingRef.current = false;
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
     if (codeExchangeTimerRef.current) {
       clearTimeout(codeExchangeTimerRef.current);
       codeExchangeTimerRef.current = null;
     }
     setIsGoogleLoading(true);
+    logOauthEvent('profile fetch', 'Fetching Google user profile and Drive backup...', 'info');
     console.log('[LoginScreen] Connecting with Google token…');
     try {
       const { fetchUserProfile, findBackupFile } = await import('../utils/googleDrive');
       const profile = await fetchUserProfile(token);
+      logOauthEvent('profile fetched', `Name: ${profile.name}, Email: ${profile.email}`, 'ok');
       let fileId: string | null = null;
       try {
         fileId = await findBackupFile(token);
-      } catch (driveErr) {
+        if (fileId) {
+          logOauthEvent('backup file found', `Google Drive fileId: ${fileId}`, 'ok');
+        } else {
+          logOauthEvent('backup file check', 'No existing backup file found', 'info');
+        }
+      } catch (driveErr: any) {
+        logOauthEvent('backup file check skipped', driveErr?.message || String(driveErr), 'info');
         console.warn('[LoginScreen] Backup file check skipped:', driveErr);
       }
 
@@ -509,9 +738,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
         profile.avatarUri,
       );
 
+      logOauthEvent('connected', `Google sign-in completed for ${profile.name}`, 'ok');
       // Auth is complete — notify parent.
       onComplete('google', profile.name);
     } catch (err: any) {
+      logOauthEvent('profile fetch failed', err?.message || String(err), 'error');
       console.error('[LoginScreen] Google connect error', err);
       Alert.alert(
         i18n.t('login.googleSignInError'),
@@ -525,12 +756,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
 
   const handleGoogleOAuth = async () => {
     if (!request) {
+      logOauthEvent('request missing', 'Google auth request is not ready. Showing manual token input.', 'error');
       setShowTokenInput(true);
       return;
     }
+    isOAuthPendingRef.current = true;
     setIsGoogleLoading(true);
+    logOauthEvent('browser opened', 'Launching OAuth browser flow with Google', 'info');
     try {
       const res = await promptAsync();
+      logOauthEvent(
+        'browser returned',
+        `promptAsync result type: ${res?.type || 'undefined'}`,
+        res?.type === 'success' ? 'ok' : res?.type === 'error' ? 'error' : 'info'
+      );
       console.log('[LoginScreen] promptAsync resolved:', res?.type);
       if (res?.type === 'success') {
         const token =
@@ -538,28 +777,38 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
           (res.params as any)?.access_token ||
           (res.params as any)?.token;
         if (token) {
+          logOauthEvent('token ready', 'Direct access token returned from promptAsync', 'ok');
           handleGoogleConnectWithToken(token);
         } else {
           const code = (res.params as any)?.code;
           if (code) {
+            logOauthEvent('code received', 'Authorization code returned from promptAsync', 'ok');
             // Token exchange is running in the background (hook or `response`
             // effect). Schedule a manual PKCE fallback in case it never lands.
             scheduleCodeExchangeFallback(code);
           } else {
             setIsGoogleLoading(false);
+            isOAuthPendingRef.current = false;
+            logOauthEvent('token missing', 'promptAsync success but no token or code', 'error');
             Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
           }
         }
       } else if (res?.type === 'error') {
         setIsGoogleLoading(false);
+        isOAuthPendingRef.current = false;
+        logOauthEvent('exchange failed', res.error?.message || 'OAuth error in promptAsync', 'error');
         Alert.alert(i18n.t('login.googleSignInError'), `OAuth error: ${res.error?.message || 'Unknown error'}`);
       } else {
         // cancel / dismiss / locked / anything else — always release the spinner
         setIsGoogleLoading(false);
+        isOAuthPendingRef.current = false;
+        logOauthEvent('browser dismissed', `Browser closed (${res?.type})`, 'info');
       }
-    } catch (err) {
+    } catch (err: any) {
+      logOauthEvent('browser error', err?.message || String(err), 'error');
       console.error('[LoginScreen] promptAsync error', err);
       setIsGoogleLoading(false);
+      isOAuthPendingRef.current = false;
       setShowTokenInput(true);
     }
   };
@@ -591,7 +840,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
             <View style={styles.content}>
               {/* ── Tier 1: Logo (0ms delay) ─────────────────── */}
               <Animated.View style={[styles.tierContainer, logoEntranceStyle]}>
-                <AnimatedLogo />
+                <AnimatedLogo onPress={handleLogoPress} />
               </Animated.View>
 
               {/* ── Tier 2: App Name & Tagline (50ms delay) ─── */}
@@ -661,6 +910,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onComplete, onGoogleLogin, on
                           </Pressable>
                         </View>
                       )}
+
+                      {/* OAuth Diagnostics & Telemetry Panel (When Unlocked) */}
+                      {isDiagnosticsVisible && <OAuthDiagnosticsPanel />}
 
                       {/* Divider */}
                       <View style={styles.dividerRow}>
@@ -1258,5 +1510,98 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: font.medium,
     fontSize: font.sizes.sm,
+  },
+
+  // ── OAuth Diagnostics Panel ─────────────────────────────────────
+  diagContainer: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    backgroundColor: '#07080A',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    overflow: 'hidden',
+  },
+  diagHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  diagHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  diagTitle: {
+    color: colors.textSecondary,
+    fontFamily: font.semibold,
+    fontSize: font.sizes.xs,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  diagActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  diagBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 3,
+  },
+  diagBtnText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontFamily: font.medium,
+  },
+  diagConsole: {
+    maxHeight: 180,
+  },
+  diagScroll: {
+    maxHeight: 180,
+  },
+  diagEmptyText: {
+    color: colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    paddingVertical: spacing.sm,
+    textAlign: 'center',
+  },
+  diagRow: {
+    paddingVertical: 2,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border + '40',
+  },
+  diagRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  diagTime: {
+    color: colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 10,
+  },
+  diagStep: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  diagDetail: {
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 10,
+    marginTop: 1,
+    paddingLeft: 4,
   },
 });

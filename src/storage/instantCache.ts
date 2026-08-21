@@ -50,7 +50,7 @@ export interface LifetimeStatsSummary {
   lastCalculatedMs: number;
 }
 
-function safeMmkvGet(key: string): string | null {
+export function safeMmkvGet(key: string): string | null {
   try {
     initMMKVAdapter();
     if (!mmkvStorageAdapter.isAvailable()) return null;
@@ -60,7 +60,7 @@ function safeMmkvGet(key: string): string | null {
   }
 }
 
-function safeMmkvSet(key: string, value: string): boolean {
+export function safeMmkvSet(key: string, value: string): boolean {
   try {
     initMMKVAdapter();
     if (!mmkvStorageAdapter.isAvailable()) return false;
@@ -70,7 +70,7 @@ function safeMmkvSet(key: string, value: string): boolean {
   }
 }
 
-function safeMmkvRemove(key: string): boolean {
+export function safeMmkvRemove(key: string): boolean {
   try {
     initMMKVAdapter();
     if (!mmkvStorageAdapter.isAvailable()) return false;

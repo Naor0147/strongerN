@@ -30,6 +30,7 @@ export const STORAGE_KEYS = {
   INSTANT_LIFETIME_STATS: 'strongern_instant_lifetime_stats_v1',
   INSTANT_LIFETIME_SETS: 'strongern_instant_lifetime_sets_v1',
   BACKUP_HASH: 'strongern_last_backup_hash_v1',
+  OAUTH_DIAGNOSTICS_LOGS: 'strongern_oauth_diagnostics_logs',
 
   // Database Names
   LEGACY_SQLITE_DB: 'strongern.db',

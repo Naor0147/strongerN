@@ -26,6 +26,7 @@ import {
   Platform,
   Linking,
   KeyboardAvoidingView,
+  AppState,
 } from 'react-native';
 import Animated, { useSharedValue, withTiming, withSpring, Easing, useAnimatedStyle, FadeIn } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -33,6 +34,7 @@ import * as RN from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
+import { logOauthEvent } from '../utils/oauthDiagnostics';
 import * as DocumentPicker from 'expo-document-picker';
 import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
@@ -257,7 +259,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const lastVersionTapTime = useRef(0);
 
   const handleVersionPress = () => {
-    if (!__DEV__) return;
     const now = Date.now();
     if (now - lastVersionTapTime.current > 2000) {
       versionTapCount.current = 1;
@@ -268,6 +269,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
     if (versionTapCount.current >= 3) {
       setDevToolsTapUnlocked(true);
+      Haptics.notificationAsync?.(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         i18n.t('extras.devToolsUnlocked'),
         i18n.t('extras.devToolsUnlockedMsg')
@@ -417,7 +419,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? ANDROID_CLIENT_ID;
   const androidRedirectUri = `com.googleusercontent.apps.${ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauth2redirect`;
   const isConnectingRef = React.useRef(false);
+  const isOAuthPendingRef = React.useRef(false);
+  const watchdogTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeExchangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loggedInitialRequest = useRef(false);
 
   // expo-auth-session hook — handles PKCE, redirect URI, and token exchange automatically
   // redirectUri must use the reverse client ID scheme for Android OAuth clients
@@ -433,14 +438,67 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     ],
   });
 
+  // Log OAuth request initialization
+  React.useEffect(() => {
+    if (request && !loggedInitialRequest.current) {
+      loggedInitialRequest.current = true;
+      logOauthEvent(
+        'request loaded [profile]',
+        `redirectUri: ${request.redirectUri}, client: ${ANDROID_CLIENT_ID ? 'configured' : 'missing'}`,
+        'ok'
+      );
+    }
+  }, [request]);
+
+  // Foreground watchdog for Profile Settings OAuth flow
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isOAuthPendingRef.current) {
+        logOauthEvent(
+          'app foregrounded [profile]',
+          'App resumed to foreground while OAuth is pending. Starting 2.5s watchdog.',
+          'info'
+        );
+        if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = setTimeout(() => {
+          if (isOAuthPendingRef.current) {
+            isOAuthPendingRef.current = false;
+            isConnectingRef.current = false;
+            setIsSyncing(false);
+            if (codeExchangeTimerRef.current) {
+              clearTimeout(codeExchangeTimerRef.current);
+              codeExchangeTimerRef.current = null;
+            }
+            logOauthEvent(
+              'watchdog timeout [profile]',
+              'App resumed without OAuth redirect received within 2.5s',
+              'error'
+            );
+            Alert.alert(
+              i18n.t('login.signInInterrupted'),
+              i18n.t('login.signInInterruptedDesc')
+            );
+          }
+        }, 2500);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    };
+  }, []);
+
   // Manual PKCE code exchange — fallback for when expo-auth-session's
   // background auto-exchange fails silently (no .catch in the library),
   // which would otherwise leave the sign-in spinner stuck forever.
   const exchangeCodeForToken = async (code: string): Promise<string | null> => {
     if (!request?.codeVerifier) {
+      logOauthEvent('manual exchange failed [profile]', 'No codeVerifier available on request', 'error');
       console.warn('[ProfileScreen] No codeVerifier available for manual exchange');
       return null;
     }
+    logOauthEvent('manual exchange [profile]', 'Executing manual PKCE token exchange fallback', 'info');
     try {
       const tokenResult = await AuthSession.exchangeCodeAsync(
         {
@@ -451,8 +509,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         },
         GOOGLE_DISCOVERY,
       );
-      return tokenResult?.accessToken ?? null;
-    } catch (e) {
+      const token = tokenResult?.accessToken ?? null;
+      if (token) {
+        logOauthEvent('token exchanged [profile]', 'Manual PKCE token exchange succeeded', 'ok');
+      } else {
+        logOauthEvent('exchange failed [profile]', 'exchangeCodeAsync returned null accessToken', 'error');
+      }
+      return token;
+    } catch (e: any) {
+      logOauthEvent('exchange failed [profile]', `Manual exchange error: ${e?.message || String(e)}`, 'error');
       console.error('[ProfileScreen] Manual code exchange failed:', e);
       return null;
     }
@@ -461,6 +526,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // Give the hook's built-in exchange time to finish before intervening,
   // so we never race/double-spend the single-use authorization code.
   const scheduleCodeExchangeFallback = (code: string, delayMs = 3500) => {
+    logOauthEvent('library exchange pending [profile]', `Waiting ${delayMs}ms for auto-exchange...`, 'info');
     if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
     codeExchangeTimerRef.current = setTimeout(async () => {
       codeExchangeTimerRef.current = null;
@@ -471,6 +537,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         handleConnectWithToken(token);
       } else if (!isConnectingRef.current) {
         setIsSyncing(false);
+        isOAuthPendingRef.current = false;
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
       }
     }, delayMs);
@@ -479,11 +546,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // Clear any pending exchange fallback on unmount
   React.useEffect(() => () => {
     if (codeExchangeTimerRef.current) clearTimeout(codeExchangeTimerRef.current);
+    if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
   }, []);
 
   // React to the auth response from Google in Profile Settings
   React.useEffect(() => {
     if (!response) return;
+    logOauthEvent(
+      'response received [profile]',
+      `AuthSession response type: ${response.type}`,
+      response.type === 'success' ? 'ok' : response.type === 'error' ? 'error' : 'info'
+    );
     console.log('[ProfileScreen] Auth response received:', response.type);
 
     if (response.type === 'success') {
@@ -493,25 +566,32 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         (response.params as any)?.token;
 
       if (token) {
+        logOauthEvent('token ready [profile]', 'Direct access token found in response', 'ok');
         handleConnectWithToken(token);
       } else {
         const code = (response.params as any)?.code;
         if (code) {
-          // Hook exchanges the code in the background; schedule a fallback
-          // in case that exchange fails silently.
+          logOauthEvent('code received [profile]', 'Authorization code found in response', 'ok');
           scheduleCodeExchangeFallback(code);
         } else {
           setIsSyncing(false);
+          isOAuthPendingRef.current = false;
+          logOauthEvent('token missing [profile]', 'Success response without token or code', 'error');
           Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
         }
       }
     } else if (response.type === 'error') {
       setIsSyncing(false);
+      isOAuthPendingRef.current = false;
+      logOauthEvent('exchange failed [profile]', response.error?.message || 'OAuth error in response', 'error');
       Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: response.error?.message || 'Unknown error' }));
     } else if (response.type === 'cancel' || response.type === 'dismiss') {
       setIsSyncing(false);
+      isOAuthPendingRef.current = false;
+      logOauthEvent('browser dismissed [profile]', `User dismissed or closed auth browser (${response.type})`, 'info');
     } else {
       setIsSyncing(false);
+      isOAuthPendingRef.current = false;
     }
   }, [response]);
 
@@ -629,18 +709,31 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handleConnectWithToken = async (token: string) => {
     if (!token || isConnectingRef.current) return;
     isConnectingRef.current = true;
+    isOAuthPendingRef.current = false;
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
     if (codeExchangeTimerRef.current) {
       clearTimeout(codeExchangeTimerRef.current);
       codeExchangeTimerRef.current = null;
     }
     setIsSyncing(true);
+    logOauthEvent('profile fetch [profile]', 'Fetching Google profile and Drive backup file...', 'info');
     console.log('[ProfileScreen] Connecting with Google token…');
     try {
       const profile = await googleDrive.fetchUserProfile(token);
+      logOauthEvent('profile fetched [profile]', `Name: ${profile.name}, Email: ${profile.email}`, 'ok');
       let fileId: string | null = null;
       try {
         fileId = await googleDrive.findBackupFile(token);
-      } catch (driveErr) {
+        if (fileId) {
+          logOauthEvent('backup file found [profile]', `Google Drive fileId: ${fileId}`, 'ok');
+        } else {
+          logOauthEvent('backup file check [profile]', 'No existing backup file found', 'info');
+        }
+      } catch (driveErr: any) {
+        logOauthEvent('backup file check skipped [profile]', driveErr?.message || String(driveErr), 'info');
         console.warn('[ProfileScreen] Backup file search skipped:', driveErr);
       }
 
@@ -653,6 +746,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       );
 
       setIsSyncing(false);
+      logOauthEvent('connected [profile]', `Google account connected: ${profile.name}`, 'ok');
 
       if (isRestored) {
         Alert.alert(
@@ -668,6 +762,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         );
       }
     } catch (err: any) {
+      logOauthEvent('profile fetch failed [profile]', err?.message || String(err), 'error');
       console.error('[Google Connect Error]', err);
       Alert.alert(i18n.t('profile.connectionFailed'), `Failed to connect: ${err.message || err}`);
     } finally {
@@ -679,6 +774,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // Google Sign-In via OAuth (standard native picker flow)
   const handleGoogleWebAuth = async () => {
     if (!ANDROID_CLIENT_ID) {
+      logOauthEvent('request missing [profile]', 'Client ID not set', 'error');
       Alert.alert(
         i18n.t('extras.googleClientIdNotSet'),
         i18n.t('extras.googleClientIdNotSetMsg')
@@ -687,13 +783,21 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
 
     if (!request) {
+      logOauthEvent('request missing [profile]', 'Auth request not ready', 'error');
       Alert.alert(i18n.t('profile.googleClientNotReady'), i18n.t('profile.googleClientNotReadyMsg'));
       return;
     }
 
+    isOAuthPendingRef.current = true;
     setIsSyncing(true);
+    logOauthEvent('browser opened [profile]', 'Launching OAuth browser flow from Profile Settings', 'info');
     try {
       const res = await promptAsync();
+      logOauthEvent(
+        'browser returned [profile]',
+        `promptAsync result type: ${res?.type || 'undefined'}`,
+        res?.type === 'success' ? 'ok' : res?.type === 'error' ? 'error' : 'info'
+      );
       console.log('[ProfileScreen] promptAsync resolved:', res?.type);
       if (res?.type === 'success') {
         const token =
@@ -701,28 +805,38 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           (res.params as any)?.access_token ||
           (res.params as any)?.token;
         if (token) {
+          logOauthEvent('token ready [profile]', 'Direct access token returned from promptAsync', 'ok');
           handleConnectWithToken(token);
         } else {
           const code = (res.params as any)?.code;
           if (code) {
+            logOauthEvent('code received [profile]', 'Authorization code returned from promptAsync', 'ok');
             // Token exchange is running in the background (hook or `response`
             // effect). Schedule a manual PKCE fallback in case it never lands.
             scheduleCodeExchangeFallback(code);
           } else {
             setIsSyncing(false);
+            isOAuthPendingRef.current = false;
+            logOauthEvent('token missing [profile]', 'promptAsync success but no token or code', 'error');
             Alert.alert(i18n.t('login.googleSignInError'), i18n.t('login.noAccessToken'));
           }
         }
       } else if (res?.type === 'error') {
         setIsSyncing(false);
+        isOAuthPendingRef.current = false;
+        logOauthEvent('exchange failed [profile]', res.error?.message || 'OAuth error in promptAsync', 'error');
         Alert.alert(i18n.t('login.googleSignInError'), i18n.t('extras.oauthError', { error: res.error?.message || 'Unknown error' }));
       } else {
         // cancel / dismiss / locked / anything else — always release the spinner
         setIsSyncing(false);
+        isOAuthPendingRef.current = false;
+        logOauthEvent('browser dismissed [profile]', `Browser closed (${res?.type})`, 'info');
       }
     } catch (err: any) {
+      logOauthEvent('browser error [profile]', err?.message || String(err), 'error');
       console.error('[ProfileScreen] promptAsync error', err);
       setIsSyncing(false);
+      isOAuthPendingRef.current = false;
       Alert.alert(i18n.t('profile.authFailed'), err.message || String(err));
     }
   };
@@ -2333,7 +2447,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
                 </Card>
               </>
-            ) : (settingsView === 'diagnostics' && __DEV__) ? (
+            ) : (settingsView === 'diagnostics' && (developerToolsUnlocked || __DEV__)) ? (
               /* ═══════════════════════════════════════════════════
                  DIAGNOSTICS DEVELOPER SUBVIEW
                  ═══════════════════════════════════════════════════ */
@@ -2341,7 +2455,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 onBack={() => setSettingsView('about')}
                 onRefreshSessions={onRefreshSessions}
               />
-            ) : (settingsView === 'developer' && __DEV__) ? (
+            ) : (settingsView === 'developer' && (developerToolsUnlocked || __DEV__)) ? (
               /* ═══════════════════════════════════════════════════
                  CRASH LOGS DEVELOPER SUBVIEW
                  ═══════════════════════════════════════════════════ */
@@ -2366,14 +2480,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                       <Ionicons name="barbell-outline" size={20} color={colors.accent} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.aboutAppName}>strongerN</Text>
+                      <Text style={styles.aboutAppName}>StrongerN</Text>
                       <Text style={styles.aboutVersion}>{i18n.t('profile.version')}</Text>
                     </View>
                   </Pressable>
                 </Card>
 
                 {/* ── DEVELOPER OPTIONS (Conditionally Shown) ──── */}
-                {(__DEV__ && developerToolsUnlocked) && (
+                {developerToolsUnlocked && (
                   <>
                     <SectionLabel
                       title={i18n.t('profile.developerOptions')}

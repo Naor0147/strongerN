@@ -2799,6 +2799,7 @@ function MainApp() {
           onComplete={handleAuthComplete}
           onGoogleLogin={handleGoogleLogin}
           onRestoreBackup={handleRestoreBackup}
+          isDeveloperModeEnabled={isDeveloperModeEnabled}
         />
       ) : (
         <NavigationContainer key={languageVersion} theme={navigationTheme}>

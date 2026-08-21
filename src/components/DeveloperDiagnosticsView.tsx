@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, Alert, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { colors, font, spacing, radius, shadow, ripple as rippleTokens } from '../theme';
@@ -10,6 +10,13 @@ import {
   restoreAllTombstonedSessions,
   DatabaseDiagnostics,
 } from '../storage/history/repository';
+import {
+  getOauthLogs,
+  clearOauthLogs,
+  subscribeOauthLogs,
+  copyOauthLogsToClipboard,
+  OAuthLogEvent,
+} from '../utils/oauthDiagnostics';
 
 export interface DeveloperDiagnosticsViewProps {
   onBack?: () => void;
@@ -24,6 +31,28 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
   const [diagnostics, setDiagnostics] = useState<DatabaseDiagnostics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [repairing, setRepairing] = useState<boolean>(false);
+  const [oauthLogs, setOauthLogs] = useState<OAuthLogEvent[]>(() => getOauthLogs());
+
+  useEffect(() => {
+    const unsub = subscribeOauthLogs((updated) => {
+      setOauthLogs(updated);
+    });
+    return unsub;
+  }, []);
+
+  const handleCopyOauthLogs = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const ok = copyOauthLogsToClipboard();
+    if (ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(i18n.t('common.info'), i18n.t('login.copiedLogs'));
+    }
+  };
+
+  const handleClearOauthLogs = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    clearOauthLogs();
+  };
 
   const fetchDiagnostics = useCallback(async () => {
     try {
@@ -329,6 +358,66 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
             </Pressable>
           </Card>
 
+          {/* OAuth Diagnostics & Telemetry Log */}
+          <Card padding={spacing.md} style={styles.oauthCard}>
+            <View style={styles.oauthHeader}>
+              <View style={styles.oauthHeaderLeft}>
+                <Ionicons name="logo-google" size={18} color={colors.accent} />
+                <Text style={styles.oauthTitle}>{i18n.t('login.diagnosticsTitle')}</Text>
+              </View>
+              <View style={styles.oauthActions}>
+                <Pressable
+                  style={styles.oauthBtn}
+                  onPress={handleCopyOauthLogs}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Ionicons name="copy-outline" size={13} color={colors.textSecondary} />
+                  <Text style={styles.oauthBtnText}>{i18n.t('login.copyLogs')}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.oauthBtn, { marginLeft: spacing.xs }]}
+                  onPress={handleClearOauthLogs}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Ionicons name="trash-outline" size={13} color={colors.textMuted} />
+                  <Text style={styles.oauthBtnText}>{i18n.t('login.clearLogs')}</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.oauthConsole}>
+              <ScrollView
+                style={styles.oauthScroll}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+              >
+                {oauthLogs.length === 0 ? (
+                  <Text style={styles.oauthEmptyText}>{i18n.t('login.noLogs')}</Text>
+                ) : (
+                  oauthLogs.map((log) => {
+                    const color =
+                      log.level === 'ok'
+                        ? colors.success
+                        : log.level === 'error'
+                        ? colors.error
+                        : colors.accent;
+                    return (
+                      <View key={log.id} style={styles.oauthRow}>
+                        <View style={styles.oauthRowHeader}>
+                          <Text style={styles.oauthTime}>{log.formattedTime}</Text>
+                          <Text style={[styles.oauthStep, { color }]}>{log.step}</Text>
+                        </View>
+                        {log.detail ? (
+                          <Text style={styles.oauthDetail}>{log.detail}</Text>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </Card>
+
           <View style={{ height: spacing.xxl }} />
         </ScrollView>
       )}
@@ -538,6 +627,98 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: font.sizes.md,
     fontFamily: font.bold,
+  },
+
+  // ── OAuth Diagnostics & Telemetry Card ──────────────────────────
+  oauthCard: {
+    marginTop: spacing.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  oauthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  oauthHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  oauthTitle: {
+    color: colors.textPrimary,
+    fontFamily: font.bold,
+    fontSize: font.sizes.sm,
+  },
+  oauthActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  oauthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  oauthBtnText: {
+    color: colors.textSecondary,
+    fontSize: font.sizes.xs,
+    fontFamily: font.medium,
+  },
+  oauthConsole: {
+    backgroundColor: '#07080A',
+    borderRadius: radius.sm,
+    padding: spacing.xs,
+    marginTop: spacing.xs,
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: colors.border + '60',
+  },
+  oauthScroll: {
+    maxHeight: 210,
+  },
+  oauthEmptyText: {
+    color: colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: font.sizes.xs,
+    paddingVertical: spacing.md,
+    textAlign: 'center',
+  },
+  oauthRow: {
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border + '40',
+  },
+  oauthRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  oauthTime: {
+    color: colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 10,
+  },
+  oauthStep: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  oauthDetail: {
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 10,
+    marginTop: 2,
+    paddingLeft: 4,
   },
 });
 
