@@ -868,10 +868,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       if (!ok) {
         Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
       } else {
-        // Provide explicit success feedback in addition to the native share sheet
+        const countForMsg = (typeof totalSessionsCount === 'number' ? totalSessionsCount : sessions?.length || 0);
+        const prettyDate = new Date().toISOString().split('T')[0];
         Alert.alert(
           i18n.t('backup.exportSuccess') || i18n.t('common.success'),
-          i18n.t('backup.exportSuccessMsg', { filename: `strongern_backup_${new Date().toISOString().split('T')[0]}.json`, count: sessions?.length || 0 }) || 'Backup file saved and share sheet opened.',
+          i18n.t('backup.exportSuccessMsg', { filename: `strongern_backup_${prettyDate}.json`, count: countForMsg }) || `Backup file saved and share sheet opened (${countForMsg} workouts).`,
           [
             { text: i18n.t('common.ok'), style: 'default' },
           ]
@@ -948,13 +949,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     const exec = () => {
       const ok = onImportBackup(JSON.stringify(backupData), mode);
       if (ok) {
-        // Slight delay to let App's async SQLite merge finish before counting
-        setTimeout(() => {
-          const msg = mode === 'replace'
-            ? i18n.t('backup.importSuccessMsg', { sessions: stats.sessions, added: stats.sessions, skipped: 0 })
-            : i18n.t('extras.restoreSuccessMsg');
-          Alert.alert(i18n.t('backup.importSuccess') || i18n.t('common.success'), msg);
-        }, 300);
+        const msg = mode === 'replace'
+          ? i18n.t('backup.importSuccessMsg', { sessions: stats.sessions, added: stats.sessions, skipped: 0 })
+          : i18n.t('backup.importSuccessMsg', { sessions: stats.sessions, added: stats.sessions, skipped: 0 }) || i18n.t('extras.restoreSuccessMsg');
+        // SQLite merge is async; show immediate feedback, list will hydrate via App's loadAllSessions listener
+        Alert.alert(i18n.t('backup.importSuccess') || i18n.t('common.success'), msg);
       } else {
         Alert.alert(i18n.t('profile.restoreFailed'), i18n.t('profile.restoreFailedMsg'));
       }
@@ -966,7 +965,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         i18n.t('backup.replaceWarningMsg', { count: stats.sessions }),
         [
           { text: i18n.t('common.cancel'), style: 'cancel' },
-          { text: i18n.t('common.delete'), style: 'destructive', onPress: exec },
+          { text: i18n.t('backup.importReplace'), style: 'destructive', onPress: exec },
         ]
       );
     } else {
@@ -1001,15 +1000,19 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const asset = result.assets[0];
       const fileUri = asset.uri;
 
-      // Read content of picked CSV file
       let csvText = '';
       if (Platform.OS === 'web') {
         const response = await fetch(fileUri);
         csvText = await response.text();
       } else {
-        csvText = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
+        try {
+          csvText = await FileSystem.readAsStringAsync(fileUri, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+        } catch {
+          const resp = await fetch(fileUri);
+          csvText = await resp.text();
+        }
       }
 
       if (!csvText || !csvText.trim()) {

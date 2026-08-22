@@ -22,6 +22,10 @@ export interface BackupData {
   exercisesList: any[];
   primaryMetricsList: any[];
   bodyPartMetricsList: any[];
+  foldersList?: string[];
+  activeProgramId?: string | null;
+  programStartDate?: string | null;
+  lastSynced?: string | null;
   settings: {
     isAutoTimerEnabled: boolean;
     defaultRestDuration: number;
@@ -65,11 +69,14 @@ function sanitizeFilename(name: string): string {
 
 /**
  * Build the canonical backup filename for a user.
+ * Includes time to avoid same-day collisions.
  */
 function buildBackupFilename(username: string): string {
-  const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const now = new Date();
+  const date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const time = now.toISOString().split('T')[1].slice(0, 8).replace(/:/g, ''); // HHMMSS
   const safeName = sanitizeFilename(username || 'User');
-  return `strongern_backup_${safeName}_${date}.json`;
+  return `strongern_backup_${safeName}_${date}_${time}.json`;
 }
 
 export function getBackupStats(data: BackupData | any): BackupStats {
@@ -107,7 +114,14 @@ export async function copyBackupJsonToClipboard(backupData: BackupData): Promise
  * @returns true if file was written (share sheet may have been dismissed), false on write failure
  */
 export async function exportBackupToFile(backupData: BackupData): Promise<boolean> {
-  const json = JSON.stringify(backupData, null, 2);
+  let json: string;
+  try {
+    json = JSON.stringify(backupData, null, 2);
+  } catch (e: any) {
+    console.error('[BackupManager] JSON stringify failed:', e);
+    Alert.alert(i18n.t('backup.invalidBackup'), e?.message || 'Failed to serialize backup data.');
+    return false;
+  }
   const filename = buildBackupFilename(backupData.username);
 
   if (Platform.OS === 'web') {
@@ -124,10 +138,9 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
       return true;
     } catch (e) {
       console.error('[BackupManager] Web download failed:', e);
-      // Fallback: try clipboard
       try {
         await Clipboard.setStringAsync(json);
-        Alert.alert(i18n.t('common.success'), 'Backup copied to clipboard (download failed).');
+        Alert.alert(i18n.t('common.success'), i18n.t('backup.copiedToClipboardFallback') || 'Backup copied to clipboard.');
         return true;
       } catch {}
       return false;
@@ -156,7 +169,7 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
     console.error('[BackupManager] File write failed:', e);
     try {
       await Clipboard.setStringAsync(json);
-      Alert.alert(i18n.t('common.error'), 'Failed to write file, but backup was copied to clipboard.');
+      Alert.alert(i18n.t('common.error'), i18n.t('backup.noWriteClipboardFallback') || 'Failed to write file, but backup was copied to clipboard.');
       return true;
     } catch {}
     Alert.alert(i18n.t('profile.exportFailed'), e?.message || i18n.t('profile.exportFailedMsg'));
@@ -192,26 +205,24 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
 
   // Fallback: RN Share (works better on iOS)
   try {
-    const result = await Share.share(
+    await Share.share(
       Platform.OS === 'ios'
         ? { url: filePath, title: filename, message: `strongerN backup — ${backupData.exportedAt}` } as any
-        : { title: filename, message: `strongerN backup saved to ${filePath}\n\n${json.slice(0, 800)}...` } as any,
+        : { title: filename, message: i18n.t('backup.shareFallbackMsg', { filename, path: filePath }) || `Backup saved to ${filePath}` } as any,
       { dialogTitle: `Share ${filename}` } as any
     );
-    // Any result (shared or dismissed) is success because file exists
     return true;
   } catch (e: any) {
     console.warn('[BackupManager] Share.share fallback failed:', e);
     if (e?.message?.includes('cancel') || e?.message?.includes('dismiss')) {
       return true;
     }
-    // Last resort: copy to clipboard + tell user where file is
     try {
       await Clipboard.setStringAsync(json);
-      Alert.alert(i18n.t('common.success'), `Backup saved to ${filePath} and copied to clipboard.`);
+      Alert.alert(i18n.t('common.success'), i18n.t('backup.savedAndCopied', { path: filePath }) || `Backup saved to ${filePath} and copied to clipboard.`);
       return true;
     } catch {}
-    return true; // File is still on disk even if share failed
+    return true;
   }
 }
 
@@ -318,6 +329,18 @@ export function parseAndValidateBackupJson(jsonStr: string): BackupData | null {
   return validateBackup(parsed);
 }
 
+function sanitizeSessionsList(list: any): any[] {
+  if (!Array.isArray(list)) return [];
+  return list.filter((s: any) => s && typeof s === 'object' && s.id && s.datetime).map((s: any) => {
+    // Ensure datetime is parseable; if invalid, coerce to now so legacySessionToV2 won't crash
+    const d = new Date(s.datetime);
+    if (isNaN(d.getTime())) {
+      return { ...s, datetime: new Date().toISOString() };
+    }
+    return s;
+  });
+}
+
 /**
  * Validate a parsed backup object and normalize it to BackupData.
  * Handles both v2 format and the legacy v1 format (plain object from handleExportBackup).
@@ -334,18 +357,21 @@ export function validateBackup(parsed: any): BackupData | null {
       Alert.alert(i18n.t('backup.invalidBackup'), i18n.t('backup.missingUserData'));
       return null;
     }
-    // Ensure settings defaults for any missing new keys (forward-compat)
     const s = parsed.settings || {};
     const normalized: BackupData = {
       version: BACKUP_VERSION,
       exportedAt: parsed.exportedAt || new Date().toISOString(),
       username: parsed.username || parsed.user?.name || 'User',
       user: parsed.user,
-      sessionsList: Array.isArray(parsed.sessionsList) ? parsed.sessionsList : [],
+      sessionsList: sanitizeSessionsList(parsed.sessionsList),
       templatesList: Array.isArray(parsed.templatesList) ? parsed.templatesList : [],
       exercisesList: Array.isArray(parsed.exercisesList) ? parsed.exercisesList : [],
       primaryMetricsList: Array.isArray(parsed.primaryMetricsList) ? parsed.primaryMetricsList : [],
       bodyPartMetricsList: Array.isArray(parsed.bodyPartMetricsList) ? parsed.bodyPartMetricsList : [],
+      foldersList: Array.isArray(parsed.foldersList) ? parsed.foldersList : undefined,
+      activeProgramId: parsed.activeProgramId !== undefined ? parsed.activeProgramId : undefined,
+      programStartDate: parsed.programStartDate !== undefined ? parsed.programStartDate : undefined,
+      lastSynced: parsed.lastSynced ?? parsed.exportedAt ?? undefined,
       settings: {
         isAutoTimerEnabled: s.isAutoTimerEnabled ?? true,
         defaultRestDuration: s.defaultRestDuration ?? 90,
@@ -368,8 +394,10 @@ export function validateBackup(parsed: any): BackupData | null {
         isAutoFinishSetEnabled: s.isAutoFinishSetEnabled ?? true,
         isRpeMode: s.isRpeMode ?? true,
         showHypertrophyGoal: s.showHypertrophyGoal ?? false,
+        customAccentColor: s.customAccentColor ?? '#4F8EF7',
+        appTheme: s.appTheme ?? 'default',
         // Preserve any extra custom keys (future-proof)
-        ...Object.fromEntries(Object.entries(s).filter(([k]) => !['isAutoTimerEnabled','defaultRestDuration','soundSetCompleted','soundWorkoutFinished','soundTimerCompleted','soundVolume','isPlateCalculatorEnabled','isProgramsEnabled','isHistoryEnabled','isMusclesEnabled','enableRoutineFolders','showAchievementBadges','showSummaryWidgets','showWeeklyTonnage','showWorkoutsChart','showHighlights','animationSpeed','isProgressiveOverloadEnabled','isAutoFinishSetEnabled','isRpeMode','showHypertrophyGoal'].includes(k))),
+        ...Object.fromEntries(Object.entries(s).filter(([k]) => !['isAutoTimerEnabled','defaultRestDuration','soundSetCompleted','soundWorkoutFinished','soundTimerCompleted','soundVolume','isPlateCalculatorEnabled','isProgramsEnabled','isHistoryEnabled','isMusclesEnabled','enableRoutineFolders','showAchievementBadges','showSummaryWidgets','showWeeklyTonnage','showWorkoutsChart','showHighlights','animationSpeed','isProgressiveOverloadEnabled','isAutoFinishSetEnabled','isRpeMode','showHypertrophyGoal','customAccentColor','appTheme'].includes(k))),
       },
     };
     return normalized;
@@ -378,19 +406,25 @@ export function validateBackup(parsed: any): BackupData | null {
   // Legacy v1 format (produced by old handleExportBackup): has user, sessionsList etc. at root
   if (parsed.user && (parsed.sessionsList !== undefined || parsed.exercisesList !== undefined)) {
     const username = parsed.user?.name || parsed.username || 'User';
-    // Settings may be nested under `settings` or flat on root (old exports)
     const flat = parsed.settings ? { ...parsed, ...parsed.settings } : parsed;
     const src = flat;
+    const extraLegacy = parsed.settings
+      ? Object.fromEntries(Object.entries(parsed.settings).filter(([k]) => !['isAutoTimerEnabled','defaultRestDuration','soundSetCompleted','soundWorkoutFinished','soundTimerCompleted','soundVolume','isPlateCalculatorEnabled','isProgramsEnabled','isHistoryEnabled','isMusclesEnabled','enableRoutineFolders','showAchievementBadges','showSummaryWidgets','showWeeklyTonnage','showWorkoutsChart','showHighlights','animationSpeed','isProgressiveOverloadEnabled','isAutoFinishSetEnabled','isRpeMode','showHypertrophyGoal','customAccentColor','appTheme'].includes(k)))
+      : {};
     return {
       version: BACKUP_VERSION,
       exportedAt: parsed.exportedAt || parsed.exportTimestamp || parsed.timestamp || new Date().toISOString(),
       username,
       user: parsed.user,
-      sessionsList: parsed.sessionsList || [],
-      templatesList: parsed.templatesList || [],
-      exercisesList: parsed.exercisesList || [],
-      primaryMetricsList: parsed.primaryMetricsList || [],
-      bodyPartMetricsList: parsed.bodyPartMetricsList || [],
+      sessionsList: sanitizeSessionsList(parsed.sessionsList),
+      templatesList: Array.isArray(parsed.templatesList) ? parsed.templatesList : [],
+      exercisesList: Array.isArray(parsed.exercisesList) ? parsed.exercisesList : [],
+      primaryMetricsList: Array.isArray(parsed.primaryMetricsList) ? parsed.primaryMetricsList : [],
+      bodyPartMetricsList: Array.isArray(parsed.bodyPartMetricsList) ? parsed.bodyPartMetricsList : [],
+      foldersList: Array.isArray(parsed.foldersList) ? parsed.foldersList : Array.isArray((parsed as any).foldersList) ? (parsed as any).foldersList : undefined,
+      activeProgramId: parsed.activeProgramId !== undefined ? parsed.activeProgramId : undefined,
+      programStartDate: parsed.programStartDate !== undefined ? parsed.programStartDate : undefined,
+      lastSynced: parsed.lastSynced ?? parsed.timestamp ?? undefined,
       settings: {
         isAutoTimerEnabled: src.isAutoTimerEnabled ?? true,
         defaultRestDuration: src.defaultRestDuration ?? 90,
@@ -413,6 +447,9 @@ export function validateBackup(parsed: any): BackupData | null {
         isAutoFinishSetEnabled: src.isAutoFinishSetEnabled ?? true,
         isRpeMode: src.isRpeMode ?? true,
         showHypertrophyGoal: src.showHypertrophyGoal ?? false,
+        customAccentColor: src.customAccentColor ?? '#4F8EF7',
+        appTheme: src.appTheme ?? 'default',
+        ...extraLegacy,
       },
     };
   }
@@ -436,6 +473,10 @@ export function buildBackupData(params: {
   primaryMetricsList: any[];
   bodyPartMetricsList: any[];
   settings: any;
+  foldersList?: string[];
+  activeProgramId?: string | null;
+  programStartDate?: string | null;
+  lastSynced?: string | null;
 }): BackupData {
   return {
     version: BACKUP_VERSION,
@@ -447,6 +488,10 @@ export function buildBackupData(params: {
     exercisesList: params.exercisesList,
     primaryMetricsList: params.primaryMetricsList,
     bodyPartMetricsList: params.bodyPartMetricsList,
+    foldersList: params.foldersList,
+    activeProgramId: params.activeProgramId,
+    programStartDate: params.programStartDate,
+    lastSynced: params.lastSynced,
     settings: params.settings,
   };
 }

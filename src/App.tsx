@@ -1650,6 +1650,8 @@ function MainApp() {
 
       isRpeMode,
       showHypertrophyGoal,
+      appTheme,
+      customAccentColor,
     };
     const backupData = buildBackupData({
       username: user.name,
@@ -1663,6 +1665,10 @@ function MainApp() {
       primaryMetricsList,
       bodyPartMetricsList,
       settings,
+      foldersList,
+      activeProgramId,
+      programStartDate,
+      lastSynced,
     });
     return exportBackupToFile(backupData);
   };
@@ -1848,6 +1854,17 @@ function MainApp() {
         else setBodyPartMetricsList(prev => mergeMetricsListFn(prev || [], parsed.bodyPartMetricsList));
       }
       if (parsed.lastSynced) setLastSynced(parsed.lastSynced);
+      // Restore folders & program state (top-level v2 fields)
+      if (parsed.foldersList && Array.isArray(parsed.foldersList)) {
+        if (mode === 'replace') setFoldersList(parsed.foldersList);
+        else setFoldersList(prev => {
+          const merged = [...prev];
+          parsed.foldersList.forEach((f: string) => { if (!merged.includes(f)) merged.push(f); });
+          return merged;
+        });
+      }
+      if (parsed.activeProgramId !== undefined) setActiveProgramId(parsed.activeProgramId);
+      if (parsed.programStartDate !== undefined) setProgramStartDate(parsed.programStartDate);
       // Apply settings from v2 format (nested under `settings`) or v1 format (flat)
       const s = parsed.settings || parsed;
       if (s.isAutoTimerEnabled !== undefined) setIsAutoTimerEnabled(s.isAutoTimerEnabled);
@@ -1872,6 +1889,22 @@ function MainApp() {
       if (s.isAutoFinishSetEnabled !== undefined) setIsAutoFinishSetEnabled(s.isAutoFinishSetEnabled);
       if (s.isKeyboardDismissOnNextEnabled !== undefined) { /* always-on, ignored */ }
       if (s.isRpeMode !== undefined) setIsRpeMode(s.isRpeMode);
+      if (s.customAccentColor !== undefined) setCustomAccentColor(s.customAccentColor);
+      if (s.appTheme !== undefined) {
+        setAppThemeState(s.appTheme);
+        try {
+          const { applyTheme } = require('./theme');
+          applyTheme(s.appTheme, s.customAccentColor || customAccentColor);
+          setThemeVersion(v => v + 1);
+        } catch {}
+      } else if (s.customAccentColor !== undefined) {
+        // Theme color changed but theme name stayed same — re-apply
+        try {
+          const { applyTheme } = require('./theme');
+          applyTheme(appTheme, s.customAccentColor);
+          setThemeVersion(v => v + 1);
+        } catch {}
+      }
       return true;
     } catch (e) {
       console.warn('Error applying backup data', e);
