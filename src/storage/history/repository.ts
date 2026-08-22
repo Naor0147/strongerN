@@ -129,10 +129,68 @@ export function reconcileSessions(sessions: WorkoutSessionV2[]): Promise<void> {
 }
 
 export function bulkImportSessions(sessions: WorkoutSessionV2[]): Promise<void> {
+  if (sessions.length < 60) {
+    return enqueueWrite(async () => {
+      const db = await requireDb();
+      await transaction(db, async () => {
+        for (const session of sessions) await writeSession(db, session);
+      });
+    });
+  }
+  return bulkImportSessionsBatched(sessions);
+}
+
+async function bulkImportSessionsBatched(sessions: WorkoutSessionV2[]): Promise<void> {
   return enqueueWrite(async () => {
     const db = await requireDb();
     await transaction(db, async () => {
-      for (const session of sessions) await writeSession(db, session);
+      // Batch workout_sessions 50 rows per INSERT (50*13=650 <999)
+      for (let i = 0; i < sessions.length; i += 50) {
+        const chunk = sessions.slice(i, i + 50);
+        const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+        const values: any[] = [];
+        for (const s of chunk) {
+          // Light validation bypass for seed (already validated)
+          values.push(s.id, s.title, s.titleNorm, s.startedAtMs, s.endedAtMs, s.durationSec, s.comment, s.totalVolumeMilliKg, s.prs, s.createdAtMs, s.updatedAtMs, s.revision, s.deletedAtMs);
+        }
+        await db.runAsync(
+          `INSERT INTO workout_sessions (id, title, title_norm, started_at_ms, ended_at_ms, duration_sec, comment, total_volume_milli_kg, prs, created_at_ms, updated_at_ms, revision, deleted_at_ms) VALUES ${placeholders} ON CONFLICT(id) DO UPDATE SET title=excluded.title, title_norm=excluded.title_norm, started_at_ms=excluded.started_at_ms, ended_at_ms=excluded.ended_at_ms, duration_sec=excluded.duration_sec, comment=excluded.comment, total_volume_milli_kg=excluded.total_volume_milli_kg, prs=excluded.prs, updated_at_ms=excluded.updated_at_ms, revision=excluded.revision, deleted_at_ms=excluded.deleted_at_ms;`,
+          values
+        );
+      }
+      // Collect exercises and sets for batched inserts
+      const allEx: any[] = [];
+      const allSets: any[] = [];
+      const sessionIds: string[] = [];
+      for (const s of sessions) {
+        sessionIds.push(s.id);
+        for (const ex of s.exercises) {
+          allEx.push([ex.id, s.id, ex.exerciseId, ex.nameSnapshot, ex.nameNorm, ex.variationKey, ex.position, ex.supersetGroupId, ex.note]);
+          for (const st of ex.sets) {
+            allSets.push([st.id, ex.id, st.position, st.category, st.completed ? 1 : 0, st.weightMilliKg, st.reps, st.rpeTenths, st.isUnilateral ? 1 : 0, st.leftWeightMilliKg, st.leftReps, st.rightWeightMilliKg, st.rightReps]);
+          }
+        }
+      }
+      if (sessionIds.length > 0) {
+        // Delete existing exercises for these sessions (seed is new but keep for idempotency, batched)
+        for (let i = 0; i < sessionIds.length; i += 180) {
+          const chunk = sessionIds.slice(i, i + 180);
+          const ph = chunk.map(() => '?').join(',');
+          await db.runAsync(`DELETE FROM session_exercises WHERE session_id IN (${ph});`, chunk);
+        }
+      }
+      for (let i = 0; i < allEx.length; i += 90) {
+        const chunk = allEx.slice(i, i + 90);
+        const ph = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+        const vals = chunk.flat();
+        await db.runAsync(`INSERT INTO session_exercises (id, session_id, exercise_id, name_snapshot, name_norm, variation_key, position, superset_group_id, note) VALUES ${ph};`, vals);
+      }
+      for (let i = 0; i < allSets.length; i += 70) {
+        const chunk = allSets.slice(i, i + 70);
+        const ph = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
+        const vals = chunk.flat();
+        await db.runAsync(`INSERT INTO set_logs (id, session_exercise_id, position, category, completed, weight_milli_kg, reps, rpe_tenths, is_unilateral, left_weight_milli_kg, left_reps, right_weight_milli_kg, right_reps) VALUES ${ph};`, vals);
+      }
     });
   });
 }

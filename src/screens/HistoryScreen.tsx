@@ -292,9 +292,11 @@ const SessionCard: React.FC<{
     </Pressable>
   );
 }, (prev, next) =>
-  // Short-circuit re-render when session identity and PR count are unchanged
   prev.session.id === next.session.id &&
   prev.session.prs === next.session.prs &&
+  prev.session.totalVolumeKg === next.session.totalVolumeKg &&
+  prev.session.durationMinutes === next.session.durationMinutes &&
+  prev.session.exercises === next.session.exercises &&
   prev.onResumeWorkout === next.onResumeWorkout
 );
 
@@ -661,12 +663,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
             removeClippedSubviews={true}
-            initialNumToRender={5}
-            maxToRenderPerBatch={4}
-            updateCellsBatchingPeriod={50}
-            windowSize={7}
-            onEndReached={() => { if (isHydrating && onLoadMore) onLoadMore(); }}
-            onEndReachedThreshold={0.4}
+            initialNumToRender={8}
+            maxToRenderPerBatch={6}
+            updateCellsBatchingPeriod={30}
+            windowSize={3}
+            onEndReached={() => { if (onLoadMore && sessions.length < (totalSessionsCount ?? Infinity)) onLoadMore(); }}
+            onEndReachedThreshold={0.5}
             refreshControl={
               (onRefreshSessions || onRefresh) ? (
                 <RefreshControl
