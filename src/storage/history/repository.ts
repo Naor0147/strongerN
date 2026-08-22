@@ -661,6 +661,35 @@ export async function loadLifetimeSetsStats(exerciseMuscleMap?: Record<string, s
   return summary;
 }
 
+export async function loadWeeklyMuscleStats(exerciseMuscleMap?: Record<string, string>): Promise<Record<string, number>> {
+  const db = await requireDb();
+  const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const rows: any[] = await db.getAllAsync(`
+    SELECT 
+      se.name_snapshot AS name_snapshot,
+      se.name_norm AS name_norm,
+      COUNT(sl.id) AS completed_sets
+    FROM set_logs sl
+    JOIN session_exercises se ON se.id = sl.session_exercise_id
+    JOIN workout_sessions ws ON ws.id = se.session_id
+    WHERE ws.deleted_at_ms IS NULL AND sl.completed = 1 AND ws.started_at_ms >= ?
+    GROUP BY se.name_norm;
+  `, [cutoffMs]);
+
+  const muscleSets: Record<string, number> = {};
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const nameNorm = row.name_norm || normalizeLookupKey(row.name_snapshot || '');
+    const count = Number(row.completed_sets || 0);
+    if (!nameNorm || count <= 0) continue;
+    const muscle = (exerciseMuscleMap && exerciseMuscleMap[nameNorm])
+      ? (exerciseMuscleMap[nameNorm] === 'Core' ? 'Abs' : exerciseMuscleMap[nameNorm])
+      : exerciseNameToMuscle(row.name_snapshot || nameNorm);
+    muscleSets[muscle] = (muscleSets[muscle] || 0) + count;
+  }
+  return muscleSets;
+}
+
 export async function getDatabaseDiagnostics(): Promise<DatabaseDiagnostics> {
   let isReady = false;
   let activeSessionsCount = 0;

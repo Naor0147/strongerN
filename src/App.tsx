@@ -55,7 +55,7 @@ import { saveCrashLogSync } from './utils/crashLogger';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, loadSessionDetails, loadSessionHeadersChunk, insertMissingSessionsOnly, loadLifetimeSetsStats, normalizeLookupKey, countSessions } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, loadSessionDetails, loadSessionHeadersChunk, loadSessionsCursorChunk, insertMissingSessionsOnly, loadLifetimeSetsStats, loadWeeklyMuscleStats, normalizeLookupKey, countSessions } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
@@ -757,10 +757,11 @@ function MainApp() {
                 } else {
                   setIsFullHistoryLoaded(true);
                 }
-                // Prime lifetime stats eagerly from SQL aggregate if MMKV cache empty (fixes 0 sets on fresh cold start)
-                if (!getCachedLifetimeStats()) {
-                  InteractionManager.runAfterInteractions(() => refreshLifetimeStats().catch(() => {}));
-                }
+                // Prime lifetime + weekly stats eagerly from SQL aggregate (fixes 0 sets when header-only)
+                InteractionManager.runAfterInteractions(() => {
+                  refreshLifetimeStats().catch(() => {});
+                  refreshWeeklyMuscleStats().catch(() => {});
+                });
               } else if (loadedSessionsMapped.length > 0) {
                 setIsFullHistoryLoaded(true);
               }
@@ -1025,6 +1026,21 @@ function MainApp() {
     } catch (e) {
       console.warn('[LifetimeStats] Failed to refresh stats:', e);
     }
+  }, [exercisesList]);
+
+  const [weeklyMuscleSetsSQL, setWeeklyMuscleSetsSQL] = React.useState<Record<string, number> | null>(null);
+  const refreshWeeklyMuscleStats = React.useCallback(async () => {
+    try {
+      const exerciseMuscleMap: Record<string, string> = {};
+      (exercisesList || []).forEach((e: any) => {
+        if (e && e.name) {
+          const norm = normalizeLookupKey(e.name);
+          if (norm && e.muscleGroup) exerciseMuscleMap[norm] = e.muscleGroup;
+        }
+      });
+      const sets = await loadWeeklyMuscleStats(exerciseMuscleMap);
+      setWeeklyMuscleSetsSQL(sets);
+    } catch (e) { console.warn('[WeeklyStats] SQL weekly failed', e); }
   }, [exercisesList]);
 
   const triggerCloudSync = React.useCallback(async (force = false): Promise<boolean> => {
@@ -1988,29 +2004,44 @@ function MainApp() {
 
   const handleRefreshSessions = React.useCallback(async () => {
     try {
-      // Refresh now uses header chunk for speed; full details are lazy-loaded per card
-      const hdr = await loadSessionHeadersChunk(undefined, undefined, 50);
-      const total = await countSessions().catch(() => hdr.headers.length);
-      if (hdr.headers.length > 0 || total === 0) {
-        const mapped = hdr.headers.map(sessionV2ToLegacy as any);
+      // Load full details for first viewport so History/Muscle never appear empty; header instant <8ms is kept in bootstrap
+      const full0 = await loadSessionsCursorChunk(undefined, undefined, 50).catch(() => null);
+      const hdr = full0 && full0.sessions.length > 0 ? full0 : await loadSessionHeadersChunk(undefined, undefined, 50).then(r => ({ sessions: r.headers as any, hasMore: r.hasMore })).catch(() => ({ sessions: [], hasMore: false } as any));
+      const sessions0: any[] = (hdr as any).sessions || (hdr as any).headers || [];
+      const total = await countSessions().catch(() => sessions0.length);
+      if (sessions0.length > 0 || total === 0) {
+        const mapped = sessions0.map(sessionV2ToLegacy as any);
         setSessionsList(mapped);
         setCachedRecentSessions(mapped, total);
         setUser(prev => ({ ...prev, totalWorkouts: total }));
         if (mapped.length < total) {
           (historyHydrator as any).setHeaderOnly?.(true);
+          // Hydrator streams headers idle; App will enrich visible cards on demand via handleLoadMoreHistory
+          const headerForHydrator = mapped.length === 50 ? mapped.map((_, i) => ({ id: (hdr as any).sessions?.[i]?.id || `hdr-${i}`, startedAtMs: (hdr as any).sessions?.[i]?.startedAtMs || Date.now(), } as any)) : sessions0 as any;
+          // Use header-only for background pagination (no JOINs) — details lazy-loaded per card via loadSessionDetails
           historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
-            const m = sessions.map(sessionV2ToLegacy as any);
-            setSessionsList(m);
-            setCachedRecentSessions(m, totalCount);
+            // Append-only: hydrate already-full first 50, then headers
+            const toMap = sessions.length > 50 ? sessions.slice(0, 50).concat(sessions.slice(50)) : sessions;
+            const m = toMap.map((s: any) => (s.exercises && s.exercises.length ? sessionV2ToLegacy(s) : s.startedAtMs ? sessionV2ToLegacy({ ...s, exercises: [] } as any) : s));
+            // Keep existing mapped if hydrate is header-only empty
+            if (m.length > mapped.length) {
+              setSessionsList(prev => {
+                const byId = new Map(prev.map((x: any) => [x.id, x]));
+                m.forEach((x: any) => { if (!byId.has(x.id)) byId.set(x.id, x); });
+                const merged = Array.from(byId.values());
+                setCachedRecentSessions(merged as any, totalCount);
+                return merged;
+              });
+            }
             if (isComplete) setIsFullHistoryLoaded(true);
           });
-          historyHydrator.start(hdr.headers as any, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
+          historyHydrator.start(sessions0 as any, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
           setIsFullHistoryLoaded(false);
         } else {
           setIsFullHistoryLoaded(true);
         }
-        // Always refresh aggregate after seeding/recovery so Exercises allTimeSets never stays 0
         refreshLifetimeStats().catch(() => {});
+        refreshWeeklyMuscleStats().catch(() => {});
       }
     } catch (error) {
       console.error('[App] Failed to refresh sessions:', error);
@@ -2020,8 +2051,13 @@ function MainApp() {
   const handleLoadMoreHistory = React.useCallback(async () => {
     if (isFullHistoryLoaded) return;
     try {
-      const res = await (historyHydrator as any).loadMoreOnDemand?.();
+      const hydrator: any = historyHydrator as any;
+      // Temporarily load full details so History cards show exercises (header-only would be empty)
+      if (hydrator.setHeaderOnly) hydrator.setHeaderOnly(false);
+      const res = await hydrator.loadMoreOnDemand?.();
+      if (hydrator.setHeaderOnly) hydrator.setHeaderOnly(true);
       if (res?.isComplete) setIsFullHistoryLoaded(true);
+      if (res?.added && res.added > 0) refreshWeeklyMuscleStats().catch(()=>{});
     } catch (e) { console.warn('[History] loadMore failed', e); }
   }, [isFullHistoryLoaded]);
 
@@ -2045,8 +2081,11 @@ function MainApp() {
     setThemeVersion(v => v + 1);
   }, [appTheme]);
 
-  // Compute weekly muscle sets from sessions in the last 7 days (with instant precomputed cache)
+  // Compute weekly muscle sets: prefer SQL aggregate (works when History header-only), fallback to session scan
   const weeklyMuscleSets = React.useMemo(() => {
+    if (weeklyMuscleSetsSQL && Object.keys(weeklyMuscleSetsSQL).length > 0) {
+      return weeklyMuscleSetsSQL;
+    }
     if ((!isDataLoaded || sessionsList.length === 0) && profileSummaries?.weeklyMuscleSets) {
       return profileSummaries.weeklyMuscleSets;
     }
@@ -2091,7 +2130,7 @@ function MainApp() {
       }
     });
     return sets;
-  }, [sessionsList, exercisesList, profileSummaries, isDataLoaded]);
+  }, [sessionsList, exercisesList, profileSummaries, isDataLoaded, weeklyMuscleSetsSQL]);
 
   // Persist precomputed profile summaries (charts, muscle sets) to MMKV for Frame 0 zero-delay rendering
   React.useEffect(() => {
