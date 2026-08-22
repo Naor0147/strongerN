@@ -39,10 +39,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import i18n, { switchLanguage } from '../utils/i18n';
 import { I18nManager } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Clipboard from 'expo-clipboard';
 import { ProfileSkeleton } from '../components/ui/Skeleton';
 
 
-import { pickAndReadBackupFile } from '../utils/backupManager';
+import { pickAndReadBackupFile, getBackupStats, parseAndValidateBackupJson, copyBackupJsonToClipboard } from '../utils/backupManager';
 import {
   scheduleDailyWorkoutReminders,
   cancelDailyWorkoutReminders,
@@ -111,7 +112,7 @@ interface ProfileScreenProps {
   onGoogleLogout:        () => void;
   onCloudSync:           () => Promise<boolean> | boolean;
   onUpdateUser?:         (name: string) => void;
-  onImportBackup?:       (backupStr: string) => boolean;
+  onImportBackup?:       (backupStr: string, mode?: 'merge' | 'replace') => boolean;
   onImportStrongCSV?:    (csvText: string) => { importedCount: number; addedExercisesCount: number };
   onExportBackup?:       () => Promise<boolean>;
   onExportCSV?:          () => string;
@@ -857,17 +858,29 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
 
   // File-based export
+  const [isExporting, setIsExporting] = useState(false);
   const handleExportJson = async () => {
-    if (onExportBackup) {
-      try {
-        const ok = await onExportBackup();
-        if (!ok) {
-          Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
-        }
-        // Success message is shown by the native Share sheet / download trigger
-      } catch (e: any) {
-        Alert.alert(i18n.t('profile.exportError'), e.message || 'An error occurred during export.');
+    if (!onExportBackup) return;
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const ok = await onExportBackup();
+      if (!ok) {
+        Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
+      } else {
+        // Provide explicit success feedback in addition to the native share sheet
+        Alert.alert(
+          i18n.t('backup.exportSuccess') || i18n.t('common.success'),
+          i18n.t('backup.exportSuccessMsg', { filename: `strongern_backup_${new Date().toISOString().split('T')[0]}.json`, count: sessions?.length || 0 }) || 'Backup file saved and share sheet opened.',
+          [
+            { text: i18n.t('common.ok'), style: 'default' },
+          ]
+        );
       }
+    } catch (e: any) {
+      Alert.alert(i18n.t('profile.exportError'), e?.message || 'An error occurred during export.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -918,9 +931,58 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           },
         },
         {
+          text: i18n.t('profile.importStrongCsv'),
+          onPress: handleImportStrongCSV,
+        },
+        {
           text: i18n.t('common.cancel'),
           style: 'cancel',
         },
+      ]
+    );
+  };
+
+  const doImportWithMode = (backupData: any, mode: 'merge' | 'replace') => {
+    if (!onImportBackup) return;
+    const stats = getBackupStats(backupData);
+    const exec = () => {
+      const ok = onImportBackup(JSON.stringify(backupData), mode);
+      if (ok) {
+        // Slight delay to let App's async SQLite merge finish before counting
+        setTimeout(() => {
+          const msg = mode === 'replace'
+            ? i18n.t('backup.importSuccessMsg', { sessions: stats.sessions, added: stats.sessions, skipped: 0 })
+            : i18n.t('extras.restoreSuccessMsg');
+          Alert.alert(i18n.t('backup.importSuccess') || i18n.t('common.success'), msg);
+        }, 300);
+      } else {
+        Alert.alert(i18n.t('profile.restoreFailed'), i18n.t('profile.restoreFailedMsg'));
+      }
+    };
+
+    if (mode === 'replace') {
+      Alert.alert(
+        i18n.t('backup.replaceWarningTitle'),
+        i18n.t('backup.replaceWarningMsg', { count: stats.sessions }),
+        [
+          { text: i18n.t('common.cancel'), style: 'cancel' },
+          { text: i18n.t('common.delete'), style: 'destructive', onPress: exec },
+        ]
+      );
+    } else {
+      exec();
+    }
+  };
+
+  const showImportPreview = (backupData: any) => {
+    const stats = getBackupStats(backupData);
+    Alert.alert(
+      i18n.t('backup.importPreviewTitle'),
+      i18n.t('backup.importPreviewMsg', { sessions: stats.sessions, templates: stats.templates, exercises: stats.exercises }),
+      [
+        { text: i18n.t('common.cancel'), style: 'cancel' },
+        { text: i18n.t('backup.importMerge'), onPress: () => doImportWithMode(backupData, 'merge') },
+        { text: i18n.t('backup.importReplace'), style: 'destructive', onPress: () => doImportWithMode(backupData, 'replace') },
       ]
     );
   };
@@ -970,44 +1032,25 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  // File-picker-based import
+  // File-picker-based import with preview (merge vs replace)
   const handleImportFromFile = async () => {
     try {
       const backupData = await pickAndReadBackupFile();
       if (!backupData) return; // User cancelled or invalid file (alert shown)
-
-      if (onImportBackup) {
-        // Convert to legacy string format for existing handler (which calls applyBackupData)
-        const ok = onImportBackup(JSON.stringify(backupData));
-        if (ok) {
-          Alert.alert(
-            i18n.t('common.success'),
-            i18n.t('extras.restoreSuccessMsg')
-          );
-        } else {
-          Alert.alert(i18n.t('profile.restoreFailed'), i18n.t('profile.restoreFailedMsg'));
-        }
-      }
+      showImportPreview(backupData);
     } catch (e: any) {
-      Alert.alert(i18n.t('profile.importError'), e.message || i18n.t('extras.importErrorMsg'));
+      Alert.alert(i18n.t('profile.importError'), e?.message || i18n.t('extras.importErrorMsg'));
     }
   };
 
   const handleImportSubmit = () => {
-    if (!pastedBackup.trim()) {
-      Alert.alert(i18n.t('common.error'), i18n.t('profile.pasteBackupFirst'));
-      return;
-    }
-    if (onImportBackup) {
-      const ok = onImportBackup(pastedBackup.trim());
-      if (ok) {
-        setPastedBackup('');
-        setIsBackupPanelVisible(false);
-        Alert.alert(i18n.t('common.success'), i18n.t('profile.profileRestored'));
-      } else {
-        Alert.alert(i18n.t('common.error'), i18n.t('profile.invalidBackupFormat'));
-      }
-    }
+    const validated = parseAndValidateBackupJson(pastedBackup);
+    if (!validated) return;
+    setIsBackupPanelVisible(false);
+    // Keep text for potential retry but clear after preview choice
+    showImportPreview(validated);
+    // Clear paste field after successful preview invocation (actual import happens on user choice)
+    setTimeout(() => setPastedBackup(''), 400);
   };
 
   // Phone switch simulation
@@ -1491,7 +1534,21 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     selectTextOnFocus
                   />
                   <Pressable
-                    style={styles.submitBtn}
+                    style={[styles.submitBtn, { backgroundColor: colors.accent }]}
+                    onPress={async () => {
+                      try {
+                        await Clipboard.setStringAsync(backupText);
+                        Alert.alert(i18n.t('profile.copied'), i18n.t('profile.copiedMsg'));
+                      } catch {
+                        Alert.alert(i18n.t('common.error'), 'Copy failed');
+                      }
+                    }}
+                    android_ripple={rippleTokens.accent}
+                  >
+                    <Text style={styles.submitBtnText}>{i18n.t('common.copy')}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.submitBtn, { marginTop: spacing.sm }]}
                     onPress={() => {
                       setIsBackupPanelVisible(false);
                       Alert.alert(i18n.t('profile.copied'), i18n.t('profile.copiedMsg'));
@@ -1802,10 +1859,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Card padding={spacing.md}>
                   {/* Export row */}
                   <Pressable
-                    style={styles.settingRow}
+                    style={[styles.settingRow, isExporting && { opacity: 0.6 }]}
                     onPress={handleExportPress}
                     android_ripple={rippleTokens.surface}
                     accessibilityLabel="Export workouts and settings data"
+                    disabled={isExporting}
                   >
                     <View style={styles.settingInfo}>
                       <View style={[styles.backupIconCircle, { backgroundColor: colors.accent + '22' }]}>
@@ -1818,7 +1876,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         </Text>
                       </View>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    {isExporting ? (
+                      <ActivityIndicator size="small" color={colors.accent} />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    )}
                   </Pressable>
 
                   <View style={styles.settingDivider} />

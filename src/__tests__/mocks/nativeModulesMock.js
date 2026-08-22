@@ -211,8 +211,11 @@ require('react-native-gesture-handler/jestSetup');
 // Mock expo-file-system/legacy
 jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file:///mock-documents/',
+  cacheDirectory: 'file:///mock-cache/',
   writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
   readAsStringAsync: jest.fn().mockResolvedValue('{}'),
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: false }),
+  getContentUriAsync: jest.fn().mockResolvedValue('content://mock/uri'),
   EncodingType: { UTF8: 'utf8' },
 }));
 
@@ -241,6 +244,30 @@ jest.mock('expo-application', () => ({
   nativeBuildVersion: '1',
   applicationName: 'StrongerN',
   applicationId: 'com.strongern',
+}));
+
+// Mock expo-sharing
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  shareAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock expo-clipboard
+jest.mock('expo-clipboard', () => ({
+  setStringAsync: jest.fn().mockResolvedValue(undefined),
+  getStringAsync: jest.fn().mockResolvedValue(''),
+  hasStringAsync: jest.fn().mockResolvedValue(false),
+}));
+
+// Mock expo-file-system additional methods
+jest.mock('expo-file-system', () => ({
+  documentDirectory: 'file:///mock-documents/',
+  cacheDirectory: 'file:///mock-cache/',
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue('{}'),
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: false }),
+  getContentUriAsync: jest.fn().mockResolvedValue('content://mock/uri'),
+  EncodingType: { UTF8: 'utf8' },
 }));
 
 

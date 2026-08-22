@@ -1,7 +1,9 @@
-import { Platform, Share, Clipboard, InteractionManager, AppState } from 'react-native';
+import { Platform, Share, InteractionManager, AppState } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import * as Application from 'expo-application';
+import * as Sharing from 'expo-sharing';
+import * as Clipboard from 'expo-clipboard';
 
 export interface CrashLog {
   id: string;
@@ -407,6 +409,24 @@ export async function exportCrashLogsToFile(): Promise<boolean> {
       encoding: FileSystem.EncodingType.UTF8,
     });
 
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        let shareUri = filePath;
+        if (Platform.OS === 'android') {
+          try { shareUri = await FileSystem.getContentUriAsync(filePath); } catch {}
+        }
+        await Sharing.shareAsync(shareUri, {
+          mimeType: 'application/json',
+          dialogTitle: filename,
+          UTI: 'public.json',
+        });
+        return true;
+      }
+    } catch (e: any) {
+      if (e?.message?.includes('cancel') || e?.message?.includes('dismiss')) return true;
+      console.warn('[CrashLogger] Sharing failed, falling back to Share', e);
+    }
+
     await Share.share({
       title: filename,
       url: filePath,
@@ -433,7 +453,12 @@ Version: ${log.version}
 Stack Trace:
 ${log.stack}`;
 
-  Clipboard.setString(formatted);
+  try {
+    Clipboard.setStringAsync(formatted);
+  } catch {
+    // fallback sync if needed
+    (Clipboard as any).setString?.(formatted);
+  }
 }
 
 // Global hook registration

@@ -1683,10 +1683,10 @@ function MainApp() {
     return JSON.stringify(data);
   };
 
-  const handleImportBackup = (backupStr: string): boolean => {
+  const handleImportBackup = (backupStr: string, mode: 'merge' | 'replace' = 'merge'): boolean => {
     try {
       const parsed = JSON.parse(backupStr);
-      return applyBackupData(parsed);
+      return applyBackupData(parsed, mode);
     } catch (e) {
       console.warn('Error importing backup', e);
       return false;
@@ -1694,7 +1694,7 @@ function MainApp() {
   };
 
   /** Shared logic to apply any parsed backup object (used by both paste-import and file-restore) */
-  const applyBackupData = (parsed: any): boolean => {
+  const applyBackupData = (parsed: any, mode: 'merge' | 'replace' = 'merge'): boolean => {
     try {
       if (parsed.user) {
         setUser({
@@ -1709,63 +1709,144 @@ function MainApp() {
         }));
         if (historyRepositoryReadyRef.current) {
           const v2Restored = restoredSessions.map((s: any, idx: number) => legacySessionToV2(s, idx));
-          insertMissingSessionsOnly(v2Restored)
-            .then(async () => {
-              const fullSessions = await loadAllSessions();
-              const fullLegacy = fullSessions.map(sessionV2ToLegacy);
-              setSessionsList(fullLegacy);
-              setCachedRecentSessions(fullLegacy, fullLegacy.length);
-              setIsFullHistoryLoaded(true);
-              setUser(prev => ({ ...prev, totalWorkouts: fullLegacy.length }));
-              refreshLifetimeStats().catch(() => {});
-            })
-            .catch((err) => {
-              console.error('[HistoryRepository] Backup restore merge failed:', err);
-              const local = sessionsList || [];
-              const merged = [...local];
-              restoredSessions.forEach((rs: any) => {
-                if (!merged.some(ls => ls.id === rs.id)) merged.push(rs);
+          if (mode === 'replace') {
+            reconcileSessions(v2Restored as any)
+              .then(async () => {
+                const fullSessions = await loadAllSessions();
+                const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+                setSessionsList(fullLegacy);
+                setCachedRecentSessions(fullLegacy, fullLegacy.length);
+                setIsFullHistoryLoaded(true);
+                setUser(prev => ({ ...prev, totalWorkouts: fullLegacy.length }));
+                refreshLifetimeStats().catch(() => {});
+                refreshWeeklyMuscleStats().catch(() => {});
+              })
+              .catch((err) => {
+                console.error('[HistoryRepository] Backup restore replace failed:', err);
+                // Fallback to merge path
+                const local = sessionsListRefStable.current || sessionsList || [];
+                const merged = [...local];
+                restoredSessions.forEach((rs: any) => {
+                  if (!merged.some((ls: any) => ls.id === rs.id)) merged.push(rs);
+                });
+                merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+                setSessionsList(merged);
+                setCachedRecentSessions(merged, merged.length);
+                setIsFullHistoryLoaded(true);
+                refreshLifetimeStats().catch(() => {});
               });
-              merged.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-              setSessionsList(merged);
-              setCachedRecentSessions(merged, merged.length);
-              setIsFullHistoryLoaded(true);
-              refreshLifetimeStats().catch(() => {});
-            });
+          } else {
+            insertMissingSessionsOnly(v2Restored)
+              .then(async () => {
+                const fullSessions = await loadAllSessions();
+                const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+                setSessionsList(fullLegacy);
+                setCachedRecentSessions(fullLegacy, fullLegacy.length);
+                setIsFullHistoryLoaded(true);
+                setUser(prev => ({ ...prev, totalWorkouts: fullLegacy.length }));
+                refreshLifetimeStats().catch(() => {});
+                refreshWeeklyMuscleStats().catch(() => {});
+              })
+              .catch((err) => {
+                console.error('[HistoryRepository] Backup restore merge failed:', err);
+                const local = sessionsListRefStable.current || sessionsList || [];
+                const merged = [...local];
+                restoredSessions.forEach((rs: any) => {
+                  if (!merged.some((ls: any) => ls.id === rs.id)) merged.push(rs);
+                });
+                merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+                setSessionsList(merged);
+                setCachedRecentSessions(merged, merged.length);
+                setIsFullHistoryLoaded(true);
+                refreshLifetimeStats().catch(() => {});
+              });
+          }
         } else {
-          const local = sessionsList || [];
-          const merged = [...local];
-          restoredSessions.forEach((rs: any) => {
-            if (!merged.some(ls => ls.id === rs.id)) merged.push(rs);
-          });
-          merged.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-          setSessionsList(merged);
-          setCachedRecentSessions(merged, merged.length);
-          setIsFullHistoryLoaded(true);
-          refreshLifetimeStats().catch(() => {});
+          if (mode === 'replace') {
+            const sorted = [...restoredSessions].sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+            setSessionsList(sorted);
+            setCachedRecentSessions(sorted, sorted.length);
+            setIsFullHistoryLoaded(true);
+            setUser(prev => ({ ...prev, totalWorkouts: sorted.length }));
+            refreshLifetimeStats().catch(() => {});
+          } else {
+            const local = sessionsListRefStable.current || sessionsList || [];
+            const merged = [...local];
+            restoredSessions.forEach((rs: any) => {
+              if (!merged.some((ls: any) => ls.id === rs.id)) merged.push(rs);
+            });
+            merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+            setSessionsList(merged);
+            setCachedRecentSessions(merged, merged.length);
+            setIsFullHistoryLoaded(true);
+            refreshLifetimeStats().catch(() => {});
+          }
         }
       }
+      // Templates: merge vs replace
       if (parsed.templatesList) {
-        setTemplatesList(parsed.templatesList.map((t: any) => ({
+        const incoming = parsed.templatesList.map((t: any) => ({
           ...t,
-          lastUsed: new Date(t.lastUsed)
-        })));
+          lastUsed: t.lastUsed ? new Date(t.lastUsed) : new Date(),
+        }));
+        if (mode === 'replace') {
+          setTemplatesList(incoming);
+        } else {
+          setTemplatesList(prev => {
+            const existingIds = new Set(prev.map((p: any) => p.id));
+            const toAdd = incoming.filter((t: any) => !existingIds.has(t.id));
+            return toAdd.length > 0 ? [...toAdd, ...prev] : prev;
+          });
+        }
       }
+      // Exercises: merge vs replace
       if (parsed.exercisesList) {
-        const loadedIds = new Set();
-        const uniqueLoaded = parsed.exercisesList.map((e: any) => {
-          if (!e.id || loadedIds.has(e.id)) {
-            const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-            loadedIds.add(newId);
-            return { ...e, id: newId };
-          }
-          loadedIds.add(e.id);
-          return e;
-        });
-        setExercisesList(uniqueLoaded);
+        const incomingRaw: any[] = parsed.exercisesList;
+        if (mode === 'replace') {
+          const loadedIds = new Set<string>();
+          const uniqueLoaded = incomingRaw.map((e: any) => {
+            if (!e.id || loadedIds.has(e.id)) {
+              const newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+              loadedIds.add(newId);
+              return { ...e, id: newId };
+            }
+            loadedIds.add(e.id);
+            return e;
+          });
+          setExercisesList(uniqueLoaded);
+          exercisesListRef.current = uniqueLoaded;
+        } else {
+          setExercisesList(prev => {
+            const existingIds = new Set(prev.map((p: any) => p.id));
+            const existingNames = new Set(prev.map((p: any) => (p.name || '').toLowerCase().trim()));
+            const toAdd: any[] = [];
+            const seenIds = new Set<string>(existingIds);
+            for (const e of incomingRaw) {
+              const nameKey = (e.name || '').toLowerCase().trim();
+              if (e.id && seenIds.has(e.id)) continue;
+              if (nameKey && existingNames.has(nameKey)) continue;
+              let newId = e.id;
+              if (!newId || seenIds.has(newId)) {
+                newId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+              }
+              seenIds.add(newId);
+              existingNames.add(nameKey);
+              toAdd.push({ ...e, id: newId });
+            }
+            const merged = toAdd.length > 0 ? [...toAdd, ...prev] : prev;
+            exercisesListRef.current = merged;
+            return merged;
+          });
+        }
       }
-      if (parsed.primaryMetricsList) setPrimaryMetricsList(parsed.primaryMetricsList);
-      if (parsed.bodyPartMetricsList) setBodyPartMetricsList(parsed.bodyPartMetricsList);
+      if (parsed.primaryMetricsList) {
+        if (mode === 'replace') setPrimaryMetricsList(parsed.primaryMetricsList);
+        else setPrimaryMetricsList(prev => mergeMetricsListFn(prev || [], parsed.primaryMetricsList));
+      }
+      if (parsed.bodyPartMetricsList) {
+        if (mode === 'replace') setBodyPartMetricsList(parsed.bodyPartMetricsList);
+        else setBodyPartMetricsList(prev => mergeMetricsListFn(prev || [], parsed.bodyPartMetricsList));
+      }
       if (parsed.lastSynced) setLastSynced(parsed.lastSynced);
       // Apply settings from v2 format (nested under `settings`) or v1 format (flat)
       const s = parsed.settings || parsed;
