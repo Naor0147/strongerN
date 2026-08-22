@@ -153,18 +153,21 @@ export function computeEnrichedExercises(
     }
   });
 
+  // Compact cache is authoritative: if provided (even 0), prefer it — fixes 0-sets bug when sessions are header-only/partial
+  const hasCache = lifetimeExerciseSets && typeof lifetimeExerciseSets === 'object' && Object.keys(lifetimeExerciseSets).length > 0;
   return exercises.map(ex => {
     const exKey = getNormalizedKey(ex.name);
-    let cachedAllTime = 0;
+    let cachedAllTime: number | null = null;
     if (lifetimeExerciseSets && lifetimeExerciseSets[exKey] !== undefined) {
       const entry = lifetimeExerciseSets[exKey];
-      cachedAllTime = typeof entry === 'number' ? entry : (entry?.sets || 0);
+      cachedAllTime = typeof entry === 'number' ? entry : (entry?.sets ?? 0);
     }
-
+    // If cache authoritative, use it (even 0); otherwise fall back to session scan (for offline/no-sqlite)
+    const resolvedAllTime = hasCache ? (cachedAllTime ?? 0) : (cachedAllTime !== null ? cachedAllTime : (allTimeCounts[exKey] || 0));
     return {
       ...ex,
       weeklySets: weeklyCounts[exKey] || 0,
-      allTimeSets: cachedAllTime > 0 ? cachedAllTime : (allTimeCounts[exKey] || 0),
+      allTimeSets: resolvedAllTime,
     };
   });
 }

@@ -6,7 +6,7 @@
  */
 
 import { InteractionManager } from 'react-native';
-import { loadSessionsCursorChunk, countSessions } from './repository';
+import { loadSessionsCursorChunk, loadSessionHeadersChunk, countSessions } from './repository';
 import { WorkoutSessionV2 } from '../contracts/types';
 import { mergeSessionChunks } from './sessionMerge';
 
@@ -35,9 +35,20 @@ export class HistoryHydrator {
   private retryCount = 0;
   private maxRetries = 3;
   private retryDelays = [1000, 4000, 10000];
+  private headerOnly = false;
+  private paused = false;
 
-  constructor(options?: { chunkSize?: number }) {
+  constructor(options?: { chunkSize?: number; headerOnly?: boolean }) {
     if (options?.chunkSize) this.chunkSize = options.chunkSize;
+    if (options?.headerOnly) this.headerOnly = options.headerOnly;
+  }
+
+  public setHeaderOnly(v: boolean): void { this.headerOnly = v; }
+  public pause(): void { this.paused = true; }
+  public resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this.isRunning && this.phase === 'hydrating') this.scheduleNextChunk();
   }
 
   public subscribe(listener: HydrationListener): () => void {
@@ -57,13 +68,15 @@ export class HistoryHydrator {
 
   public async start(
     initialSessions?: WorkoutSessionV2[],
-    isDeleted?: (id: string) => boolean
+    isDeleted?: (id: string) => boolean,
+    options?: { headerOnly?: boolean }
   ): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
     this.isCancelled = false;
     this.retryCount = 0;
     this.isDeletedCheck = isDeleted || null;
+    if (options?.headerOnly !== undefined) this.headerOnly = options.headerOnly;
 
     if (initialSessions && initialSessions.length > 0) {
       this.accumulatedSessions = isDeleted
@@ -100,17 +113,31 @@ export class HistoryHydrator {
       this.isRunning = false;
       return;
     }
+    if (this.paused) {
+      // retry shortly when resumed
+      setTimeout(() => { if (!this.isCancelled && !this.paused) this.scheduleNextChunk(); }, 250);
+      return;
+    }
 
-    InteractionManager.runAfterInteractions(() => {
-      setTimeout(async () => {
-        if (this.isCancelled) {
-          this.isRunning = false;
-          return;
-        }
+    const idleFn = (typeof (global as any).requestIdleCallback === 'function')
+      ? (cb: () => void) => (global as any).requestIdleCallback(cb, { timeout: 200 })
+      : (cb: () => void) => InteractionManager.runAfterInteractions(() => setTimeout(cb, 16));
 
-        await this.loadChunk();
-      }, 16);
+    idleFn(async () => {
+      if (this.isCancelled || this.paused) {
+        if (this.paused) return;
+        this.isRunning = false;
+        return;
+      }
+      await this.loadChunk();
     });
+  }
+
+  public async loadMoreOnDemand(): Promise<{ added: number; isComplete: boolean }> {
+    if (this.isCancelled || this.paused) return { added: 0, isComplete: this.phase === 'complete' };
+    const before = this.accumulatedSessions.length;
+    await this.loadChunk();
+    return { added: this.accumulatedSessions.length - before, isComplete: this.phase === 'complete' };
   }
 
   private async loadChunk(): Promise<void> {
@@ -130,11 +157,17 @@ export class HistoryHydrator {
       }
 
       const startTime = Date.now();
-      const { sessions: chunk, hasMore } = await loadSessionsCursorChunk(
-        lastStartedAtMs,
-        lastId,
-        this.chunkSize
-      );
+      let chunk: WorkoutSessionV2[] = [];
+      let hasMore = false;
+      if (this.headerOnly) {
+        const res = await loadSessionHeadersChunk(lastStartedAtMs, lastId, this.chunkSize);
+        chunk = res.headers as any;
+        hasMore = res.hasMore;
+      } else {
+        const res = await loadSessionsCursorChunk(lastStartedAtMs, lastId, this.chunkSize);
+        chunk = res.sessions;
+        hasMore = res.hasMore;
+      }
       const durationMs = Date.now() - startTime;
 
       // Adaptive throttle: if query took > 8ms, decrease chunk size
@@ -152,7 +185,16 @@ export class HistoryHydrator {
         ? chunk.filter(s => !this.isDeletedCheck!(s.id))
         : chunk;
 
-      this.accumulatedSessions = mergeSessionChunks(this.accumulatedSessions, filteredChunk);
+      // Append-only fast path when ids don't collide (common), else dedup merge
+      if (filteredChunk.length > 0) {
+        const existingIds = new Set(this.accumulatedSessions.map(s => s.id));
+        const hasOverlap = filteredChunk.some(s => existingIds.has(s.id));
+        if (!hasOverlap) {
+          this.accumulatedSessions = [...this.accumulatedSessions, ...filteredChunk];
+        } else {
+          this.accumulatedSessions = mergeSessionChunks(this.accumulatedSessions, filteredChunk);
+        }
+      }
       this.retryCount = 0; // Reset retry count on successful load
 
       const isComplete = !hasMore || filteredChunk.length === 0 || this.accumulatedSessions.length >= this.totalCount;

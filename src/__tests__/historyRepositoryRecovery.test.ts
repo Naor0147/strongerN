@@ -214,10 +214,12 @@ describe('History Repository Recovery & Diagnostics Engine', () => {
         sourceFingerprint: 'fastpath-valid',
       }));
 
-      // Initial load returns 1 session, countTombstoned returns 5, second load returns 2 sessions
+      // Header path: after restore returns 2 sessions (active + healed)
+      jest.spyOn(repository, 'loadSessionHeadersChunk')
+        .mockResolvedValue({ headers: [activeSession, restoredSession] as any, hasMore: false });
       jest.spyOn(repository, 'loadAllSessions')
-        .mockResolvedValueOnce([activeSession])
-        .mockResolvedValueOnce([activeSession, restoredSession]);
+        .mockResolvedValue([activeSession, restoredSession] as any);
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(2);
 
       const countSpy = jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(5);
       const restoreSpy = jest.spyOn(repository, 'restoreAllTombstonedSessions').mockResolvedValue(5);

@@ -504,6 +504,9 @@ describe('Milestone 3 Challenger - Empirical Adversarial Test Suite', () => {
         sourceFingerprint: 'fast-path-fp',
         verifiedAtMs: 1786687000000,
       }));
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [createMockSession('fast-1')] as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([createMockSession('fast-1')]);
 
       const result = await bootstrapPersistence({ user: { name: 'FastUser' } }, null);

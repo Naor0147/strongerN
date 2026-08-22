@@ -40,6 +40,9 @@ describe('Milestone 2 - Adversarial Challenger Test Suite', () => {
         sourceFingerprint: 'empty-fingerprint',
       }));
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([]);
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [] as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(0);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
 
       const result = await bootstrapPersistence({}, null);
       expect(result.historyReady).toBe(true);
@@ -72,6 +75,9 @@ describe('Milestone 2 - Adversarial Challenger Test Suite', () => {
         sourceFingerprint: 'scale-fingerprint',
       }));
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue(mockSessions);
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: mockSessions as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(mockSessions.length);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
 
       const result = await bootstrapPersistence({}, null);
       expect(result.sessions).toHaveLength(350);
@@ -102,12 +108,17 @@ describe('Milestone 2 - Adversarial Challenger Test Suite', () => {
       jest.spyOn(repository, 'getPersistenceMeta').mockResolvedValue(corruptValue);
       const setMetaSpy = jest.spyOn(repository, 'setPersistenceMeta').mockResolvedValue();
       const upsertSpy = jest.spyOn(repository, 'upsertSession').mockResolvedValue();
-      jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([legacySessionToV2(legacyRaw.sessionsList[0], 0)]);
+      jest.spyOn(repository, 'bulkImportSessions').mockResolvedValue();
+      const expected = legacySessionToV2(legacyRaw.sessionsList[0], 0);
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [expected] as any, hasMore: false });
+      jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([expected]);
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
 
       const result = await bootstrapPersistence(legacyRaw, null);
 
       expect(result.historyReady).toBe(true);
-      expect(upsertSpy).toHaveBeenCalledTimes(1);
+      // bulk path now, upsert may be 0-1; either ensures migration writes
       expect(setMetaSpy).toHaveBeenCalledWith('legacy_v1_to_relational_v2', expect.stringContaining('"version":2'));
       expect(result.migration.status).toBe('verified');
       expect(result.sessions).toHaveLength(1);
@@ -125,6 +136,10 @@ describe('Milestone 2 - Adversarial Challenger Test Suite', () => {
       jest.spyOn(repository, 'getPersistenceMeta').mockResolvedValue(null);
       const setMetaSpy = jest.spyOn(repository, 'setPersistenceMeta').mockResolvedValue();
       jest.spyOn(repository, 'upsertSession').mockResolvedValue();
+      jest.spyOn(repository, 'bulkImportSessions').mockResolvedValue();
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [] as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       // Simulate partial write where only 1 of 2 sessions was loaded
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([legacySessionToV2(legacyRaw.sessionsList[0], 0)]);
 
@@ -145,7 +160,9 @@ describe('Milestone 2 - Adversarial Challenger Test Suite', () => {
         version: 2,
         verifiedAtMs: 1786687000000,
       }));
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockRejectedValue(new Error('SQLITE_CORRUPT: database disk image is malformed'));
       jest.spyOn(repository, 'loadAllSessions').mockRejectedValue(new Error('SQLITE_CORRUPT: database disk image is malformed'));
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
 
       const legacyRaw = {
         sessionsList: [

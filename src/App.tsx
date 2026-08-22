@@ -55,7 +55,7 @@ import { saveCrashLogSync } from './utils/crashLogger';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, insertMissingSessionsOnly, loadLifetimeSetsStats, normalizeLookupKey } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, loadSessionDetails, loadSessionHeadersChunk, insertMissingSessionsOnly, loadLifetimeSetsStats, normalizeLookupKey, countSessions } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
@@ -730,23 +730,39 @@ function MainApp() {
             }
 
             if (loadedSessionsMapped !== null) {
+              const totalFromPersistence = (persistence as any).totalCount ?? loadedSessionsMapped.length;
+              const isInitiallyComplete = loadedSessionsMapped.length >= totalFromPersistence || !persistence.historyReady;
               setSessionsList(loadedSessionsMapped);
-              setCachedRecentSessions(loadedSessionsMapped, loadedSessionsMapped.length);
-              setUser(prev => ({ ...prev, totalWorkouts: loadedSessionsMapped!.length }));
-              setIsFullHistoryLoaded(true);
+              setCachedRecentSessions(loadedSessionsMapped, totalFromPersistence);
+              setUser(prev => ({ ...prev, totalWorkouts: totalFromPersistence }));
+              setIsFullHistoryLoaded(isInitiallyComplete);
 
               if (persistence.historyReady && persistence.sessions) {
-                historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
-                  const mapped = sessions.map(sessionV2ToLegacy);
-                  setSessionsList(mapped);
-                  setCachedRecentSessions(mapped, totalCount);
-                  setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
-                  if (isComplete) {
-                    setIsFullHistoryLoaded(true);
-                    refreshLifetimeStats().catch(() => {});
-                  }
-                });
-                historyHydrator.start(persistence.sessions, (id) => deletedIdsRef.current.has(id)).catch(() => {});
+                // If header-only bootstrap already streamed first 50, hydrator fills the rest lazily
+                if (!isInitiallyComplete) {
+                  // Configure hydrator for header-only cursor streaming (no JOINs, <5ms per chunk)
+                  (historyHydrator as any).setHeaderOnly?.(true);
+                  historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
+                    const mapped = sessions.map(sessionV2ToLegacy);
+                    // Append path via hydrator (hydrator already deduped via append fast-path)
+                    setSessionsList(mapped);
+                    setCachedRecentSessions(mapped, totalCount);
+                    setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
+                    if (isComplete) {
+                      setIsFullHistoryLoaded(true);
+                      refreshLifetimeStats().catch(() => {});
+                    }
+                  });
+                  historyHydrator.start(persistence.sessions, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
+                } else {
+                  setIsFullHistoryLoaded(true);
+                }
+                // Prime lifetime stats eagerly from SQL aggregate if MMKV cache empty (fixes 0 sets on fresh cold start)
+                if (!getCachedLifetimeStats()) {
+                  InteractionManager.runAfterInteractions(() => refreshLifetimeStats().catch(() => {}));
+                }
+              } else if (loadedSessionsMapped.length > 0) {
+                setIsFullHistoryLoaded(true);
               }
             }
 
@@ -1093,13 +1109,16 @@ function MainApp() {
     }
   }, [user, sessionsList, templatesList, exercisesList, primaryMetricsList, bodyPartMetricsList, isAutoTimerEnabled, googleUser, isDataLoaded, isFullHistoryLoaded, handleGoogleSessionExpired]);
 
-  // AppState background sync trigger
+  // AppState background sync + hydrator pause/resume (prevents jank during transitions)
   React.useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
+        (historyHydrator as any).pause?.();
         InteractionManager.runAfterInteractions(() => {
           triggerCloudSync(false).catch(() => {});
         });
+      } else if (nextAppState === 'active') {
+        (historyHydrator as any).resume?.();
       }
     });
 
@@ -1969,18 +1988,41 @@ function MainApp() {
 
   const handleRefreshSessions = React.useCallback(async () => {
     try {
-      const loadedSessions = await loadAllSessions();
-      if (loadedSessions) {
-        const mapped = loadedSessions.map(sessionV2ToLegacy);
+      // Refresh now uses header chunk for speed; full details are lazy-loaded per card
+      const hdr = await loadSessionHeadersChunk(undefined, undefined, 50);
+      const total = await countSessions().catch(() => hdr.headers.length);
+      if (hdr.headers.length > 0 || total === 0) {
+        const mapped = hdr.headers.map(sessionV2ToLegacy as any);
         setSessionsList(mapped);
-        setCachedRecentSessions(mapped, mapped.length);
-        setUser(prev => ({ ...prev, totalWorkouts: mapped.length }));
-        setIsFullHistoryLoaded(true);
+        setCachedRecentSessions(mapped, total);
+        setUser(prev => ({ ...prev, totalWorkouts: total }));
+        if (mapped.length < total) {
+          (historyHydrator as any).setHeaderOnly?.(true);
+          historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
+            const m = sessions.map(sessionV2ToLegacy as any);
+            setSessionsList(m);
+            setCachedRecentSessions(m, totalCount);
+            if (isComplete) setIsFullHistoryLoaded(true);
+          });
+          historyHydrator.start(hdr.headers as any, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
+          setIsFullHistoryLoaded(false);
+        } else {
+          setIsFullHistoryLoaded(true);
+        }
+        if (!getCachedLifetimeStats()) refreshLifetimeStats().catch(() => {});
       }
     } catch (error) {
       console.error('[App] Failed to refresh sessions:', error);
     }
   }, []);
+
+  const handleLoadMoreHistory = React.useCallback(async () => {
+    if (isFullHistoryLoaded) return;
+    try {
+      const res = await (historyHydrator as any).loadMoreOnDemand?.();
+      if (res?.isComplete) setIsFullHistoryLoaded(true);
+    } catch (e) { console.warn('[History] loadMore failed', e); }
+  }, [isFullHistoryLoaded]);
 
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
@@ -2329,7 +2371,7 @@ function MainApp() {
     });
   }, [beginActiveWorkout, isProgressiveOverloadEnabled]);
 
-  const handleResumeWorkout = React.useCallback((session: any) => {
+  const handleResumeWorkout = React.useCallback(async (session: any) => {
     if (isWorkoutActive) {
       Alert.alert(
         i18n.t('alerts.workoutActive'),
@@ -2338,8 +2380,17 @@ function MainApp() {
       return;
     }
 
+    // If header-only (exercises empty), lazy-load full details via SQLite without blocking list
+    let fullSession = session;
+    if ((!session.exercises || session.exercises.length === 0) && historyRepositoryReadyRef.current) {
+      try {
+        const detailed = await loadSessionDetails(session.id);
+        if (detailed) fullSession = sessionV2ToLegacy(detailed);
+      } catch (e) { console.warn('[Resume] failed to load details', e); }
+    }
+
     // Map session exercises back to active workout exercises structure
-    const mapped = session.exercises.map((ex: any) => {
+    const mapped = (fullSession.exercises || []).map((ex: any) => {
       return {
         id: ex.id,
         name: ex.name,
@@ -2354,12 +2405,12 @@ function MainApp() {
     });
 
     beginActiveWorkout({
-      workoutName: session.title,
-      startTime: new Date(session.datetime),
+      workoutName: fullSession.title,
+      startTime: new Date(fullSession.datetime),
       workoutExercises: mapped,
       isWorkoutModalVisible: true,
-      activeWorkoutComment: session.comment || '',
-      editingSessionId: session.id,
+      activeWorkoutComment: fullSession.comment || '',
+      editingSessionId: fullSession.id,
     });
   }, [isWorkoutActive, beginActiveWorkout]);
 
@@ -2650,10 +2701,11 @@ function MainApp() {
       onResumeWorkout={handleResumeWorkout}
       onDeleteSession={handleDeleteSession}
       onRefreshSessions={handleRefreshSessions}
+      onLoadMore={handleLoadMoreHistory}
       isHydrating={!isFullHistoryLoaded}
       totalSessionsCount={user.totalWorkouts || sessionsList.length}
     />
-  ), [sessionsList, handleResumeWorkout, handleDeleteSession, handleRefreshSessions, isFullHistoryLoaded, user.totalWorkouts]);
+  ), [sessionsList, handleResumeWorkout, handleDeleteSession, handleRefreshSessions, handleLoadMoreHistory, isFullHistoryLoaded, user.totalWorkouts]);
 
   const workoutScreenElement = React.useMemo(() => {
     return (

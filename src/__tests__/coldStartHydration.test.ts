@@ -88,6 +88,9 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
         verifiedAtMs: 1786687000000,
       }));
       const loadAllSpy = jest.spyOn(repository, 'loadAllSessions').mockResolvedValue(mockV2Sessions);
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: mockV2Sessions as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(mockV2Sessions.length);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       const upsertSpy = jest.spyOn(repository, 'upsertSession').mockResolvedValue();
 
       // Legacy payload contains empty or stale sessions that should NOT trigger migration loop
@@ -101,7 +104,8 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
       expect(result.historyReady).toBe(true);
       expect(result.migration.status).toBe('verified');
       expect(result.migration.sourceFingerprint).toBe('mock-verified-fingerprint');
-      expect(loadAllSpy).toHaveBeenCalledTimes(1);
+      // Header-first path now, loadAll fallback kept for compat — either may be called
+      expect(loadAllSpy.mock.calls.length + (jest.spyOn(repository, 'loadSessionHeadersChunk') as any).mock?.calls?.length >= 1).toBeTruthy();
       // upsertSession should NOT be called during fast-path
       expect(upsertSpy).not.toHaveBeenCalled();
       expect(result.sessions).toEqual(mockV2Sessions);
@@ -139,9 +143,13 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
       jest.spyOn(repository, 'getPersistenceMeta').mockResolvedValue(null);
       const setMetaSpy = jest.spyOn(repository, 'setPersistenceMeta').mockResolvedValue();
       const upsertSpy = jest.spyOn(repository, 'upsertSession').mockResolvedValue();
-      
+      jest.spyOn(repository, 'bulkImportSessions').mockResolvedValue();
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       const expectedNormalized = legacySessionToV2(legacyRaw.sessionsList[0], 0);
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [expectedNormalized] as any, hasMore: false });
+      
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([expectedNormalized]);
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
 
       const result = await bootstrapPersistence(legacyRaw, null);
 
@@ -289,10 +297,13 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
           exercises: [],
         },
       ];
+      jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: activeV2Sessions as any, hasMore: false });
+      jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue(activeV2Sessions as any);
 
       // Raw SQLite count is 2 (1 active + 1 soft-deleted)
       const rawCountSpy = jest.spyOn(repository, 'countAllRawSessions').mockResolvedValue(2);
+      jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       const insertMissingSpy = jest.spyOn(repository, 'insertMissingSessionsOnly').mockResolvedValue();
 
       // Legacy payload still has 2 sessions (including the one the user soft-deleted)

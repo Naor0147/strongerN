@@ -46,6 +46,7 @@ interface HistoryScreenProps {
   onDeleteSession: (sessionId: string) => void;
   onRefresh?: () => Promise<void> | void;
   onRefreshSessions?: () => Promise<void> | void;
+  onLoadMore?: () => Promise<void> | void;
   isRefreshing?: boolean;
   isHydrating?: boolean;
   totalSessionsCount?: number;
@@ -304,6 +305,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
   onDeleteSession,
   onRefresh,
   onRefreshSessions,
+  onLoadMore,
   isRefreshing,
   isHydrating,
   totalSessionsCount,
@@ -658,11 +660,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
-            removeClippedSubviews={Platform.OS === 'ios'}
+            removeClippedSubviews={true}
             initialNumToRender={5}
             maxToRenderPerBatch={4}
             updateCellsBatchingPeriod={50}
-            windowSize={5}
+            windowSize={7}
+            onEndReached={() => { if (isHydrating && onLoadMore) onLoadMore(); }}
+            onEndReachedThreshold={0.4}
             refreshControl={
               (onRefreshSessions || onRefresh) ? (
                 <RefreshControl

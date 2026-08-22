@@ -372,6 +372,86 @@ export async function loadSessionsCursorChunk(
   };
 }
 
+export async function loadSessionHeadersChunk(
+  lastStartedAtMs?: number,
+  lastId?: string,
+  limit = 30
+): Promise<{ headers: WorkoutSessionV2[]; hasMore: boolean }> {
+  const db = await requireDb();
+  let query = `SELECT id, title, title_norm, started_at_ms, ended_at_ms, duration_sec, comment, total_volume_milli_kg, prs, created_at_ms, updated_at_ms, revision, deleted_at_ms FROM workout_sessions WHERE deleted_at_ms IS NULL`;
+  const params: any[] = [];
+  if (lastStartedAtMs !== undefined && lastId !== undefined) {
+    query += ` AND (started_at_ms < ? OR (started_at_ms = ? AND id < ?))`;
+    params.push(lastStartedAtMs, lastStartedAtMs, lastId);
+  }
+  query += ` ORDER BY started_at_ms DESC, id DESC LIMIT ?;`;
+  params.push(Math.max(1, Math.min(limit, 5000)));
+  const sessionRows: any[] = await db.getAllAsync(query, params);
+  if (sessionRows.length === 0) return { headers: [], hasMore: false };
+  const headers: WorkoutSessionV2[] = sessionRows.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    titleNorm: row.title_norm,
+    startedAtMs: row.started_at_ms,
+    endedAtMs: row.ended_at_ms ?? null,
+    durationSec: row.duration_sec,
+    comment: row.comment ?? null,
+    totalVolumeMilliKg: row.total_volume_milli_kg,
+    prs: row.prs,
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+    revision: row.revision,
+    deletedAtMs: row.deleted_at_ms ?? null,
+    exercises: [],
+  }));
+  return { headers, hasMore: sessionRows.length === limit };
+}
+
+export async function loadSessionDetails(sessionId: string): Promise<WorkoutSessionV2 | null> {
+  const db = await requireDb();
+  const row: any = await db.getFirstAsync(`SELECT * FROM workout_sessions WHERE id = ? AND deleted_at_ms IS NULL;`, [sessionId]);
+  if (!row) return null;
+  const [exerciseRows, setRows]: [any[], any[]] = await Promise.all([
+    db.getAllAsync(`SELECT * FROM session_exercises WHERE session_id = ? ORDER BY position;`, [sessionId]),
+    db.getAllAsync(`SELECT sl.* FROM set_logs sl JOIN session_exercises se ON se.id = sl.session_exercise_id WHERE se.session_id = ? ORDER BY sl.session_exercise_id, sl.position;`, [sessionId]),
+  ]);
+  const setsByExercise = new Map<string, SetLogV2[]>();
+  for (let i = 0; i < setRows.length; i++) {
+    const r = setRows[i];
+    let list = setsByExercise.get(r.session_exercise_id);
+    if (!list) { list = []; setsByExercise.set(r.session_exercise_id, list); }
+    list.push(mapSetRow(r));
+  }
+  const exercises: SessionExerciseV2[] = exerciseRows.map((r: any) => ({
+    id: r.id,
+    sessionId: r.session_id,
+    exerciseId: r.exercise_id ?? null,
+    nameSnapshot: r.name_snapshot,
+    nameNorm: r.name_norm,
+    variationKey: r.variation_key,
+    position: r.position,
+    supersetGroupId: r.superset_group_id ?? null,
+    note: r.note ?? null,
+    sets: setsByExercise.get(r.id) ?? [],
+  }));
+  return {
+    id: row.id,
+    title: row.title,
+    titleNorm: row.title_norm,
+    startedAtMs: row.started_at_ms,
+    endedAtMs: row.ended_at_ms ?? null,
+    durationSec: row.duration_sec,
+    comment: row.comment ?? null,
+    totalVolumeMilliKg: row.total_volume_milli_kg,
+    prs: row.prs,
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+    revision: row.revision,
+    deletedAtMs: row.deleted_at_ms ?? null,
+    exercises,
+  };
+}
+
 export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
   const sessionRows: any[] = await db.getAllAsync(
