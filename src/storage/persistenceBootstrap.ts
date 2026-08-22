@@ -150,6 +150,30 @@ export async function bootstrapPersistence(
               sessions = headerRes.headers as WorkoutSessionV2[];
             }
           }
+          // Extra heal: if active 0 but raw DB has tombstoned rows, force restore (covers wipe→cold-start)
+          if (totalCount === 0 && sessions.length === 0) {
+            try {
+              const raw = await countAllRawSessions().catch(() => 0);
+              const tomb = raw > 0 ? await countTombstonedSessions().catch(() => 0) : 0;
+              if (tomb > 0) {
+                await restoreAllTombstonedSessions().catch(() => {});
+                totalCount = await countSessions().catch(() => 0);
+                if (totalCount > 0) {
+                  const healed = await loadSessionHeadersChunk(undefined, undefined, 50).catch(() => ({ headers: [] as any, hasMore: false }));
+                  if (healed.headers.length > 0) {
+                    try {
+                      const { loadSessionsCursorChunk } = await import('./history/repository');
+                      const fullRes = await loadSessionsCursorChunk(undefined, undefined, 50).catch(() => ({ sessions: [], hasMore: false } as any));
+                      sessions = fullRes.sessions.length > 0 ? fullRes.sessions : healed.headers as WorkoutSessionV2[];
+                    } catch { sessions = healed.headers as WorkoutSessionV2[]; }
+                  } else {
+                    sessions = await loadAllSessions().catch(() => []) as WorkoutSessionV2[];
+                    totalCount = sessions.length;
+                  }
+                }
+              }
+            } catch {}
+          }
           // Self-healing only when legacy payload has more sessions than SQLite total
           const rawLegacySessions = (legacyAppRaw && typeof legacyAppRaw === 'object')
             ? (legacyAppRaw as any).sessionsList

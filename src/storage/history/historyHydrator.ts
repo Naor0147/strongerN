@@ -114,16 +114,25 @@ export class HistoryHydrator {
       return;
     }
     if (this.paused) {
-      // retry shortly when resumed
       setTimeout(() => { if (!this.isCancelled && !this.paused) this.scheduleNextChunk(); }, 250);
       return;
     }
 
-    const idleFn = (typeof (global as any).requestIdleCallback === 'function')
-      ? (cb: () => void) => (global as any).requestIdleCallback(cb, { timeout: 200 })
-      : (cb: () => void) => InteractionManager.runAfterInteractions(() => setTimeout(cb, 16));
+    // Use direct micro-delay instead of InteractionManager which can stall on
+    // continuous JS animations (Skeleton shimmer) or navigation transitions.
+    // Priority: if requestIdleCallback exists and we are not paused, use it
+    // with short timeout; otherwise plain setTimeout(16) guarantees progress.
+    const schedule = (cb: () => void) => {
+      if (typeof (global as any).requestIdleCallback === 'function') {
+        try {
+          (global as any).requestIdleCallback(cb, { timeout: 50 });
+          return;
+        } catch {}
+      }
+      setTimeout(cb, 16);
+    };
 
-    idleFn(async () => {
+    schedule(async () => {
       if (this.isCancelled || this.paused) {
         if (this.paused) return;
         this.isRunning = false;

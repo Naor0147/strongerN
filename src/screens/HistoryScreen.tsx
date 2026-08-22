@@ -681,12 +681,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
             }
             ListFooterComponent={
               isHydrating ? (
-                <View style={styles.hydratingFooter}>
+                <Pressable
+                  onPress={() => {
+                    if (onRefreshSessions) onRefreshSessions();
+                    else if (onRefresh) (onRefresh as any)();
+                    else if (onLoadMore) onLoadMore();
+                  }}
+                  android_ripple={rippleTokens.surface}
+                  style={styles.hydratingFooter}
+                >
                   <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: spacing.sm }} />
                   <Text style={styles.hydratingFooterText}>
-                    {i18n.t('history.syncingHistory', { defaultValue: 'Syncing history...' })}
+                    {i18n.t('history.syncingHistory', { defaultValue: 'Syncing history...' })} — {i18n.t('common.tapToRetry', { defaultValue: 'Tap to retry' })}
                   </Text>
-                </View>
+                </Pressable>
               ) : null
             }
             ListEmptyComponent={

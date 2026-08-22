@@ -2277,6 +2277,57 @@ function MainApp() {
     finally { isLoadingMoreRef.current = false; }
   }, [isFullHistoryLoaded, sessionsList, refreshWeeklyMuscleStats]);
 
+  // Watchdog + foreground heal for stalled history hydration (defined after handlers to avoid TDZ)
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && historyRepositoryReadyRef.current) {
+        (async () => {
+          try {
+            const { countTombstonedSessions, restoreAllTombstonedSessions, countSessions } = await import('./storage/history/repository');
+            const tomb = await countTombstonedSessions().catch(() => 0);
+            if (tomb > 0) {
+              await restoreAllTombstonedSessions();
+              const total = await countSessions().catch(() => 0);
+              if (total > sessionsListRefStable.current.length) {
+                handleRefreshSessions().catch(() => {});
+              }
+            }
+          } catch {}
+        })();
+      }
+    });
+    return () => sub.remove();
+  }, [handleRefreshSessions]);
+
+  React.useEffect(() => {
+    if (isFullHistoryLoaded || !isDataLoaded || !historyRepositoryReadyRef.current) return;
+    const t = setTimeout(async () => {
+      if (isFullHistoryLoaded) return;
+      const phase = (historyHydrator as any).getPhase?.();
+      const running = (historyHydrator as any).getIsRunning?.();
+      if (phase === 'failed' || !running) {
+        console.warn('[Watchdog] History hydrator stalled (phase:', phase, 'running:', running, ') — forcing refresh');
+        try {
+          await handleRefreshSessions();
+        } catch {
+          try {
+            const all = await loadAllSessions();
+            if (all && all.length > sessionsListRefStable.current.length) {
+              const mapped = all.map(sessionV2ToLegacy as any);
+              setSessionsList(mapped);
+              setCachedRecentSessions(mapped as any, all.length);
+              setIsFullHistoryLoaded(true);
+              setUser(prev => ({ ...prev, totalWorkouts: all.length }));
+            }
+          } catch {}
+        }
+      } else {
+        (historyHydrator as any).resume?.();
+      }
+    }, 12000);
+    return () => clearTimeout(t);
+  }, [isFullHistoryLoaded, isDataLoaded, handleRefreshSessions]);
+
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
   const handleMeasurePress = React.useCallback(() => {

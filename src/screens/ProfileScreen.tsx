@@ -859,6 +859,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // File-based export
   const [isExporting, setIsExporting] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
   const handleExportJson = async () => {
     if (!onExportBackup) return;
     if (isExporting) return;
@@ -1093,6 +1094,38 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         }
       ]
     );
+  };
+
+  const handleRepairHistory = async () => {
+    if (isRepairing) return;
+    setIsRepairing(true);
+    try {
+      const { getDatabaseDiagnostics, restoreAllTombstonedSessions } = await import('../storage/history/repository');
+      const diagBefore = await getDatabaseDiagnostics();
+      if (diagBefore.tombstonedSessionsCount === 0) {
+        if (diagBefore.activeSessionsCount > 0) {
+          Alert.alert(i18n.t('common.info'), i18n.t('developer.diagnostics.noTombstones'));
+        } else {
+          Alert.alert(i18n.t('common.info'), 'No workouts found in database (0 active, 0 hidden). Try importing a backup file.');
+        }
+        return;
+      }
+      const restored = await restoreAllTombstonedSessions();
+      // Refresh UI from DB
+      if (onRefreshSessions) {
+        await onRefreshSessions();
+      }
+      const diagAfter = await getDatabaseDiagnostics().catch(() => null);
+      const total = diagAfter?.activeSessionsCount ?? (diagBefore.activeSessionsCount + restored);
+      Alert.alert(
+        i18n.t('common.success'),
+        `${i18n.t('developer.diagnostics.repairSuccess', { count: restored } as any)} (${total} total)`
+      );
+    } catch (e: any) {
+      Alert.alert(i18n.t('common.error'), e?.message || 'Repair failed');
+    } finally {
+      setIsRepairing(false);
+    }
   };
 
   const handleAppLogoutConfirm = () => {
@@ -1942,6 +1975,33 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   >
                     <Ionicons name="refresh" size={14} color={colors.textSecondary} />
                     <Text style={styles.wipeSimBtnText}>{i18n.t('profile.phoneSwitchSim')}</Text>
+                  </Pressable>
+
+                  <View style={styles.settingDivider} />
+
+                  <Pressable
+                    style={styles.settingRow}
+                    onPress={handleRepairHistory}
+                    android_ripple={rippleTokens.surface}
+                    accessibilityLabel="Repair hidden workout history"
+                    disabled={isRepairing}
+                  >
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.backupIconCircle, { backgroundColor: colors.gold + '22' }]}>
+                        <Ionicons name="construct-outline" size={20} color={colors.gold} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.settingTitle}>{i18n.t('developer.diagnostics.repairButton')}</Text>
+                        <Text style={styles.settingSubtitle}>
+                          {i18n.t('developer.diagnostics.repairDesc' as any, { defaultValue: 'Recover workouts hidden after wipe or failed sync' }) as string}
+                        </Text>
+                      </View>
+                    </View>
+                    {isRepairing ? (
+                      <ActivityIndicator size="small" color={colors.gold} />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    )}
                   </Pressable>
                 </Card>
               </>
