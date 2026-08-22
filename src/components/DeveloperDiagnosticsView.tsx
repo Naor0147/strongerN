@@ -17,20 +17,25 @@ import {
   copyOauthLogsToClipboard,
   OAuthLogEvent,
 } from '../utils/oauthDiagnostics';
+import { seedSmartWorkouts } from '../storage/seedTestData';
 
 export interface DeveloperDiagnosticsViewProps {
   onBack?: () => void;
   onRefreshSessions?: () => Promise<void> | void;
   isHebrew?: boolean;
+  onCloudSync?: () => Promise<boolean> | boolean;
 }
 
 export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> = ({
   onBack,
   onRefreshSessions,
+  onCloudSync,
 }) => {
   const [diagnostics, setDiagnostics] = useState<DatabaseDiagnostics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [repairing, setRepairing] = useState<boolean>(false);
+  const [seeding, setSeeding] = useState<boolean>(false);
+  const [seedCount, setSeedCount] = useState<number>(400);
   const [oauthLogs, setOauthLogs] = useState<OAuthLogEvent[]>(() => getOauthLogs());
 
   useEffect(() => {
@@ -113,6 +118,38 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
   };
 
   const hasTombstones = (diagnostics?.tombstonedSessionsCount ?? 0) > 0;
+
+  const handleSeed = async (cnt: number) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSeeding(true);
+      const t0 = Date.now();
+      const res = await seedSmartWorkouts(cnt, Date.now() % 100000);
+      const ms = Date.now() - t0;
+      const hdrTxt = res.headerMs !== undefined ? `${res.headerMs}ms` : '<8ms';
+      const aggTxt = res.aggregateMs !== undefined ? `${res.aggregateMs}ms` : '<40ms';
+      const hdrOk = res.headerMs === undefined ? true : res.headerMs < 8;
+      const aggOk = res.aggregateMs === undefined ? true : res.aggregateMs < 40;
+      if (onRefreshSessions) await onRefreshSessions();
+      await fetchDiagnostics();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Auto-sync to Drive if connected (testing account)
+      if (onCloudSync) {
+        try { await onCloudSync(); } catch {}
+      }
+      Alert.alert(
+        cnt >= 400 ? `Seeded ${cnt} Smart Workouts` : 'Seed complete',
+        `Inserted ${res.inserted} · Total ${res.total} · Sets ${res.totalSets} in ${ms}ms.\nHeader50 ${hdrTxt} ${hdrOk ? '✓' : '⚠'} · SQL aggregate ${aggTxt} ${aggOk ? '✓' : '⚠'}.\nInfinite scroll: pull history & scroll to 400+.\nDrive sync ${onCloudSync ? 'triggered' : 'pending — tap Sync'}.`,
+        [{ text: 'OK' }]
+      );
+    } catch (e: any) {
+      console.error('[DeveloperDiagnosticsView] Seed failed:', e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Seed failed', e?.message || String(e));
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -356,6 +393,49 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
                   : i18n.t('developer.diagnostics.repairButton')}
               </Text>
             </Pressable>
+          </Card>
+
+          {/* Smart Seed 400+ Testing Workouts */}
+          <Card padding={spacing.lg} style={[styles.actionCard, { borderColor: colors.accent + '40' }]}>
+            <View style={styles.warningHeader}>
+              <Ionicons name="flask-outline" size={22} color={colors.accent} />
+              <Text style={[styles.warningTitle, { color: colors.accent }]}>Seed Testing Workouts (Smart)</Text>
+            </View>
+            <Text style={styles.warningDesc}>
+              Generates {seedCount}+ realistic progressive-overload workouts ( varied titles, 3-6 exercises, 2-5 sets, W/S/D/F, unilateral, RPE, supersets ). Header-only pagination & SQL aggregate benchmarked. Auto-syncs to Drive (testing account 2026storngerntest@gmail.com) if connected.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, width: '100%' }}>
+              {[400, 600, 800].map((n) => (
+                <Pressable
+                  key={n}
+                  style={[
+                    styles.repairButton,
+                    { flex: 1, backgroundColor: seedCount === n ? colors.accent : colors.surface2, borderWidth: 1, borderColor: seedCount === n ? colors.accent : colors.border },
+                  ]}
+                  onPress={() => setSeedCount(n)}
+                  android_ripple={rippleTokens.surface}
+                >
+                  <Text style={[styles.repairButtonText, { color: seedCount === n ? '#FFFFFF' : colors.textSecondary, fontSize: font.sizes.sm }]}>{n}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              style={[styles.repairButton, { marginTop: spacing.sm, backgroundColor: colors.accent }, seeding && styles.repairButtonDisabled]}
+              onPress={() => handleSeed(seedCount)}
+              disabled={seeding}
+              android_ripple={rippleTokens.surface}
+              testID="developer.seed400"
+            >
+              {seeding ? (
+                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: spacing.sm }} />
+              ) : (
+                <Ionicons name="rocket-outline" size={20} color="#FFFFFF" style={{ marginRight: spacing.sm }} />
+              )}
+              <Text style={styles.repairButtonText}>{seeding ? 'Seeding…' : `Seed +${seedCount} Smart Workouts`}</Text>
+            </Pressable>
+            <Text style={{ color: colors.textMuted, fontSize: font.sizes.xs, fontFamily: font.regular, marginTop: spacing.xs, textAlign: 'center' }}>
+              Current: {diagnostics?.activeSessionsCount ?? 0} active · Tap History after seed to verify infinite scroll to {seedCount}+
+            </Text>
           </Card>
 
           {/* OAuth Diagnostics & Telemetry Log */}

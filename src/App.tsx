@@ -2009,7 +2009,8 @@ function MainApp() {
         } else {
           setIsFullHistoryLoaded(true);
         }
-        if (!getCachedLifetimeStats()) refreshLifetimeStats().catch(() => {});
+        // Always refresh aggregate after seeding/recovery so Exercises allTimeSets never stays 0
+        refreshLifetimeStats().catch(() => {});
       }
     } catch (error) {
       console.error('[App] Failed to refresh sessions:', error);

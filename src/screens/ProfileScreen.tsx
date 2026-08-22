@@ -2469,6 +2469,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <DeveloperDiagnosticsView
                 onBack={() => setSettingsView('about')}
                 onRefreshSessions={onRefreshSessions}
+                onCloudSync={onCloudSync}
               />
             ) : (settingsView === 'developer' && (developerToolsUnlocked || __DEV__)) ? (
               /* ═══════════════════════════════════════════════════
