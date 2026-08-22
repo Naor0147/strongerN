@@ -33,6 +33,7 @@ import { colors, font, spacing, radius, ripple as rippleTokens, shadow, globalAn
 import { WorkoutSession, ExerciseSet } from '../data/mockData';
 import i18n from '../utils/i18n';
 import { showToast } from '../utils/toast';
+import { getDatabaseDiagnostics, restoreAllTombstonedSessions } from '../storage/history/repository';
 
 import ScreenHeader from '../components/layout/ScreenHeader';
 import Card         from '../components/ui/Card';
@@ -312,6 +313,52 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
   isHydrating,
   totalSessionsCount,
 }) => {
+  const [diag, setDiag] = useState<any>(null);
+  const [isRepairingHist, setIsRepairingHist] = useState(false);
+
+  // Fetch diagnostics when empty to help user understand why 0
+  useEffect(() => {
+    let cancelled = false;
+    if (sessions.length === 0) {
+      getDatabaseDiagnostics().then((d) => {
+        if (!cancelled) setDiag(d);
+      }).catch(() => {});
+    } else {
+      setDiag(null);
+    }
+    return () => { cancelled = true; };
+  }, [sessions.length, isHydrating, totalSessionsCount]);
+
+  const handleHistoryRepair = async () => {
+    if (isRepairingHist) return;
+    setIsRepairingHist(true);
+    try {
+      const dBefore = await getDatabaseDiagnostics();
+      if (dBefore.tombstonedSessionsCount === 0 && dBefore.activeSessionsCount === 0 && dBefore.rawTotalSessionsCount === 0) {
+        Alert.alert(i18n.t('common.info'), 'No workouts found in database (0 active, 0 hidden). If you wiped data, check Settings → Data Management → Import from backup file or Google Drive.');
+        return;
+      }
+      if (dBefore.tombstonedSessionsCount === 0 && dBefore.activeSessionsCount > 0) {
+        // Active exists but History shows 0 — likely filter or hydrator desync — just refresh
+        if (onRefreshSessions) await onRefreshSessions();
+        else if (onRefresh) await (onRefresh as any)();
+        Alert.alert(i18n.t('common.info'), `Found ${dBefore.activeSessionsCount} active workouts. Refreshed. If still empty, pull to refresh.`);
+        return;
+      }
+      const restored = await restoreAllTombstonedSessions();
+      if (onRefreshSessions) await onRefreshSessions();
+      else if (onRefresh) await (onRefresh as any)();
+      const dAfter = await getDatabaseDiagnostics().catch(() => null);
+      Alert.alert(i18n.t('common.success'), `${i18n.t('developer.diagnostics.repairSuccess', { count: restored } as any)} (${dAfter?.activeSessionsCount ?? restored} total)`);
+      // Refresh diag
+      const d2 = await getDatabaseDiagnostics().catch(() => null);
+      if (d2) setDiag(d2);
+    } catch (e: any) {
+      Alert.alert(i18n.t('common.error'), e?.message || 'Repair failed');
+    } finally {
+      setIsRepairingHist(false);
+    }
+  };
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -706,19 +753,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
                 <Text style={styles.emptySubtitle}>
                   {i18n.t('history.noHistorySubtitle', { defaultValue: 'Start an empty workout or routine to build your training history.' })}
                 </Text>
-                {(onRefreshSessions || onRefresh) && (
-                  <Pressable
-                    onPress={() => (onRefreshSessions ? onRefreshSessions() : (onRefresh as any)?.())}
-                    android_ripple={rippleTokens.surface}
-                    style={styles.repairBtn}
-                  >
+                <Pressable
+                  onPress={handleHistoryRepair}
+                  android_ripple={rippleTokens.surface}
+                  style={[styles.repairBtn, isRepairingHist && { opacity: 0.6 }]}
+                  disabled={isRepairingHist}
+                >
+                  {isRepairingHist ? (
+                    <ActivityIndicator size="small" color={colors.gold} style={{ marginRight: spacing.xs }} />
+                  ) : (
                     <Ionicons name="construct-outline" size={16} color={colors.gold} style={{ marginRight: spacing.xs }} />
-                    <Text style={styles.repairBtnText}>{i18n.t('developer.diagnostics.repairButton')}</Text>
-                  </Pressable>
-                )}
+                  )}
+                  <Text style={styles.repairBtnText}>{isRepairingHist ? i18n.t('developer.diagnostics.repairing') : i18n.t('developer.diagnostics.repairButton')}</Text>
+                </Pressable>
                 <Text style={styles.repairHint}>
                   {i18n.t('developer.diagnostics.repairDesc')}
                 </Text>
+                {diag && (
+                  <View style={styles.diagBox}>
+                    <Text style={styles.diagText}>
+                      DB: {diag.activeSessionsCount} active • {diag.tombstonedSessionsCount} hidden • {diag.rawTotalSessionsCount} raw{'\n'}Cache: {diag.cachedRecentCount}/{diag.cachedTotalCount} • Hydrating: {isHydrating ? 'yes' : 'no'}
+                    </Text>
+                    <Text style={[styles.diagText, { marginTop: 4, color: colors.textMuted }]}>
+                      {diag.isReady ? 'DB ready' : 'DB NOT ready'} • Pull to refresh also heals
+                    </Text>
+                  </View>
+                )}
               </View>
             }
           />
@@ -1105,6 +1165,22 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
     marginTop: spacing.xs,
     textAlign: 'center',
+  },
+  diagBox: {
+    marginTop: spacing.md,
+    padding: spacing.sm,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    width: '100%',
+  },
+  diagText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontFamily: font.medium,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });
 

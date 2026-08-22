@@ -3,6 +3,7 @@ import React from 'react';
 import { View, StyleSheet, Modal, Text, Pressable, Alert, Linking, AppState, ScrollView, Platform, InteractionManager, unstable_batchedUpdates } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system/legacy';
 
 enableFreeze(true);
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -2133,7 +2134,43 @@ function MainApp() {
     setProgramStartDate(programId ? new Date().toISOString() : null);
   }, []);
 
-  const handleWipeAllData = () => {
+  const handleWipeAllData = async () => {
+    // Emergency backup before destructive wipe (so user can restore via file import if needed)
+    try {
+      let currentSessions = sessionsList;
+      if (historyRepositoryReadyRef.current) {
+        try {
+          const full = await loadAllSessions();
+          if (full) currentSessions = full.map(sessionV2ToLegacy);
+        } catch {}
+      }
+      const settings: any = {
+        isAutoTimerEnabled, defaultRestDuration, soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, soundVolume,
+        isProgramsEnabled, isHistoryEnabled, isMusclesEnabled, enableRoutineFolders, showAchievementBadges, showSummaryWidgets, showWeeklyTonnage, showWorkoutsChart, showHighlights, animationSpeed, isProgressiveOverloadEnabled, isAutoFinishSetEnabled, isRpeMode, showHypertrophyGoal, appTheme, customAccentColor,
+      };
+      const backupData = buildBackupData({
+        username: user.name,
+        user: { ...user, totalWorkouts: currentSessions.length },
+        sessionsList: currentSessions,
+        templatesList,
+        exercisesList,
+        primaryMetricsList,
+        bodyPartMetricsList,
+        settings,
+        foldersList,
+        activeProgramId,
+        programStartDate,
+        lastSynced,
+      });
+      const dir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      if (dir) {
+        const fname = `strongern_pre_wipe_backup_${new Date().toISOString().split('T')[0]}_${Date.now()}.json`;
+        const fpath = `${dir}${fname}`;
+        await FileSystem.writeAsStringAsync(fpath, JSON.stringify(backupData, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
+        console.log('[Wipe] Emergency pre-wipe backup saved to', fpath, 'sessions', currentSessions.length);
+      }
+    } catch (e) { console.warn('[Wipe] Emergency backup failed', e); }
+
     setUser({
       name: 'Guest User',
       totalWorkouts: 0,
