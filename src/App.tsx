@@ -2161,6 +2161,17 @@ function MainApp() {
 
   const handleRefreshSessions = React.useCallback(async () => {
     try {
+      // Pre-heal: restore any tombstoned rows before querying (fixes 0-active after wipe)
+      if (historyRepositoryReadyRef.current) {
+        try {
+          const { countTombstonedSessions, restoreAllTombstonedSessions } = await import('./storage/history/repository');
+          const tomb = await countTombstonedSessions().catch(() => 0);
+          if (tomb > 0) {
+            console.log('[Refresh] Auto-healing', tomb, 'tombstoned sessions');
+            await restoreAllTombstonedSessions().catch(() => {});
+          }
+        } catch {}
+      }
       // Prevent subscription leak: release previous listener
       if (hydratorUnsubRef.current) {
         try { hydratorUnsubRef.current(); } catch {}
@@ -2327,6 +2338,36 @@ function MainApp() {
     }, 12000);
     return () => clearTimeout(t);
   }, [isFullHistoryLoaded, isDataLoaded, handleRefreshSessions]);
+
+  // Emergency auto-heal when History shows 0 but DB has hidden/tombstoned rows
+  React.useEffect(() => {
+    if (!isDataLoaded || !historyRepositoryReadyRef.current) return;
+    // Only heal when UI shows empty but we are not still hydrating initial batch
+    if (sessionsList.length !== 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getDatabaseDiagnostics, restoreAllTombstonedSessions } = await import('./storage/history/repository');
+        const diag = await getDatabaseDiagnostics();
+        console.log('[AutoHeal] Diagnostics on empty history:', diag);
+        if (diag.tombstonedSessionsCount > 0) {
+          console.log('[AutoHeal] Restoring', diag.tombstonedSessionsCount, 'tombstoned sessions');
+          const restored = await restoreAllTombstonedSessions();
+          console.log('[AutoHeal] Restored', restored);
+          if (!cancelled) {
+            await handleRefreshSessions();
+          }
+        } else if (diag.rawTotalSessionsCount > 0 && diag.activeSessionsCount === 0) {
+          const restored = await restoreAllTombstonedSessions().catch(() => 0);
+          if (restored > 0 && !cancelled) await handleRefreshSessions();
+        } else if (diag.activeSessionsCount === 0 && diag.cachedTotalCount > 0) {
+          // MMKV cache has count but DB empty — try direct reload
+          await handleRefreshSessions().catch(() => {});
+        }
+      } catch (e) { console.warn('[AutoHeal] failed', e); }
+    })();
+    return () => { cancelled = true; };
+  }, [isDataLoaded, sessionsList.length, isFullHistoryLoaded, handleRefreshSessions]);
 
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);

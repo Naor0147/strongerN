@@ -706,6 +706,19 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
                 <Text style={styles.emptySubtitle}>
                   {i18n.t('history.noHistorySubtitle', { defaultValue: 'Start an empty workout or routine to build your training history.' })}
                 </Text>
+                {(onRefreshSessions || onRefresh) && (
+                  <Pressable
+                    onPress={() => (onRefreshSessions ? onRefreshSessions() : (onRefresh as any)?.())}
+                    android_ripple={rippleTokens.surface}
+                    style={styles.repairBtn}
+                  >
+                    <Ionicons name="construct-outline" size={16} color={colors.gold} style={{ marginRight: spacing.xs }} />
+                    <Text style={styles.repairBtnText}>{i18n.t('developer.diagnostics.repairButton')}</Text>
+                  </Pressable>
+                )}
+                <Text style={styles.repairHint}>
+                  {i18n.t('developer.diagnostics.repairDesc')}
+                </Text>
               </View>
             }
           />
@@ -1069,6 +1082,29 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  repairBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gold + '18',
+    borderColor: colors.gold + '40',
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  repairBtnText: {
+    color: colors.gold,
+    fontSize: font.sizes.sm,
+    fontFamily: font.bold,
+  },
+  repairHint: {
+    color: colors.textMuted,
+    fontSize: font.sizes.xs,
+    fontFamily: font.regular,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
 });
 
