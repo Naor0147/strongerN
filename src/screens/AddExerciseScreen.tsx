@@ -145,12 +145,12 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           const nameLower = ex.name.toLowerCase();
           const muscleLower = (ex.muscleGroup || '').toLowerCase();
           const equipLower = (ex.equipment || '').toLowerCase();
-          
+
           let matchScore = 0;
-          
+
           // Cross-lingual match (English name, Hebrew name, aliases)
           const isCrossLingualMatch = exerciseMatchesQuery(ex.name, q);
-          
+
           let isWordBoundaryMatch = false;
           const isHebrew = /[\u0590-\u05FF]/.test(q);
           if (isHebrew) {
@@ -168,7 +168,7 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
               isWordBoundaryMatch = nameLower.startsWith(q);
             }
           }
-          
+
           if (nameLower === q) {
             matchScore = 10000;
           } else if (nameLower.startsWith(q)) {
@@ -182,16 +182,16 @@ const AddExerciseScreen: React.FC<AddExerciseScreenProps> = ({
           } else if (muscleLower.includes(q) || equipLower.includes(q)) {
             matchScore = 100;
           }
-          
+
           if (matchScore === 0) return null;
-          
+
           const freq = exerciseFrequencies[nameLower.trim()] || 0;
           const totalScore = matchScore + freq;
-          
+
           return { ex, totalScore };
         })
         .filter((item): item is { ex: Exercise; totalScore: number } => item !== null);
-        
+
       scored.sort((a, b) => b.totalScore - a.totalScore);
       return scored.map(item => item.ex);
     } else {

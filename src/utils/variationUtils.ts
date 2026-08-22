@@ -9,7 +9,7 @@ export function normalizeTag(input: any): string {
   if (!input || typeof input !== 'string') return '';
   const trimmed = input.trim().replace(/\s+/g, ' ');
   if (!trimmed) return '';
-  
+
   return trimmed
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -30,12 +30,12 @@ export function isValidTag(tag: string): boolean {
 export function addVariationToExercise(exercise: Exercise, tag: string): Exercise {
   const normalized = normalizeTag(tag);
   if (!normalized || !isValidTag(normalized)) return exercise;
-  
+
   const currentVars = (exercise?.variations || []).filter((v): v is string => Boolean(v && typeof v === 'string'));
   if (currentVars.some(v => v.toLowerCase() === normalized.toLowerCase())) {
     return exercise;
   }
-  
+
   return {
     ...exercise,
     variations: [...currentVars, normalized],
@@ -69,10 +69,10 @@ export function getSessionsForExerciseVariation(
   sessions: WorkoutSession[]
 ): WorkoutSession[] {
   if (!exerciseName || typeof exerciseName !== 'string' || !sessions || !Array.isArray(sessions) || sessions.length === 0) return [];
-  
+
   const normExName = exerciseName.toLowerCase().trim();
   const normVar = (variation && typeof variation === 'string') ? normalizeTag(variation) : undefined;
-  
+
   const isMatchExName = (e: any): boolean => {
     return Boolean(e && typeof e === 'object' && e.name && typeof e.name === 'string' && e.name.toLowerCase().trim() === normExName);
   };
@@ -91,7 +91,7 @@ export function getSessionsForExerciseVariation(
       })
     );
   }
-  
+
   // 2. Look for sessions explicitly matching this variation
   const exactMatches = sessions.filter(s =>
     s && typeof s === 'object' && Array.isArray(s.exercises) && s.exercises.some(e => {
@@ -100,7 +100,7 @@ export function getSessionsForExerciseVariation(
       return vStr !== '' && normalizeTag(vStr) === normVar;
     })
   );
-  
+
   if (exactMatches.length > 0) {
     return exactMatches;
   }
@@ -126,7 +126,7 @@ export function getSessionsForExerciseVariation(
     );
     return baseSessions;
   }
-  
+
   // Subsequent tags start from zero if other tags already have history
   return [];
 }

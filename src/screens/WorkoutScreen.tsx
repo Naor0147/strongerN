@@ -214,7 +214,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
   const [selectedFolderFilter, setSelectedFolderFilter] = useState('All');
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const scrollRef = useAnimatedRef<ScrollView>();
-  
+
   // Filter popover state
   const [isFilterBarVisible, setIsFilterBarVisible] = useState(false);
   // Folder navigation state
@@ -361,7 +361,6 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
       }
     }
   };
-
 
 
   // Calendar program week viewer state
@@ -986,7 +985,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
                   </Pressable>
                 </View>
                 <Text style={styles.activeProgDesc}>{activeProgram.description}</Text>
-                
+
                 {/* Progress bar */}
                 <View style={styles.progressContainer}>
                   <Text style={styles.progressLabel}>{i18n.t('workout.programWeeks', { current: viewingWeek, total: activeProgram.weeks })}</Text>
@@ -1025,7 +1024,7 @@ const WorkoutScreen: React.FC<WorkoutScreenProps> = ({
 
               {/* Weekly Scheduled Training Calendar */}
               <SectionLabel title={i18n.t('workout.weeklyTrainingSchedule')} subtitle={i18n.t('workout.weekBreakdown', { week: viewingWeek })} style={styles.sectionLabel} />
-              
+
               <View style={styles.calendarContainer}>
                 {calendarDays.map((day, idx) => (
                   <View key={day.dayName} style={styles.calendarDayRow}>

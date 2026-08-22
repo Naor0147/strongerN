@@ -27,7 +27,7 @@ export function computeBackupFingerprint(payload: {
   bodyPartMetricsList?: any[];
 }): string {
   const userStr = `${payload.user?.name ?? ''}:${payload.user?.totalWorkouts ?? 0}:${payload.user?.isPro ? 1 : 0}`;
-  
+
   const templates = payload.templatesList || [];
   let templateHash = 0;
   for (let i = 0; i < templates.length; i++) {

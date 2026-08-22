@@ -83,36 +83,7 @@ import { ActiveExerciseRow, ActiveExerciseRowProps } from './ActiveExerciseRow';
 import { ActiveExerciseCard, ActiveExerciseCardProps } from './ActiveExerciseCard';
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const SwipeableRow = SharedSwipeableRow;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
@@ -392,7 +363,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const currentVal = activeExercisesRef.current[ex]?.sets[s]?.[field] ?? '';
     const valStr = String(currentVal);
     tempInputValueRef.current = valStr;
-    
+
     const activeExercise = activeExercisesRef.current[ex];
     const newInput = {
       exIdx: ex,
@@ -489,7 +460,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [windowWidth]);
 
 
-
   // Plate calculator states
   const [isPlateCalcVisible, setIsPlateCalcVisible] = useState(false);
   const [plateCalcTargetWeight, setPlateCalcTargetWeight] = useState('60');
@@ -499,7 +469,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const calculatedPlates = useMemo(() => {
     const target = parseFloat(plateCalcTargetWeight) || 0;
     if (target <= barWeight) return [];
-    
+
     let sideWeight = (target - barWeight) / 2;
     const availablePlates = [
       { size: 25, color: colors.plate25 || colors.error, textColor: colors.textPrimary },
@@ -510,9 +480,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       { size: 2.5, color: colors.surfaceHigh, textColor: colors.textPrimary },
       { size: 1.25, color: colors.borderStrong, textColor: colors.textPrimary },
     ];
-    
+
     const result: typeof availablePlates = [];
-    
+
     for (const plate of availablePlates) {
       while (sideWeight >= plate.size) {
         result.push(plate);
@@ -681,7 +651,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               useRoutineTargets,
             };
           }
- 
+
            return {
              id: (ex as any).id || `ex-${exIdx}-${Date.now()}-${Math.random()}`,
              name: ex.name,
@@ -793,7 +763,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   });
 
 
-
   // Handle custom keyboard "Next" button click
   const handleNextField = useCallback(() => {
     const activeInputVal = activeInputRef.current;
@@ -820,7 +789,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const targetEx = prev[exIdx];
           if (!targetEx.sets[setIdx]) return prev;
           const nextSets = [...targetEx.sets];
-          
+
           let updatedSet = { ...nextSets[setIdx], completed: true };
           if (activeInputVal && activeInputVal.exIdx === exIdx && activeInputVal.setIdx === setIdx) {
             const fName = activeInputVal.fieldName as keyof SetRecord;
@@ -848,7 +817,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               updatedSet.rightReps = (updatedSet as any).suggestedRightReps;
             }
           }
-          
+
           nextSets[setIdx] = updatedSet;
           const nextArr = [...prev];
           nextArr[exIdx] = { ...targetEx, sets: nextSets };
@@ -932,7 +901,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const exercisesForFinish = activeExercisesRef.current;
     let totalVolume = 0;
     let totalSets   = 0;
-    
+
     exercisesForFinish.forEach(ex => {
       ex.sets.forEach(set => {
         if (set.completed) {
@@ -961,11 +930,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
 
     const sessionSec = Math.max(0, Math.floor((Date.now() - resumeStartTime.current.getTime()) / 1000));
-    
+
     // Check if user made any actual changes to the workout
     const currentSerialized = serializeState(exercisesForFinish, workoutNote);
     const hasChanges = currentSerialized !== initialStateRef.current.exercises;
-    
+
     let durationMin = 0;
     if (previousDurationMin > 0 && !hasChanges) {
       durationMin = previousDurationMin;
@@ -979,7 +948,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (onUpdateComment) {
       onUpdateComment(workoutNote.trim());
     }
-    
+
     wasInitializedRef.current = false;
     flushExercisesToParent(exercisesForFinish);
     onFinish({
@@ -1066,7 +1035,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   };
 
 
-
   const handleOpenReplace = () => {
     setIsReplaceMode(true);
     setLibrarySearch('');
@@ -1135,7 +1103,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 >
                   <Ionicons name="chevron-down" size={24} color={colors.textPrimary} />
                 </Pressable>
-                
+
                 <RestTimerHeaderButton
                   isSubMenuVisible={isTimerSubMenuVisible}
                   onToggleSubMenu={() => setIsTimerSubMenuVisible(!isTimerSubMenuVisible)}
@@ -1181,8 +1149,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               </View>
             </View>
-
-
 
 
             {/* ── Scrollable Exercises List ────────────────────────── */}
@@ -1410,7 +1376,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             )}
 
 
-
             {/* ── Global Exercise Picker (replaces old transparent Modal A) ── */}
 
             {/* Modal B: Ellipsis Actions Context Sheet for Active Exercise */}
@@ -1492,13 +1457,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         </Pressable>
                       );
                     })()}
-                    
+
                     {activeExercises[activeExerciseMenuIndex].superSetGroupId ? (
                       <Pressable
                         style={styles.sheetItem}
                         onPress={() => {
                           const targetGroupId = activeExercises[activeExerciseMenuIndex].superSetGroupId;
-                          setActiveExercises(prev => prev.map(ex => 
+                          setActiveExercises(prev => prev.map(ex =>
                             ex.superSetGroupId === targetGroupId ? { ...ex, superSetGroupId: undefined } : ex
                           ));
                           setIsExMenuVisible(false);
@@ -1616,7 +1581,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                               targetUnilateral
                             );
                           }
-                          
+
                           setIsExMenuVisible(false);
                         }
                       }}
@@ -1937,7 +1902,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         <Text style={styles.sheetTitle}>
                           {i18n.t('activeWorkout.defaultRestTimer')}
                         </Text>
-                        
+
                         <Text style={{
                           color: colors.textSecondary,
                           fontSize: font.sizes.xs,
@@ -1967,10 +1932,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 android_ripple={rippleTokens.surface}
                               >
                                 <View style={styles.soundOptionLeft}>
-                                  <Ionicons 
-                                    name="time-outline" 
-                                    size={18} 
-                                    color={isSelected ? colors.accent : colors.textSecondary} 
+                                  <Ionicons
+                                    name="time-outline"
+                                    size={18}
+                                    color={isSelected ? colors.accent : colors.textSecondary}
                                   />
                                   <Text style={[
                                     styles.soundOptionText,
@@ -2053,15 +2018,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     </>
   );
 };
-
-
-
-
-
-
-
-
-
 
 
 export default React.memo(ActiveWorkoutModal);

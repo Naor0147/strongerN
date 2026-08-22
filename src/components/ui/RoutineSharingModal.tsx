@@ -134,7 +134,7 @@ export const RoutineSharingModal: React.FC<RoutineSharingModalProps> = ({
                 <Text style={[styles.instructions, { textAlign: 'center' }]}>
                   {i18n.t('routineSharing.qrCodeDesc')}
                 </Text>
-                
+
                 {/* Real QR Code generated from routine data */}
                 <View style={styles.qrContainer}>
                   <QRCode

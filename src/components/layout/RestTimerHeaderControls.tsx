@@ -38,10 +38,10 @@ export const RestTimerHeaderButton: React.FC<{
       android_ripple={rippleTokens.surface}
       accessibilityLabel={i18n.t('restTimer.toggleA11y', { defaultValue: 'Toggle rest timer' })}
     >
-      <Ionicons 
-        name={timerState.active ? "stopwatch" : "stopwatch-outline"} 
-        size={18} 
-        color={timerState.active ? colors.accent : colors.textPrimary} 
+      <Ionicons
+        name={timerState.active ? "stopwatch" : "stopwatch-outline"}
+        size={18}
+        color={timerState.active ? colors.accent : colors.textPrimary}
       />
       {timerState.active && (
         <Text style={styles.headerRestTimerText}>{timerState.remaining}{i18n.t('restTimer.secShort')}</Text>

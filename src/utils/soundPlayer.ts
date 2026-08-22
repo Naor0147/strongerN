@@ -133,7 +133,7 @@ function getOrCreatePlayer(soundKey: string, source: any) {
 }
 
 /**
- * Native audio player using expo-audio. 
+ * Native audio player using expo-audio.
  * Loads locally-bundled synthesized sound files for offline reliability.
  * Cache is used to guarantee zero latency.
  */
@@ -141,7 +141,7 @@ async function playNativeSound(soundKey: string) {
   try {
     await ensureAudioModeActivated();
     let player;
-    
+
     // Check if it is a built-in asset key
     if (NATIVE_SOUND_ASSETS[soundKey]) {
       player = getOrCreatePlayer(soundKey, NATIVE_SOUND_ASSETS[soundKey]);

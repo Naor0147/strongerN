@@ -55,7 +55,7 @@ import { saveCrashLogSync } from './utils/crashLogger';
 import { useActiveWorkoutStore } from './state/activeWorkoutStore';
 import { bootstrapPersistence } from './storage/persistenceBootstrap';
 import { sessionV2ToLegacy, legacySessionToV2 } from './storage/history/legacySessionMapper';
-import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, loadSessionDetails, loadSessionHeadersChunk, loadSessionsCursorChunk, insertMissingSessionsOnly, loadLifetimeSetsStats, loadWeeklyMuscleStats, normalizeLookupKey, countSessions } from './storage/history/repository';
+import { bulkImportSessions, reconcileSessions, softDeleteSession, upsertSession, loadAllSessions, loadSessionDetails, loadSessionHeadersChunk, loadSessionsCursorChunk, loadSessionsByIds, insertMissingSessionsOnly, loadLifetimeSetsStats, loadWeeklyMuscleStats, normalizeLookupKey, countSessions } from './storage/history/repository';
 import { loadCompactSettings, saveCompactSettings } from './storage/compactSettings';
 import { buildExerciseHistoryIndex, resolveLastPerformanceSuggestion } from './storage/expectedValues';
 import { countCompletedSetsInExercise } from './utils/setCounting';
@@ -146,13 +146,13 @@ function mergeMetricsListFn(local: any[], remote: any[]) {
         }
       });
       mergedHistory.sort((a: any, b: any) => a.date.localeCompare(b.date));
-      
+
       let lastVal = merged[localIdx].lastValue;
       if (mergedHistory.length > 0) {
         const latest = mergedHistory[mergedHistory.length - 1];
         lastVal = formatMetricValue(latest.value, merged[localIdx].label);
       }
-      
+
       merged[localIdx] = {
         ...merged[localIdx],
         history: mergedHistory,
@@ -570,6 +570,11 @@ function MainApp() {
   const [showHighlights, setShowHighlights] = React.useState(() => initialSettings?.showHighlights ?? false);
   const [showHypertrophyGoal, setShowHypertrophyGoal] = React.useState(() => initialSettings?.showHypertrophyGoal ?? false);
   const historyRepositoryReadyRef = React.useRef(false);
+  const hydratorUnsubRef = React.useRef<(() => void) | null>(null);
+  const backgroundHydratorUnsubRef = React.useRef<(() => void) | null>(null);
+  const isLoadingMoreRef = React.useRef(false);
+  const sessionsListRefStable = React.useRef<any[]>([]);
+  React.useEffect(() => { sessionsListRefStable.current = sessionsList; }, [sessionsList]);
 
   // Apply initial theme immediately to eliminate theme flash
   React.useEffect(() => {
@@ -586,7 +591,7 @@ function MainApp() {
     }
     const weeks: { start: Date; end: Date; label: string; count: number }[] = [];
     const oneDay = 24 * 60 * 60 * 1000;
-    
+
     for (let i = 7; i >= 0; i--) {
       const start = new Date(Date.now() - i * 7 * oneDay);
       const day = start.getDay();
@@ -594,7 +599,7 @@ function MainApp() {
       const diff = day === 0 ? 6 : day - 1;
       start.setTime(start.getTime() - diff * oneDay);
       start.setHours(0, 0, 0, 0);
-      
+
       weeks.push({
         start,
         end: new Date(start.getTime() + 7 * oneDay - 1),
@@ -602,7 +607,7 @@ function MainApp() {
         count: 0,
       });
     }
-    
+
     sessionsList.forEach(session => {
       const sessDate = new Date(session.datetime);
       weeks.forEach(w => {
@@ -611,7 +616,7 @@ function MainApp() {
         }
       });
     });
-    
+
     return weeks.map(w => ({ weekLabel: w.label, count: w.count }));
   }, [sessionsList, profileSummaries, isDataLoaded]);
 
@@ -738,13 +743,15 @@ function MainApp() {
               setIsFullHistoryLoaded(isInitiallyComplete);
 
               if (persistence.historyReady && persistence.sessions) {
-                // If header-only bootstrap already streamed first 50, hydrator fills the rest lazily
                 if (!isInitiallyComplete) {
-                  // Configure hydrator for header-only cursor streaming (no JOINs, <5ms per chunk)
-                  (historyHydrator as any).setHeaderOnly?.(true);
-                  historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
+                  // Background hydration: use full details (header-only would mark isFullHistoryLoaded prematurely and risk sparse cloud backups)
+                  if (backgroundHydratorUnsubRef.current) {
+                    try { backgroundHydratorUnsubRef.current(); } catch {}
+                    backgroundHydratorUnsubRef.current = null;
+                  }
+                  (historyHydrator as any).setHeaderOnly?.(false);
+                  backgroundHydratorUnsubRef.current = historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
                     const mapped = sessions.map(sessionV2ToLegacy);
-                    // Append path via hydrator (hydrator already deduped via append fast-path)
                     setSessionsList(mapped);
                     setCachedRecentSessions(mapped, totalCount);
                     setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
@@ -753,7 +760,7 @@ function MainApp() {
                       refreshLifetimeStats().catch(() => {});
                     }
                   });
-                  historyHydrator.start(persistence.sessions, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
+                  historyHydrator.start(persistence.sessions, (id) => deletedIdsRef.current.has(id), { headerOnly: false } as any).catch(() => {});
                 } else {
                   setIsFullHistoryLoaded(true);
                 }
@@ -842,6 +849,17 @@ function MainApp() {
       }
     }
     loadData();
+    return () => {
+      if (backgroundHydratorUnsubRef.current) {
+        try { backgroundHydratorUnsubRef.current(); } catch {}
+        backgroundHydratorUnsubRef.current = null;
+      }
+      if (hydratorUnsubRef.current) {
+        try { hydratorUnsubRef.current(); } catch {}
+        hydratorUnsubRef.current = null;
+      }
+      try { (historyHydrator as any).cancel?.(); } catch {}
+    };
   }, []);
 
   // Set document body background color on Web to match AMOLED pure black
@@ -997,7 +1015,7 @@ function MainApp() {
 
   // Auto-sync and Cloud Backup with FNV Hash Caching & Mutex Guard
   const isCloudSyncInProgressRef = React.useRef(false);
-  
+
   const handleGoogleSessionExpired = React.useCallback(async () => {
     setGoogleUser(prev => prev ? { ...prev, accessToken: undefined } : null);
     await deleteSecureItem('google_oauth_token');
@@ -1012,8 +1030,9 @@ function MainApp() {
 
   const refreshLifetimeStats = React.useCallback(async () => {
     try {
+      const list = exercisesListRef.current ?? exercisesList;
       const exerciseMuscleMap: Record<string, string> = {};
-      (exercisesList || []).forEach((e: any) => {
+      (list || []).forEach((e: any) => {
         if (e && e.name) {
           const norm = normalizeLookupKey(e.name);
           if (norm && e.muscleGroup) {
@@ -1026,13 +1045,14 @@ function MainApp() {
     } catch (e) {
       console.warn('[LifetimeStats] Failed to refresh stats:', e);
     }
-  }, [exercisesList]);
+  }, []);
 
   const [weeklyMuscleSetsSQL, setWeeklyMuscleSetsSQL] = React.useState<Record<string, number> | null>(null);
   const refreshWeeklyMuscleStats = React.useCallback(async () => {
     try {
+      const list = exercisesListRef.current ?? exercisesList;
       const exerciseMuscleMap: Record<string, string> = {};
-      (exercisesList || []).forEach((e: any) => {
+      (list || []).forEach((e: any) => {
         if (e && e.name) {
           const norm = normalizeLookupKey(e.name);
           if (norm && e.muscleGroup) exerciseMuscleMap[norm] = e.muscleGroup;
@@ -1041,13 +1061,33 @@ function MainApp() {
       const sets = await loadWeeklyMuscleStats(exerciseMuscleMap);
       setWeeklyMuscleSetsSQL(sets);
     } catch (e) { console.warn('[WeeklyStats] SQL weekly failed', e); }
-  }, [exercisesList]);
+  }, []);
 
   const triggerCloudSync = React.useCallback(async (force = false): Promise<boolean> => {
-    if (!isDataLoaded || !isFullHistoryLoaded) return false;
+    if (!isDataLoaded) return false;
     if (!googleUser || !googleUser.accessToken) return false;
-    if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return false;
     if (isCloudSyncInProgressRef.current) return false;
+
+    // Always source complete records directly from SQLite to avoid header-only sparse uploads
+    let sessionsToBackup: any[] = sessionsList;
+    if (historyRepositoryReadyRef.current) {
+      try {
+        const full = await loadAllSessions();
+        if (full) {
+          sessionsToBackup = full.map(sessionV2ToLegacy);
+        }
+      } catch (e) {
+        console.warn('[CloudSync] loadAllSessions failed, fallback to in-memory', e);
+        if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return false;
+        sessionsToBackup = sessionsList;
+        // If SQLite is ready but we fell back to potentially header-only list, block sparse upload
+        const hasSparse = sessionsToBackup.some((s: any) => !s.exercises || s.exercises.length === 0);
+        if (hasSparse && sessionsToBackup.length < (user.totalWorkouts || 0)) return false;
+      }
+    } else {
+      if (!isFullHistoryLoaded) return false;
+      if (sessionsList.length === 0 && (user.totalWorkouts || 0) > 0) return false;
+    }
 
     isCloudSyncInProgressRef.current = true;
     try {
@@ -1055,9 +1095,9 @@ function MainApp() {
       const backupData = {
         user: {
           ...user,
-          totalWorkouts: sessionsList.length,
+          totalWorkouts: sessionsToBackup.length,
         },
-        sessionsList,
+        sessionsList: sessionsToBackup,
         templatesList,
         exercisesList,
         primaryMetricsList,
@@ -1112,9 +1152,9 @@ function MainApp() {
     } catch (e: any) {
       console.warn('[Cloud Sync Error]', e);
       if (e?.message && (
-        e.message.includes('401') || 
-        e.message.toLowerCase().includes('unauthorized') || 
-        e.message.toLowerCase().includes('invalid credentials') || 
+        e.message.includes('401') ||
+        e.message.toLowerCase().includes('unauthorized') ||
+        e.message.toLowerCase().includes('invalid credentials') ||
         e.message.toLowerCase().includes('auth')
       )) {
         await handleGoogleSessionExpired();
@@ -1153,7 +1193,6 @@ function MainApp() {
   }, [soundSetCompleted, soundWorkoutFinished, soundTimerCompleted, soundVolume, customSounds]);
 
 
-
   // Synchronize dynamic global animation speed token
   React.useEffect(() => {
     globalAnimation.speed = animationSpeed;
@@ -1168,7 +1207,7 @@ function MainApp() {
     avatarUri?: string
   ) => {
     setGoogleUser({ email, name, accessToken, fileId, avatarUri });
-    
+
     // We update the local React state authState to instantly re-render listening screens/components in 'google' mode!
     const newAuthState = {
       hasCompletedOnboarding: true,
@@ -1323,14 +1362,16 @@ function MainApp() {
     if (accessToken) {
       try {
         let sessionsToUpload = sessionsList;
-        if (!isFullHistoryLoaded && historyRepositoryReadyRef.current) {
+        if (historyRepositoryReadyRef.current) {
           try {
             const loaded = await loadAllSessions();
             if (loaded) {
               sessionsToUpload = loaded.map(sessionV2ToLegacy);
-              setSessionsList(sessionsToUpload);
-              setCachedRecentSessions(sessionsToUpload, sessionsToUpload.length);
-              setIsFullHistoryLoaded(true);
+              if (!isFullHistoryLoaded || sessionsToUpload.length !== sessionsList.length) {
+                setSessionsList(sessionsToUpload);
+                setCachedRecentSessions(sessionsToUpload, sessionsToUpload.length);
+                setIsFullHistoryLoaded(true);
+              }
             }
           } catch (e) {
             console.error('[App] Failed to load full sessions before Google login upload:', e);
@@ -1389,11 +1430,11 @@ function MainApp() {
       url.includes('/oauthredirect');
     const isCustomCallback = url.includes('strongern://');
     if (!isGoogleRedirect && !isCustomCallback) return;
-    
+
     let accessToken = '';
     const hashSplit = url.split('#');
     const querySplit = url.split('?');
-    
+
     const parseParams = (paramString: string) => {
       const params: Record<string, string> = {};
       const pairs = paramString.split('&');
@@ -1405,18 +1446,18 @@ function MainApp() {
       }
       return params;
     };
-    
+
     if (hashSplit.length > 1) {
       const params = parseParams(hashSplit[1]);
       if (params.access_token) accessToken = params.access_token;
     }
-    
+
     if (!accessToken && querySplit.length > 1) {
       const params = parseParams(querySplit[1]);
       if (params.access_token) accessToken = params.access_token;
       else if (params.token) accessToken = params.token;
     }
-    
+
     if (accessToken) {
       console.log('[App] Extracted OAuth access token from deep link. Authenticating...');
       try {
@@ -1424,7 +1465,7 @@ function MainApp() {
           googleDrive.fetchUserProfile(accessToken),
           googleDrive.findBackupFile(accessToken),
         ]);
-        
+
         await handleGoogleLogin(
           profile.email,
           profile.name,
@@ -1440,7 +1481,7 @@ function MainApp() {
 
   React.useEffect(() => {
     if (!isDataLoaded) return;
-    
+
     const handleDeepLink = async (event: { url: string }) => {
       await parseAndHandleOAuthLink(event.url);
     };
@@ -1486,28 +1527,30 @@ function MainApp() {
   const handleCloudSync = async () => {
     if (!googleUser || !googleUser.accessToken) return false;
     let currentSessions = sessionsList;
-    if (!isFullHistoryLoaded) {
-      if (historyRepositoryReadyRef.current) {
-        try {
-          const fullSessions = await loadAllSessions();
-          if (fullSessions) {
-            const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+    // Always prefer complete SQLite source for cloud sync
+    if (historyRepositoryReadyRef.current) {
+      try {
+        const fullSessions = await loadAllSessions();
+        if (fullSessions) {
+          const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+          // Keep UI in sync if we were showing header-only
+          if (!isFullHistoryLoaded || fullLegacy.length !== sessionsList.length) {
             setSessionsList(fullLegacy);
             setCachedRecentSessions(fullLegacy, fullLegacy.length);
             setIsFullHistoryLoaded(true);
-            currentSessions = fullLegacy;
-          } else {
-            console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
-            return false;
           }
-        } catch (err) {
-          console.error('[CloudSync] Failed to load full history for sync:', err);
+          currentSessions = fullLegacy;
+        } else if (!isFullHistoryLoaded) {
+          console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
           return false;
         }
-      } else {
-        console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
-        return false;
+      } catch (err) {
+        console.error('[CloudSync] Failed to load full history for sync:', err);
+        if (!isFullHistoryLoaded) return false;
       }
+    } else if (!isFullHistoryLoaded) {
+      console.warn('[CloudSync] Sync blocked: Full history not loaded yet');
+      return false;
     }
     try {
       const nowStr = new Date().toISOString();
@@ -1567,20 +1610,21 @@ function MainApp() {
   // Export/Import backups
   const handleExportBackup = async (): Promise<boolean> => {
     let currentSessions = sessionsList;
-    if (!isFullHistoryLoaded) {
-      if (historyRepositoryReadyRef.current) {
-        try {
-          const fullSessions = await loadAllSessions();
-          if (fullSessions) {
-            const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+    // Always source complete history from SQLite for exports
+    if (historyRepositoryReadyRef.current) {
+      try {
+        const fullSessions = await loadAllSessions();
+        if (fullSessions) {
+          const fullLegacy = fullSessions.map(sessionV2ToLegacy);
+          if (!isFullHistoryLoaded || fullLegacy.length !== sessionsList.length) {
             setSessionsList(fullLegacy);
             setCachedRecentSessions(fullLegacy, fullLegacy.length);
             setIsFullHistoryLoaded(true);
-            currentSessions = fullLegacy;
           }
-        } catch (err) {
-          console.error('[BackupExport] Failed to load full history for backup export:', err);
+          currentSessions = fullLegacy;
         }
+      } catch (err) {
+        console.error('[BackupExport] Failed to load full history for backup export:', err);
       }
     }
     const settings = {
@@ -1777,7 +1821,7 @@ function MainApp() {
   const handleImportStrongCSV = (csvText: string): { importedCount: number; addedExercisesCount: number } => {
     try {
       const { importedSessions, addedExercises } = importStrongCSV(csvText, exercisesList, sessionsList);
-      
+
       if (importedSessions.length > 0) {
         setSessionsList(prev => [...importedSessions, ...prev]);
         if (historyRepositoryReadyRef.current) {
@@ -1795,11 +1839,11 @@ function MainApp() {
           totalWorkouts: sessionsList.length + importedSessions.length
         }));
       }
-      
+
       if (addedExercises.length > 0) {
         setExercisesList(prev => [...addedExercises, ...prev]);
       }
-      
+
       return {
         importedCount: importedSessions.length,
         addedExercisesCount: addedExercises.length,
@@ -1904,7 +1948,6 @@ function MainApp() {
   }, []);
 
 
-
   const mergeMetricsList = mergeMetricsListFn;
 
   const handleRecordMetric = (id: string, newValue: string) => {
@@ -2004,7 +2047,14 @@ function MainApp() {
 
   const handleRefreshSessions = React.useCallback(async () => {
     try {
-      // Load full details for first viewport so History/Muscle never appear empty; header instant <8ms is kept in bootstrap
+      // Prevent subscription leak: release previous listener
+      if (hydratorUnsubRef.current) {
+        try { hydratorUnsubRef.current(); } catch {}
+        hydratorUnsubRef.current = null;
+      }
+      try { (historyHydrator as any).cancel?.(); } catch {}
+
+      // Load full details for first viewport so History/Muscle never appear empty
       const full0 = await loadSessionsCursorChunk(undefined, undefined, 50).catch(() => null);
       const hdr = full0 && full0.sessions.length > 0 ? full0 : await loadSessionHeadersChunk(undefined, undefined, 50).then(r => ({ sessions: r.headers as any, hasMore: r.hasMore })).catch(() => ({ sessions: [], hasMore: false } as any));
       const sessions0: any[] = (hdr as any).sessions || (hdr as any).headers || [];
@@ -2012,30 +2062,38 @@ function MainApp() {
       if (sessions0.length > 0 || total === 0) {
         const mapped = sessions0.map(sessionV2ToLegacy as any);
         setSessionsList(mapped);
+        sessionsListRefStable.current = mapped;
         setCachedRecentSessions(mapped, total);
         setUser(prev => ({ ...prev, totalWorkouts: total }));
         if (mapped.length < total) {
-          (historyHydrator as any).setHeaderOnly?.(true);
-          // Hydrator streams headers idle; App will enrich visible cards on demand via handleLoadMoreHistory
-          const headerForHydrator = mapped.length === 50 ? mapped.map((_, i) => ({ id: (hdr as any).sessions?.[i]?.id || `hdr-${i}`, startedAtMs: (hdr as any).sessions?.[i]?.startedAtMs || Date.now(), } as any)) : sessions0 as any;
-          // Use header-only for background pagination (no JOINs) — details lazy-loaded per card via loadSessionDetails
-          historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
-            // Append-only: hydrate already-full first 50, then headers
-            const toMap = sessions.length > 50 ? sessions.slice(0, 50).concat(sessions.slice(50)) : sessions;
-            const m = toMap.map((s: any) => (s.exercises && s.exercises.length ? sessionV2ToLegacy(s) : s.startedAtMs ? sessionV2ToLegacy({ ...s, exercises: [] } as any) : s));
-            // Keep existing mapped if hydrate is header-only empty
+          (historyHydrator as any).setHeaderOnly?.(false);
+          hydratorUnsubRef.current = historyHydrator.subscribe(({ sessions, isComplete, totalCount }) => {
+            const m = sessions.map((s: any) => sessionV2ToLegacy(s));
             if (m.length > mapped.length) {
               setSessionsList(prev => {
                 const byId = new Map(prev.map((x: any) => [x.id, x]));
-                m.forEach((x: any) => { if (!byId.has(x.id)) byId.set(x.id, x); });
+                m.forEach((x: any) => {
+                  const existing: any = byId.get(x.id);
+                  if (!existing) byId.set(x.id, x);
+                  else if (!existing.exercises || existing.exercises.length === 0) byId.set(x.id, x);
+                });
                 const merged = Array.from(byId.values());
+                merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+                sessionsListRefStable.current = merged as any;
                 setCachedRecentSessions(merged as any, totalCount);
                 return merged;
               });
+              setUser(prev => ({ ...prev, totalWorkouts: totalCount }));
             }
-            if (isComplete) setIsFullHistoryLoaded(true);
+            if (isComplete) {
+              setIsFullHistoryLoaded(true);
+              if (hydratorUnsubRef.current) {
+                try { hydratorUnsubRef.current(); } catch {}
+                hydratorUnsubRef.current = null;
+              }
+            }
           });
-          historyHydrator.start(sessions0 as any, (id) => deletedIdsRef.current.has(id), { headerOnly: true } as any).catch(() => {});
+          historyHydrator.start(sessions0 as any, (id) => deletedIdsRef.current.has(id), { headerOnly: false } as any).catch(() => {});
           setIsFullHistoryLoaded(false);
         } else {
           setIsFullHistoryLoaded(true);
@@ -2046,20 +2104,64 @@ function MainApp() {
     } catch (error) {
       console.error('[App] Failed to refresh sessions:', error);
     }
-  }, []);
+  }, [refreshLifetimeStats, refreshWeeklyMuscleStats]);
 
   const handleLoadMoreHistory = React.useCallback(async () => {
-    if (isFullHistoryLoaded) return;
+    if (isFullHistoryLoaded || isLoadingMoreRef.current) return;
+    isLoadingMoreRef.current = true;
     try {
-      const hydrator: any = historyHydrator as any;
-      // Temporarily load full details so History cards show exercises (header-only would be empty)
-      if (hydrator.setHeaderOnly) hydrator.setHeaderOnly(false);
-      const res = await hydrator.loadMoreOnDemand?.();
-      if (hydrator.setHeaderOnly) hydrator.setHeaderOnly(true);
-      if (res?.isComplete) setIsFullHistoryLoaded(true);
-      if (res?.added && res.added > 0) refreshWeeklyMuscleStats().catch(()=>{});
+      const current = sessionsListRefStable.current.length > 0 ? sessionsListRefStable.current : sessionsList;
+      // Enrich any visible headers that are still sparse before paging forward
+      const sparseIds = (current as any[]).filter((s: any) => !s.exercises || s.exercises.length === 0).slice(0, 20).map((s: any) => s.id);
+      if (sparseIds.length > 0 && historyRepositoryReadyRef.current) {
+        try {
+          const enrichedV2 = await loadSessionsByIds(sparseIds);
+          if (enrichedV2.length > 0) {
+            const enriched = enrichedV2.map(sessionV2ToLegacy as any);
+            setSessionsList(prev => {
+              const byId = new Map(prev.map((x: any) => [x.id, x]));
+              enriched.forEach((e: any) => byId.set(e.id, e));
+              const merged = Array.from(byId.values());
+              merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+              sessionsListRefStable.current = merged as any;
+              setCachedRecentSessions(merged as any, merged.length < (current.length + 40) ? merged.length : undefined as any);
+              return merged;
+            });
+          }
+        } catch (e) { console.warn('[History] enrich sparse failed', e); }
+      }
+
+      // Single-flight paginated append using full cursor chunk (smoothest, no header/ detail split)
+      const last = (sessionsListRefStable.current.length > 0 ? sessionsListRefStable.current : sessionsList) as any[];
+      if (last.length === 0) { isLoadingMoreRef.current = false; return; }
+      const tail: any = last[last.length - 1];
+      const lastStartedAtMs = tail?.startedAtMs ?? (tail?.datetime ? new Date(tail.datetime).getTime() : undefined);
+      const lastId = tail?.id;
+      if (lastStartedAtMs === undefined || !lastId) { isLoadingMoreRef.current = false; return; }
+      const res = await loadSessionsCursorChunk(lastStartedAtMs, lastId, 40);
+      if (res.sessions.length > 0) {
+        const mapped = res.sessions.map(sessionV2ToLegacy as any);
+        setSessionsList(prev => {
+          const byId = new Map(prev.map((x: any) => [x.id, x]));
+          let added = 0;
+          mapped.forEach((m: any) => { if (!byId.has(m.id)) { byId.set(m.id, m); added++; } });
+          const merged = Array.from(byId.values());
+          merged.sort((a: any, b: any) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+          sessionsListRefStable.current = merged as any;
+          const totalHint = res.hasMore ? undefined : merged.length;
+          if (totalHint !== undefined) setCachedRecentSessions(merged as any, totalHint);
+          else setCachedRecentSessions(merged as any, merged.length + 20);
+          return merged;
+        });
+        setUser(prev => ({ ...prev, totalWorkouts: (sessionsListRefStable.current.length || last.length + mapped.length) }));
+        if (!res.hasMore) setIsFullHistoryLoaded(true);
+        refreshWeeklyMuscleStats().catch(() => {});
+      } else {
+        setIsFullHistoryLoaded(true);
+      }
     } catch (e) { console.warn('[History] loadMore failed', e); }
-  }, [isFullHistoryLoaded]);
+    finally { isLoadingMoreRef.current = false; }
+  }, [isFullHistoryLoaded, sessionsList, refreshWeeklyMuscleStats]);
 
   // Measure modal state (accessed from Profile)
   const [isMeasureModalVisible, setIsMeasureModalVisible] = React.useState(false);
@@ -2110,7 +2212,7 @@ function MainApp() {
       if (n.includes('calf')) return 'Calves';
       if (n.includes('forearm') || n.includes('wrist') || n.includes('roller')) return 'Forearms';
       if (n.includes('ab ') || n.includes('crunch') || n.includes('plank') || n.includes('sit up') || n.includes('twist') || n.includes('leg raise')) return 'Abs';
-      
+
       const mapped = exerciseMuscleMap[n];
       if (mapped === 'Core') return 'Abs';
       return mapped ?? 'Other';
@@ -2139,7 +2241,6 @@ function MainApp() {
       setCachedProfileSummaries({ dynamicWeeklyChartData, weeklyMuscleSets });
     }
   }, [dynamicWeeklyChartData, weeklyMuscleSets, isDataLoaded]);
-
 
 
   // Active workout management states
@@ -2233,7 +2334,7 @@ function MainApp() {
     if (matchingTemplate && matchingTemplate.defaultRestDuration !== undefined) {
       setDefaultRestDuration(matchingTemplate.defaultRestDuration);
     }
-    
+
     // Fallback: Resolve exercisesDetails from templatesList if not provided (e.g. starting program calendar workout or smart up-next selector)
     let resolvedDetails = exercisesDetails;
     if (!resolvedDetails || resolvedDetails.length === 0) {
@@ -2241,7 +2342,7 @@ function MainApp() {
         resolvedDetails = matchingTemplate.exercisesDetails;
       }
     }
-    
+
     // Build O(1) library map for fast exercise lookups
     const exerciseLibMap = new Map(
       exercisesListRef.current.map(e => [e.name.toLowerCase().trim(), e])
@@ -2256,7 +2357,7 @@ function MainApp() {
       const detail = (resolvedDetails?.[index] && resolvedDetails[index].name.toLowerCase().trim() === exName.toLowerCase().trim())
         ? resolvedDetails[index]
         : resolvedDetails?.find(d => d.name.toLowerCase().trim() === exName.toLowerCase().trim());
-      
+
       const targetVariation = detail?.variation;
 
       if (detail && detail.sets && detail.sets.length > 0) {
@@ -2379,7 +2480,7 @@ function MainApp() {
       });
       bestWeight = Number(expectedSets[0]?.suggestedWeight ?? 0);
       bestReps = Number(expectedSets[0]?.suggestedReps ?? 0);
-      
+
       return {
         name: exName,
         variation: targetVariation,
@@ -2555,10 +2656,10 @@ function MainApp() {
 
     setSessionsList(updatedSessions);
     setUser(nextUser);
-    
+
     refreshLifetimeStats().catch(() => {});
     triggerCloudSync(false).catch(() => {});
-    
+
     // Show celebratory screen
     setCompletionData({
       totalVolume: summary.totalVolume,
@@ -2664,7 +2765,6 @@ function MainApp() {
   }, [flushSave]);
 
 
-
   const handleFinishWorkoutRef = React.useRef(handleFinishWorkout);
   React.useEffect(() => {
     handleFinishWorkoutRef.current = handleFinishWorkout;
@@ -2749,9 +2849,9 @@ function MainApp() {
 
   const workoutScreenElement = React.useMemo(() => {
     return (
-      <WorkoutScreen 
+      <WorkoutScreen
         isHydrating={!isDataLoaded || !isWorkoutRestored}
-        templates={templatesList} 
+        templates={templatesList}
         onStartWorkout={handleStartWorkout}
         onAddTemplate={handleAddTemplate}
         onDeleteTemplate={handleDeleteTemplate}
@@ -2800,8 +2900,8 @@ function MainApp() {
 
   const exercisesScreenElement = React.useMemo(() => {
     return (
-      <ExercisesScreen 
-        exercises={exercisesList} 
+      <ExercisesScreen
+        exercises={exercisesList}
         onAddExercise={handleAddExercise}
         onDeleteExercise={handleDeleteExercise}
         onUpdateExerciseNotes={handleUpdateExerciseNotes}
@@ -2846,8 +2946,6 @@ function MainApp() {
     showHypertrophyGoal,
     setShowHypertrophyGoal
   ]);
-
-
 
 
   const handleWorkoutCrashRecovery = React.useCallback(() => {
@@ -3108,12 +3206,12 @@ function MainApp() {
                   <View style={[styles.trophyGlow, { backgroundColor: colors.gold + '1A' }]}>
                     <Ionicons name="trophy" size={54} color={colors.gold} />
                   </View>
-                  
+
                   <Text style={styles.celebrationTitle}>{i18n.t('completion.workoutCompleted')}</Text>
                   <Text style={styles.celebrationSubtitle}>{completionData.name}</Text>
-                  
+
                   <View style={styles.divider} />
-                  
+
                   <View style={styles.celebrationStats}>
                     <View style={styles.celebrationStatItem}>
                       <Text style={styles.statVal}>{completionData.durationMin}m</Text>
@@ -3130,7 +3228,7 @@ function MainApp() {
                       <Text style={styles.statLabel}>{i18n.t('completion.volume')}</Text>
                     </View>
                   </View>
-                  
+
                   {/* Share and Insights buttons removed (Phase D) */}
 
                   <Pressable

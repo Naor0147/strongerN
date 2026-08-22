@@ -481,7 +481,7 @@ export function initCrashLogger(): void {
     ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? (error.stack || '') : '';
-      
+
       if (isFatal) {
         // Synchronously write the crash log strictly for fatal crashes to guarantee persistence before process exit
         saveCrashLogSync(message, stack, true);

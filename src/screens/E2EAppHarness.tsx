@@ -103,7 +103,7 @@ export default function E2EAppHarness() {
       unsubscribe();
     };
   }, []);
-  
+
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [workoutName, setWorkoutName] = useState('Empty Workout');
   const [startTime, setStartTime] = useState<Date>(new Date());
@@ -256,7 +256,7 @@ export default function E2EAppHarness() {
     };
     setWorkoutName(tpl.name);
     setStartTime(new Date());
-    
+
     const initialExercises: any[] = (tpl.exercisesDetails || []).map(ed => {
       return {
         name: ed.name,
@@ -298,7 +298,7 @@ export default function E2EAppHarness() {
     const tpl = mockTemplates[0];
     setWorkoutName(tpl.name);
     setStartTime(new Date());
-    
+
     // Convert template exercisesDetails to ExerciseSet[]
     const initialExercises: any[] = (tpl.exercisesDetails || []).map(ed => {
       return {
@@ -342,7 +342,7 @@ export default function E2EAppHarness() {
     setIsWorkoutActive(false);
     deleteFromDb('strongern_active_workout_state');
     addLog(`Finished Workout! Volume: ${summary.totalVolume}kg, Sets: ${summary.totalSets}, Duration: ${summary.durationMin}m, Note: ${summary.comment || 'None'}`);
-    
+
     // Save to session history
     const newSession: WorkoutSession = {
       id: nextId('session'),
@@ -377,7 +377,6 @@ export default function E2EAppHarness() {
     addLog(`Created Custom Exercise: ${name} (${muscle})${isUnilateral ? ' · unilateral' : ''}`);
     return newEx;
   };
-
 
 
   if (!fontsLoaded && !fontError && !fontTimeout) {

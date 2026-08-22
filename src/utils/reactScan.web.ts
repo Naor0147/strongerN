@@ -1,6 +1,6 @@
 /**
  * React Scan Performance Monitoring Toggle (Web Implementation)
- * 
+ *
  * React Scan displays a visual toolbar and highlights re-renders in web browsers.
  * See: https://github.com/aidenybai/react-scan
  */

@@ -21,7 +21,7 @@ describe('Real Strong CSV Import Verification', () => {
     console.log('--- Real CSV Import Summary ---');
     console.log(`Total Workouts Found/Imported: ${result.importedSessions.length}`);
     console.log(`Total New Exercises Added: ${result.addedExercises.length}`);
-    
+
     // Log new exercises created
     if (result.addedExercises.length > 0) {
       console.log('New Exercises Created:');
@@ -36,7 +36,7 @@ describe('Real Strong CSV Import Verification', () => {
 
     // Assert that we successfully parsed a significant number of workouts
     expect(result.importedSessions.length).toBeGreaterThan(50);
-    
+
     // Assert that some exercises are matched to existing ones
     // For example, "Bench Press (Barbell)" from CSV should match "Bench Press" from mockExercises
     // Let's verify that "Bench Press" (from mockExercises) is present in the imported sessions

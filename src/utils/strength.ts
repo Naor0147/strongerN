@@ -9,10 +9,10 @@ export function estimate1RM(weight: number, reps: number): number {
   const r = typeof reps === 'number' ? reps : parseInt(String(reps), 10);
   if (isNaN(w) || isNaN(r) || r < 1 || w <= 0) return 0;
   if (r === 1) return w;
-  
+
   const epley = w * (1 + r / 30);
   if (r >= 37) return epley;
-  
+
   const brzycki = (w * 36) / (37 - r);
   const result = (epley + brzycki) / 2;
   return isNaN(result) ? 0 : result;
@@ -25,7 +25,7 @@ export function bestSetBy1RM(sets: SetDetail[]): SetDetail | null {
   if (!Array.isArray(sets) || sets.length === 0) return null;
   let bestSet: SetDetail | null = null;
   let highest1RM = -1;
-  
+
   for (const set of sets) {
     if (!set || !set.completed) continue;
     const w = typeof set.weight === 'number' ? set.weight : parseFloat(String(set.weight));
@@ -36,7 +36,7 @@ export function bestSetBy1RM(sets: SetDetail[]): SetDetail | null {
       bestSet = set;
     }
   }
-  
+
   return bestSet;
 }
 
@@ -50,7 +50,7 @@ export function exercise1RMSeries(
 ): { date: Date; value: number }[] {
   if (!exName || !Array.isArray(sessions) || sessions.length === 0) return [];
   const series: { date: Date; value: number }[] = [];
-  
+
   // Sort sessions chronologically (oldest to newest)
   const validSessions = sessions.filter((s) => s && s.datetime && !isNaN(new Date(s.datetime).getTime()));
   const sortedSessions = [...validSessions].sort((a, b) => {
@@ -63,7 +63,7 @@ export function exercise1RMSeries(
       (e) => e && e.name && e.name.toLowerCase() === exName.toLowerCase()
     );
     if (!exerciseSet || !Array.isArray(exerciseSet.setsDetails)) continue;
-    
+
     const bestSet = bestSetBy1RM(exerciseSet.setsDetails);
     if (bestSet) {
       const w = typeof bestSet.weight === 'number' ? bestSet.weight : parseFloat(String(bestSet.weight));

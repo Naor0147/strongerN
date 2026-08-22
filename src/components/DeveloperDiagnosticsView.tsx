@@ -120,47 +120,59 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
   const hasTombstones = (diagnostics?.tombstonedSessionsCount ?? 0) > 0;
 
   const handleSeed = async (cnt: number) => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setSeeding(true);
-      const t0 = Date.now();
-      const res = await seedSmartWorkouts(cnt, Date.now() % 100000);
-      const ms = Date.now() - t0;
-      const hdrTxt = res.headerMs !== undefined ? `${res.headerMs}ms` : '<8ms';
-      const aggTxt = res.aggregateMs !== undefined ? `${res.aggregateMs}ms` : '<40ms';
-      const hdrOk = res.headerMs === undefined ? true : res.headerMs < 8;
-      const aggOk = res.aggregateMs === undefined ? true : res.aggregateMs < 40;
-      if (onRefreshSessions) await onRefreshSessions();
-      await fetchDiagnostics();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Auto-sync to Drive if connected (testing account)
-      if (onCloudSync) {
-        try { await onCloudSync(); } catch {}
-      }
-      Alert.alert(
-        cnt >= 400 ? `Seeded ${cnt} Smart Workouts` : 'Seed complete',
-        `Inserted ${res.inserted} · Total ${res.total} · Sets ${res.totalSets} in ${ms}ms.\nHeader50 ${hdrTxt} ${hdrOk ? '✓' : '⚠'} · SQL aggregate ${aggTxt} ${aggOk ? '✓' : '⚠'}.\nInfinite scroll: pull history & scroll to 400+.\nDrive sync ${onCloudSync ? 'triggered' : 'pending — tap Sync'}.`,
-        [{ text: 'OK' }]
-      );
-    } catch (e: any) {
-      console.error('[DeveloperDiagnosticsView] Seed failed:', e);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Seed failed', e?.message || String(e));
-    } finally {
-      setSeeding(false);
-    }
+    Alert.alert(
+      `Seed ${cnt} Testing Workouts?`,
+      `This will insert ${cnt} synthetic workouts locally for benchmarking. They will NOT be auto-synced to Google Drive. Continue?`,
+      [
+        { text: i18n.t('common.cancel'), style: 'cancel' },
+        {
+          text: `Seed ${cnt}`,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setSeeding(true);
+              const t0 = Date.now();
+              const res = await seedSmartWorkouts(cnt, Date.now() % 100000);
+              const ms = Date.now() - t0;
+              const hdrTxt = res.headerMs !== undefined ? `${res.headerMs}ms` : '<8ms';
+              const aggTxt = res.aggregateMs !== undefined ? `${res.aggregateMs}ms` : '<40ms';
+              const hdrOk = res.headerMs === undefined ? true : res.headerMs < 8;
+              const aggOk = res.aggregateMs === undefined ? true : res.aggregateMs < 40;
+              if (onRefreshSessions) await onRefreshSessions();
+              await fetchDiagnostics();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // Never auto-sync generated data to real Drive backups
+              Alert.alert(
+                cnt >= 400 ? `Seeded ${cnt} Smart Workouts` : 'Seed complete',
+                `Inserted ${res.inserted} · Total ${res.total} · Sets ${res.totalSets} in ${ms}ms.\nHeader50 ${hdrTxt} ${hdrOk ? '✓' : '⚠'} · SQL aggregate ${aggTxt} ${aggOk ? '✓' : '⚠'}.\nInfinite scroll: pull history & scroll to 400+.\nSynthetic data not auto-synced — use Export to share if needed.`,
+                [{ text: 'OK' }]
+              );
+            } catch (e: any) {
+              console.error('[DeveloperDiagnosticsView] Seed failed:', e);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Seed failed', e?.message || String(e));
+            } finally {
+              setSeeding(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
     <View style={styles.container}>
       {/* Top Toolbar */}
       <View style={styles.toolbar}>
-        <Pressable
-          style={styles.refreshButton}
-          onPress={handleRefresh}
-          android_ripple={rippleTokens.surface}
-          disabled={loading || repairing}
-        >
+            <Pressable
+              style={styles.refreshButton}
+              onPress={handleRefresh}
+              android_ripple={rippleTokens.surface}
+              disabled={loading || repairing}
+              accessibilityLabel="Refresh diagnostics"
+              accessibilityRole="button"
+            >
           <Ionicons
             name="refresh-outline"
             size={18}
@@ -376,6 +388,8 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
               onPress={handleRepair}
               disabled={repairing}
               android_ripple={rippleTokens.surface}
+              accessibilityLabel="Repair workout history"
+              accessibilityRole="button"
             >
               {repairing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: spacing.sm }} />
@@ -402,7 +416,7 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
               <Text style={[styles.warningTitle, { color: colors.accent }]}>Seed Testing Workouts (Smart)</Text>
             </View>
             <Text style={styles.warningDesc}>
-              Generates {seedCount}+ realistic progressive-overload workouts ( varied titles, 3-6 exercises, 2-5 sets, W/S/D/F, unilateral, RPE, supersets ). Header-only pagination & SQL aggregate benchmarked. Auto-syncs to Drive (testing account 2026storngerntest@gmail.com) if connected.
+              Generates {seedCount}+ realistic progressive-overload workouts (varied titles, 3-6 exercises, 2-5 sets, W/S/D/F, unilateral, RPE, supersets). Header-only pagination and SQL aggregate benchmarked. Synthetic data stays local and is never auto-synced to Drive.
             </Text>
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, width: '100%' }}>
               {[400, 600, 800].map((n) => (
@@ -414,8 +428,10 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
                   ]}
                   onPress={() => setSeedCount(n)}
                   android_ripple={rippleTokens.surface}
+                  accessibilityLabel={`Select ${n} workouts to seed`}
+                  accessibilityRole="button"
                 >
-                  <Text style={[styles.repairButtonText, { color: seedCount === n ? '#FFFFFF' : colors.textSecondary, fontSize: font.sizes.sm }]}>{n}</Text>
+                  <Text style={[styles.repairButtonText, { color: seedCount === n ? '#FFFFFF' : colors.textSecondary, fontSize: font.sizes.sm }]}>{String(n)}</Text>
                 </Pressable>
               ))}
             </View>
@@ -425,6 +441,8 @@ export const DeveloperDiagnosticsView: React.FC<DeveloperDiagnosticsViewProps> =
               disabled={seeding}
               android_ripple={rippleTokens.surface}
               testID="developer.seed400"
+              accessibilityLabel={`Seed ${seedCount} testing workouts`}
+              accessibilityRole="button"
             >
               {seeding ? (
                 <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: spacing.sm }} />
@@ -755,7 +773,7 @@ const styles = StyleSheet.create({
     fontFamily: font.medium,
   },
   oauthConsole: {
-    backgroundColor: '#07080A',
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: spacing.xs,
     marginTop: spacing.xs,

@@ -141,6 +141,11 @@ export function bulkImportSessions(sessions: WorkoutSessionV2[]): Promise<void> 
 }
 
 async function bulkImportSessionsBatched(sessions: WorkoutSessionV2[]): Promise<void> {
+  // Validate complete batch before opening transaction so malformed data cannot partially redefine invariants
+  for (let i = 0; i < sessions.length; i++) {
+    const v = validateWorkoutSessionV2(sessions[i]);
+    if (!v.success) throw new Error(`Invalid normalized session at index ${i}: ${v.error}`);
+  }
   return enqueueWrite(async () => {
     const db = await requireDb();
     await transaction(db, async () => {
@@ -150,7 +155,6 @@ async function bulkImportSessionsBatched(sessions: WorkoutSessionV2[]): Promise<
         const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
         const values: any[] = [];
         for (const s of chunk) {
-          // Light validation bypass for seed (already validated)
           values.push(s.id, s.title, s.titleNorm, s.startedAtMs, s.endedAtMs, s.durationSec, s.comment, s.totalVolumeMilliKg, s.prs, s.createdAtMs, s.updatedAtMs, s.revision, s.deletedAtMs);
         }
         await db.runAsync(
@@ -224,7 +228,7 @@ function mapSetRow(row: any): SetLogV2 {
 
 export async function loadAllSessions(): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
-  
+
   const [sessionRows, exerciseRows, setRows]: [any[], any[], any[]] = await Promise.all([
     db.getAllAsync(
       `SELECT id, title, title_norm, started_at_ms, ended_at_ms, duration_sec, comment,
@@ -332,12 +336,12 @@ export async function loadSessionsCursorChunk(
   const db = await requireDb();
   let query = `SELECT * FROM workout_sessions WHERE deleted_at_ms IS NULL`;
   const params: any[] = [];
-  
+
   if (lastStartedAtMs !== undefined && lastId !== undefined) {
     query += ` AND (started_at_ms < ? OR (started_at_ms = ? AND id < ?))`;
     params.push(lastStartedAtMs, lastStartedAtMs, lastId);
   }
-  
+
   query += ` ORDER BY started_at_ms DESC, id DESC LIMIT ?;`;
   params.push(Math.max(1, Math.min(limit, 5000)));
 
@@ -510,6 +514,66 @@ export async function loadSessionDetails(sessionId: string): Promise<WorkoutSess
   };
 }
 
+export async function loadSessionsByIds(ids: string[]): Promise<WorkoutSessionV2[]> {
+  if (!ids || ids.length === 0) return [];
+  const db = await requireDb();
+  const cleanIds = ids.filter(Boolean);
+  if (cleanIds.length === 0) return [];
+  const placeholders = cleanIds.map(() => '?').join(',');
+  const sessionRows: any[] = await db.getAllAsync(
+    `SELECT * FROM workout_sessions WHERE id IN (${placeholders}) AND deleted_at_ms IS NULL ORDER BY started_at_ms DESC, id DESC;`,
+    cleanIds
+  );
+  if (sessionRows.length === 0) return [];
+  const sessionIds = sessionRows.map((r) => r.id);
+  const ph = sessionIds.map(() => '?').join(',');
+  const [exerciseRows, setRows]: [any[], any[]] = await Promise.all([
+    db.getAllAsync(`SELECT * FROM session_exercises WHERE session_id IN (${ph}) ORDER BY session_id, position;`, sessionIds),
+    db.getAllAsync(`SELECT sl.* FROM set_logs sl JOIN session_exercises se ON se.id = sl.session_exercise_id WHERE se.session_id IN (${ph}) ORDER BY sl.session_exercise_id, sl.position;`, sessionIds),
+  ]);
+  const setsByExercise = new Map<string, SetLogV2[]>();
+  for (let i = 0; i < setRows.length; i++) {
+    const row = setRows[i];
+    let list = setsByExercise.get(row.session_exercise_id);
+    if (!list) { list = []; setsByExercise.set(row.session_exercise_id, list); }
+    list.push(mapSetRow(row));
+  }
+  const exercisesBySession = new Map<string, SessionExerciseV2[]>();
+  for (let i = 0; i < exerciseRows.length; i++) {
+    const row = exerciseRows[i];
+    let list = exercisesBySession.get(row.session_id);
+    if (!list) { list = []; exercisesBySession.set(row.session_id, list); }
+    list.push({
+      id: row.id,
+      sessionId: row.session_id,
+      exerciseId: row.exercise_id ?? null,
+      nameSnapshot: row.name_snapshot,
+      nameNorm: row.name_norm,
+      variationKey: row.variation_key ?? null,
+      position: row.position,
+      supersetGroupId: row.superset_group_id ?? null,
+      note: row.note ?? null,
+      sets: setsByExercise.get(row.id) ?? [],
+    });
+  }
+  return sessionRows.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    titleNorm: row.title_norm,
+    startedAtMs: row.started_at_ms,
+    endedAtMs: row.ended_at_ms ?? null,
+    durationSec: row.duration_sec,
+    comment: row.comment ?? null,
+    totalVolumeMilliKg: row.total_volume_milli_kg,
+    prs: row.prs,
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+    revision: row.revision,
+    deletedAtMs: row.deleted_at_ms ?? null,
+    exercises: exercisesBySession.get(row.id) ?? [],
+  }));
+}
+
 export async function listSessions(limit = 100, offset = 0): Promise<WorkoutSessionV2[]> {
   const db = await requireDb();
   const sessionRows: any[] = await db.getAllAsync(
@@ -636,7 +700,7 @@ export const recoverTombstonedSessions = restoreAllTombstonedSessions;
 const exerciseNameToMuscle = (name: string): string => {
   if (!name) return 'Other';
   const n = name.toLowerCase().trim();
-  
+
   if (n.includes('lateral raise') || n.includes('side delt') || n.includes('overhead press') || n.includes('shoulder press') || n.includes('military press') || n.includes('arnold press') || n.includes('front raise')) return 'Shoulders';
   if (n.includes('rear delt') || n.includes('face pull') || n.includes('reverse fly')) return 'Rear Delts';
   if (n.includes('squat') || n.includes('leg press') || n.includes('quad') || n.includes('hack squat') || n.includes('lunge') || n.includes('leg extension')) return 'Quads';

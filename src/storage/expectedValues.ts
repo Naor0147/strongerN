@@ -319,13 +319,13 @@ export function resolveLastPerformanceSuggestion(
   const variationKey = normalized(targetVariation);
   const ordinal = Math.max(0, Math.trunc(positionInCategory));
   const cacheKey = [exerciseKey, category, ordinal, isUnilateral ? 1 : 0, variationKey,
-    normalized(context.routineName), context.exercisePosition ?? '', Boolean(context.supersetGroupId) ? 1 : 0,
+    normalized(context.routineName), context.exercisePosition ?? '', context.supersetGroupId ? 1 : 0,
     context.progressiveOverloadEnabled ? 1 : 0, normalized(context.equipment), context.allowBaseVariationFallback === false ? 0 : 1,
     context.templateSuggestion ? JSON.stringify(context.templateSuggestion) : ''].join('|');
   const cached = index.cache.get(cacheKey);
   if (cached) return cached;
   const tierCacheKey = [exerciseKey, category, variationKey, normalized(context.routineName),
-    context.exercisePosition ?? '', Boolean(context.supersetGroupId) ? 1 : 0,
+    context.exercisePosition ?? '', context.supersetGroupId ? 1 : 0,
     context.allowBaseVariationFallback === false ? 0 : 1].join('|');
   let selection = index.tierCache.get(tierCacheKey);
   if (selection === undefined) {

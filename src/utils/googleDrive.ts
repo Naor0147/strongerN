@@ -117,7 +117,7 @@ export async function downloadBackupFile(token: string, fileId: string): Promise
  */
 export async function createBackupFile(token: string, data: any): Promise<string> {
   const boundary = 'strongern_multipart_boundary';
-  
+
   const metadata = {
     name: 'strongern_backup.json',
     mimeType: 'application/json',

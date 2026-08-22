@@ -146,7 +146,7 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
         {state.routes.map((route, index) => {
           const tab = tabConfigs.find(t => t.route === route.name);
           if (!tab) return null;
-          
+
           return (
             <TabItem
               key={route.key}

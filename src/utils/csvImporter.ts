@@ -103,11 +103,11 @@ export function findMatchingExercise(rawName: string, exercisesList: Exercise[])
  */
 export function guessMuscleGroup(name: string): string {
   const n = name.toLowerCase();
-  
+
   // 1. Specific multi-word keywords first
   if (n.includes('leg curl')) return 'Hamstrings';
   if (n.includes('hip thrust')) return 'Glutes';
-  
+
   // 2. Clear muscle group direct mentions
   if (n.includes('tricep')) return 'Triceps';
   if (n.includes('bicep')) return 'Biceps';
@@ -127,7 +127,7 @@ export function guessMuscleGroup(name: string): string {
   if (n.includes('overhead press') || n.includes('military press') || n.includes('lateral raise') || n.includes('arnold')) return 'Shoulders';
   if (n.includes('curl')) return 'Biceps'; // general curl
   if (n.includes('pushdown') || n.includes('skull')) return 'Triceps';
-  
+
   if (n.includes('squat') || n.includes('leg press') || n.includes('extension') || n.includes('lunge')) return 'Quads';
   if (n.includes('romanian') || n.includes('rdl')) return 'Hamstrings';
   if (n.includes('hip') || n.includes('adductor') || n.includes('abductor') || n.includes('kickback')) return 'Glutes';
@@ -135,7 +135,6 @@ export function guessMuscleGroup(name: string): string {
 
   return 'Chest'; // Default fallback
 }
-
 
 
 /**
@@ -163,7 +162,7 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (char === '"') {
@@ -176,7 +175,7 @@ function parseCSVLine(line: string, delimiter: string): string[] {
     }
   }
   result.push(current.trim());
-  
+
   return result.map(val => {
     if (val.startsWith('"') && val.endsWith('"')) {
       return val.slice(1, -1);
@@ -201,10 +200,10 @@ export function importStrongCSV(
   // Detect delimiter
   const headerLine = lines[0];
   const delimiter = headerLine.includes(';') ? ';' : ',';
-  
+
   // Parse headers
   const headers = parseCSVLine(headerLine, delimiter);
-  
+
   const colIndex = {
     workoutNum: headers.findIndex(h => h.toLowerCase().includes('workout #') || h.toLowerCase() === 'workout'),
     date: headers.findIndex(h => h.toLowerCase().includes('date')),
@@ -243,7 +242,7 @@ export function importStrongCSV(
 
   const addedExercises: Exercise[] = [];
   const importedSessions: WorkoutSession[] = [];
-  
+
   // Create a mutable copy of existing exercises for quick local matching
   const currentExercisesPool = [...existingExercises];
 
@@ -255,7 +254,7 @@ export function importStrongCSV(
     const dateStr = firstRow[colIndex.date];
     const sessionDate = new Date(dateStr.replace(' ', 'T')); // Standardize date parsing
     const title = (colIndex.workoutName !== -1 ? firstRow[colIndex.workoutName] : '') || 'Evening Workout';
-    
+
     // Deduplicate sessions: skip if session already exists
     const isDuplicateSession = existingSessions.some(
       s => Math.abs(new Date(s.datetime).getTime() - sessionDate.getTime()) < 60000 && s.title === title
@@ -285,7 +284,7 @@ export function importStrongCSV(
     for (const [rawExName, exRows] of exerciseRowsMap.entries()) {
       // Find or create exercise
       let matchedEx = findMatchingExercise(rawExName, currentExercisesPool);
-      
+
       if (!matchedEx) {
         // Create new Exercise object
         const newExId = `ex-custom-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -363,7 +362,7 @@ export function importStrongCSV(
           bestReps: maxReps,
           setsDetails,
         });
-        
+
         // Accumulate all-time sets statistic onto the matched exercise
         matchedEx.allTimeSets = (matchedEx.allTimeSets || 0) + setsDetails.length;
       }

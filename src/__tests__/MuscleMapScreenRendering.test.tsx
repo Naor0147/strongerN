@@ -151,7 +151,7 @@ describe('MuscleMapScreen', () => {
     // Find the pressable item in the legend representing Chest
     const instance = tree.root;
     const legendItems = instance.findAll((el: any) => el.type === 'Pressable');
-    
+
     // Find Chest legend item and press it
     const chestLegend = legendItems.find((item: any) => {
       const texts = item.findAll((el: any) => el.type === 'Text');

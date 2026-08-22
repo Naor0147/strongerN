@@ -105,7 +105,7 @@ describe('Strong CSV Importer', () => {
       const hipAddSet = session.exercises.find(e => e.name === 'Hip Adductor (Machine)');
       expect(hipAddSet).toBeDefined();
       expect(result.addedExercises.length).toBe(2); // Leg Press & Hip Adductor (Machine)
-      
+
       const newHipAdd = result.addedExercises.find(e => e.name === 'Hip Adductor (Machine)');
       expect(newHipAdd).toBeDefined();
       expect(newHipAdd?.notes).toBe('Sit deep'); // Extracted from Note row

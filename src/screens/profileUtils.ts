@@ -29,7 +29,7 @@ export const getStartOfWeek = (date: Date): Date => {
 
 export const getWeeklyStreak = (sessionsList: any[]): number => {
   if (!sessionsList || sessionsList.length === 0) return 0;
-  
+
   const weekStarts = new Set<number>();
   sessionsList.forEach(s => {
     const date = new Date(s.datetime);

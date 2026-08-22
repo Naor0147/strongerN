@@ -94,26 +94,26 @@ interface RoutineEditorModalProps {
 function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
   const seenGroups = new Set<string>();
   let lastGroupId: string | undefined = undefined;
-  
+
   const result = items.map((item, idx) => {
     const gid = item.superSetGroupId;
     if (!gid) {
       lastGroupId = undefined;
       return item;
     }
-    
+
     // If we've seen this group ID before, but it's not contiguous with the last one, split it!
     if (seenGroups.has(gid) && lastGroupId !== gid) {
       const newGid = `ss-split-${Date.now()}-${idx}-${Math.random()}`;
       lastGroupId = newGid;
       return { ...item, superSetGroupId: newGid };
     }
-    
+
     seenGroups.add(gid);
     lastGroupId = gid;
     return item;
   });
-  
+
   // Dissolve groups containing < 2 exercises
   const groupCounts: Record<string, number> = {};
   result.forEach(item => {
@@ -121,7 +121,7 @@ function sanitizeSuperSets(items: RoutineExercise[]): RoutineExercise[] {
       groupCounts[item.superSetGroupId] = (groupCounts[item.superSetGroupId] || 0) + 1;
     }
   });
-  
+
   return result.map(item => {
     if (item.superSetGroupId && groupCounts[item.superSetGroupId] < 2) {
       return { ...item, superSetGroupId: undefined };
@@ -580,12 +580,12 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
     if (activeInputRef.current) {
       updateSetField(activeInputRef.current.exIdx, activeInputRef.current.setIdx, activeInputRef.current.fieldName, tempInputValueRef.current);
     }
-    
+
     // 2. Set the new input value and focus
     const currentVal = editorExercisesRef.current[ex]?.sets[s]?.[field] || '';
     setTempInputValue(String(currentVal));
     tempInputValueRef.current = String(currentVal);
-    
+
     const newInput = { exIdx: ex, setIdx: s, fieldName: field, focusTime: Date.now() };
     setActiveInput(newInput);
     activeInputRef.current = newInput;
@@ -909,7 +909,6 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                     </Text>
 
 
-
                     {(() => {
                       const currentEx = editorExercises[exMenuIdx];
                       if (!currentEx) return null;
@@ -924,7 +923,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                               style={edStyles.sheetItem}
                               onPress={() => {
                                 setEditorExercises(prev => {
-                                  const unlinked = prev.map((ex, idx) => 
+                                  const unlinked = prev.map((ex, idx) =>
                                     idx === exMenuIdx ? { ...ex, superSetGroupId: undefined } : ex
                                   );
                                   return sanitizeSuperSets(unlinked);
@@ -948,7 +947,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                                   const gidA = prev[idxA].superSetGroupId;
                                   const gidB = prev[idxB].superSetGroupId;
                                   const targetGid = gidA || gidB || `ss-${Date.now()}`;
-                                  
+
                                   const linked = prev.map((ex, idx) => {
                                     if (idx === idxA || idx === idxB) {
                                       return { ...ex, superSetGroupId: targetGid };
@@ -979,7 +978,7 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
                                   const gidA = prev[idxA].superSetGroupId;
                                   const gidB = prev[idxB].superSetGroupId;
                                   const targetGid = gidA || gidB || `ss-${Date.now()}`;
-                                  
+
                                   const linked = prev.map((ex, idx) => {
                                     if (idx === idxA || idx === idxB) {
                                       return { ...ex, superSetGroupId: targetGid };
@@ -1073,12 +1072,12 @@ const RoutineEditorModal: React.FC<RoutineEditorModalProps> = ({
               animationType="fade"
               onRequestClose={() => setIsDiscardConfirmVisible(false)}
             >
-              <Pressable 
-                style={edStyles.confirmBackdrop} 
+              <Pressable
+                style={edStyles.confirmBackdrop}
                 onPress={() => setIsDiscardConfirmVisible(false)}
               >
-                <Pressable 
-                  style={edStyles.confirmCard} 
+                <Pressable
+                  style={edStyles.confirmCard}
                   onPress={e => e.stopPropagation()}
                 >
                   <Text style={edStyles.confirmTitle}>{i18n.t('extras.discardChanges')}</Text>

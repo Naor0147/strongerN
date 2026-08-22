@@ -119,7 +119,7 @@ export const styles = StyleSheet.create({
     fontFamily: font.regular,
     marginTop: 2,
   },
-  
+
   // Settings Section
   settingRow: {
     flexDirection: 'row',
@@ -420,7 +420,6 @@ export const styles = StyleSheet.create({
     fontFamily: font.bold,
     letterSpacing: 0.8,
   },
-
 
 
   // Modals Styling

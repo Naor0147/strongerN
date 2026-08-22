@@ -69,10 +69,10 @@ const BarChart: React.FC<BarChartProps> = ({
 
   // Grid tick values (3 steps)
   const yTicks = [yMin, yMax / 2, yMax];
-  
+
   // Decide how many x labels to show
-  const xTicksIndices = N <= 6 
-    ? data.map((_, i) => i) 
+  const xTicksIndices = N <= 6
+    ? data.map((_, i) => i)
     : [0, Math.floor((N - 1) / 3), Math.floor((N - 1) * 2 / 3), N - 1];
 
   return (

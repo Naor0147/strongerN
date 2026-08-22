@@ -18,11 +18,11 @@ export const getNextWorkout = (
   if (templates && templates.length > 0) {
     const lastSession = sessions && sessions.length > 0 ? sessions[0] : null;
     let matchedTemplate: Template | null = null;
-    
+
     if (lastSession) {
       const sessionTitleClean = lastSession.title.toLowerCase().trim();
       matchedTemplate = templates.find(t => t.name.toLowerCase().trim() === sessionTitleClean) || null;
-      
+
       if (!matchedTemplate) {
         matchedTemplate = templates.find(t => {
           const tNameClean = t.name.toLowerCase().trim();
@@ -33,7 +33,7 @@ export const getNextWorkout = (
         }) || null;
       }
     }
-    
+
     // If we didn't match the last session to a template directly, try to find the template with the most recent lastUsed timestamp
     if (!matchedTemplate && sessions && sessions.length > 0) {
       let newestTemplate: Template | null = null;
@@ -57,7 +57,7 @@ export const getNextWorkout = (
         candidateTemplates = folderTemplates;
       }
     }
-    
+
     let selectedTemplate = candidateTemplates[0];
     if (matchedTemplate) {
       const idx = candidateTemplates.findIndex(t => t.id === matchedTemplate?.id);
@@ -65,7 +65,7 @@ export const getNextWorkout = (
         selectedTemplate = candidateTemplates[(idx + 1) % candidateTemplates.length];
       }
     }
-    
+
     return {
       name: selectedTemplate.name,
       exercises: selectedTemplate.exercises,

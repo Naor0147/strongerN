@@ -139,8 +139,8 @@ const SwipeableHistoryItem: React.FC<{
 
   return (
     <View style={styles.swipeContainer}>
-      <Pressable 
-        style={styles.deleteBackground} 
+      <Pressable
+        style={styles.deleteBackground}
         onPress={() => {
           cancelAnimation(swipeX);
           onDelete();
@@ -175,7 +175,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
   const [selectedMetric, setSelectedMetric] = useState<MeasureItem | null>(null);
   const [isLogModalVisible, setIsLogModalVisible] = useState(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-  
+
   // Input form states
   const [newLogValue, setNewLogValue] = useState('');
   const [newMetricLabel, setNewMetricLabel] = useState('');
@@ -333,7 +333,7 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                 />
               </View>
 
-              <ScrollView 
+              <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.detailsScrollContent}
               >
@@ -360,14 +360,14 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                             <View key={entry.date} style={styles.chartRow}>
                               <Text style={styles.chartDate}>{formatDateString(entry.date)}</Text>
                               <View style={styles.chartBarTrack}>
-                                <View 
+                                <View
                                   style={[
-                                    styles.chartBarFill, 
-                                    { 
+                                    styles.chartBarFill,
+                                    {
                                       width: `${pct}%`,
                                       backgroundColor: colors.accent,
                                     }
-                                  ]} 
+                                  ]}
                                 />
                               </View>
                               <Text style={styles.chartValue}>{entry.value}{unit}</Text>
@@ -386,10 +386,10 @@ const MeasureScreen: React.FC<MeasureScreenProps> = ({
                     <TextInput
                       style={[styles.textInput, { flex: 1 }]}
                       placeholder={
-                        selectedMetric.label.toLowerCase().includes('fat') 
-                          ? '14.5' 
-                          : selectedMetric.label.toLowerCase().includes('caloric') 
-                            ? '2800' 
+                        selectedMetric.label.toLowerCase().includes('fat')
+                          ? '14.5'
+                          : selectedMetric.label.toLowerCase().includes('caloric')
+                            ? '2800'
                             : '82.4'
                       }
                       placeholderTextColor={colors.textMuted}

@@ -159,7 +159,7 @@ export interface VolumeRecommendation {
  */
 export function getVolumeRecommendation(muscleGroup?: string): VolumeRecommendation {
   const norm = (muscleGroup || '').toLowerCase().trim();
-  
+
   // Hypertrophy guidelines: chest/back/legs: 10-20, arms/delts: 8-16, core: 6-12
   if (['chest', 'back', 'quads', 'hamstrings', 'glutes', 'legs'].includes(norm)) {
     return { min: 10, max: 20, message: '10–20 sets/week is optimal for large muscle hypertrophy.' };
@@ -170,6 +170,6 @@ export function getVolumeRecommendation(muscleGroup?: string): VolumeRecommendat
   if (['core', 'abs', 'obliques'].includes(norm)) {
     return { min: 6, max: 12, message: '6–12 sets/week is recommended for core stability and hypertrophy.' };
   }
-  
+
   return { min: 8, max: 15, message: '8–15 sets/week is recommended for general muscle development.' };
 }

@@ -147,7 +147,7 @@ describe('Milestone 2 - Cold Start & SQLite Hydration Optimization', () => {
       jest.spyOn(repository, 'countTombstonedSessions').mockResolvedValue(0);
       const expectedNormalized = legacySessionToV2(legacyRaw.sessionsList[0], 0);
       jest.spyOn(repository, 'loadSessionHeadersChunk').mockResolvedValue({ headers: [expectedNormalized] as any, hasMore: false });
-      
+
       jest.spyOn(repository, 'loadAllSessions').mockResolvedValue([expectedNormalized]);
       jest.spyOn(repository, 'countSessions').mockResolvedValue(1);
 

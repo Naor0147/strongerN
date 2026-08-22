@@ -559,5 +559,3 @@ export const mockBodyPartMetrics: MeasureItem[] = [
   { id: 'bp-11', label: i18n.t('mockData.rightCalf'), lastValue: '38.1 cm', history: [{ date: getRelativeDateString(7), value: 38.1 }] },
 ];
 
-
-

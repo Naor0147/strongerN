@@ -63,7 +63,7 @@ export const SocialShareCard: React.FC<SocialShareCardProps> = ({
               <View style={styles.canvasInner}>
                 {/* Branding stamp */}
                 <Text style={styles.brandText}>strongerN</Text>
-                
+
                 {/* Trophy glow indicator */}
                 <View style={[styles.trophyGlow, { backgroundColor: colors.gold + '1A' }]}>
                   <Ionicons name="trophy" size={44} color={colors.gold} />

@@ -69,14 +69,14 @@ const LineChart: React.FC<LineChartProps> = ({
   // Limits
   const xValues = validData.map((d) => d.x);
   const yValues = validData.map((d) => d.y);
-  
+
   const xMin = Math.min(...xValues);
   const xMax = Math.max(...xValues);
-  
+
   const yMinVal = Math.min(...yValues);
   const yMaxVal = Math.max(...yValues);
   const yRange = isNaN(yMaxVal - yMinVal) ? 0 : yMaxVal - yMinVal;
-  
+
   const yPadMin = Math.max(5, yRange * 1.2);
   const yPadMax = Math.max(2, yRange * 0.3);
   const yMin = Math.max(0, yMinVal - yPadMin);
@@ -84,7 +84,7 @@ const LineChart: React.FC<LineChartProps> = ({
 
   const getX = (xVal: number) => {
     if (xMax === xMin || isNaN(xMin) || isNaN(xMax)) return paddingLeft + (width - paddingLeft - paddingRight) / 2;
-    const res = paddingLeft + plotPaddingHorizontal + 
+    const res = paddingLeft + plotPaddingHorizontal +
       ((xVal - xMin) / (xMax - xMin)) * (width - paddingLeft - paddingRight - 2 * plotPaddingHorizontal);
     return isNaN(res) ? paddingLeft : res;
   };
@@ -100,12 +100,12 @@ const LineChart: React.FC<LineChartProps> = ({
   const fillPath = `${linePath} L ${getX(validData[validData.length - 1].x)} ${height - paddingBottom} L ${getX(validData[0].x)} ${height - paddingBottom} Z`;
 
   const yTicks = [yMin, yMin + (yMax - yMin) / 2, yMax];
-  
+
   const xTickPoints = React.useMemo(() => {
     if (validData.length === 0) return [];
     const points: { xPos: number; label: string }[] = [];
     let lastX = -999;
-    
+
     validData.forEach((d, i) => {
       const xPos = getX(d.x);
       const label = d.label || (xAxisFormatter ? xAxisFormatter(d.x) : String(d.x));
@@ -134,7 +134,7 @@ const LineChart: React.FC<LineChartProps> = ({
             <Stop offset="40%" stopColor={color} stopOpacity={0.12} />
             <Stop offset="100%" stopColor={color} stopOpacity={0.0} />
           </LinearGradient>
-          
+
           <LinearGradient id="gridLineGrad" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0%" stopColor={colors.border} stopOpacity={0.1} />
             <Stop offset="15%" stopColor={colors.border} stopOpacity={0.7} />

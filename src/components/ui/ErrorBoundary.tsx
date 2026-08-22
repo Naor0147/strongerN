@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const stack = errorInfo.componentStack || error.stack || '';
     console.error('[ErrorBoundary] Caught crash:', error.message, stack);
-    
+
     // Synchronously save crash log to database (non-fatal recovery view)
     saveCrashLogSync(error.message, stack, false);
   }
@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
-    
+
     // Trigger reset callback if provided (e.g. to clean up corrupt state)
     try {
       this.props.onReset?.();
@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // Attempt state reset
     this.setState({ hasError: false, error: null });
-    
+
     // If on web, we can also refresh the page
     if (Platform.OS === 'web') {
       window.location.reload();
@@ -90,7 +90,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <Text style={styles.errorMessage}>
                 {this.state.error?.message || 'Unknown Error'}
               </Text>
-              
+
               <Text style={[styles.errorLabel, { marginTop: spacing.md }]}>STACK TRACE</Text>
               <View style={styles.stackContainer}>
                 <ScrollView contentContainerStyle={styles.stackScroll} showsVerticalScrollIndicator={true}>

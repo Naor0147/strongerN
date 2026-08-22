@@ -235,7 +235,7 @@ describe('strongerN Calculation Utilities', () => {
 
     test('Plays configured sound or mutes accordingly', async () => {
       const { soundConfig, playSetCheckedSound } = require('../utils/soundPlayer');
-      
+
       // Set to mute
       soundConfig.setChecked = 'mute';
       playSetCheckedSound();
@@ -244,7 +244,7 @@ describe('strongerN Calculation Utilities', () => {
       // Set to chime
       soundConfig.setChecked = 'chime';
       playSetCheckedSound();
-      
+
       // Wait for async execution of playNativeSound
       await new Promise(resolve => setTimeout(resolve, 5));
 
@@ -256,11 +256,11 @@ describe('strongerN Calculation Utilities', () => {
 
     test('Plays correct timer completed sound', async () => {
       const { soundConfig, playTimerCompletedSound } = require('../utils/soundPlayer');
-      
+
       // Set to beep
       soundConfig.timerCompleted = 'beep';
       playTimerCompletedSound();
-      
+
       // Wait for async execution of playNativeSound
       await new Promise(resolve => setTimeout(resolve, 5));
 
@@ -271,11 +271,11 @@ describe('strongerN Calculation Utilities', () => {
 
     test('Plays correct workout completed sound', async () => {
       const { soundConfig, playWorkoutCompletedSound } = require('../utils/soundPlayer');
-      
+
       // Set to fanfare
       soundConfig.workoutCompleted = 'fanfare';
       playWorkoutCompletedSound();
-      
+
       // Wait for async execution of playNativeSound
       await new Promise(resolve => setTimeout(resolve, 5));
 
@@ -338,7 +338,7 @@ describe('strongerN Calculation Utilities', () => {
 
     test('Custom rest duration setting updates successfully', () => {
       let defaultRestDuration = 90;
-      
+
       const updateRestDuration = (val: number) => {
         defaultRestDuration = val;
       };

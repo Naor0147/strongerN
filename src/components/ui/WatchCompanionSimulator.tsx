@@ -109,8 +109,8 @@ export const WatchCompanionSimulator: React.FC<WatchCompanionSimulatorProps> = (
           </View>
 
           {/* Watch Action Button */}
-          <Pressable 
-            style={styles.actionBtn} 
+          <Pressable
+            style={styles.actionBtn}
             onPress={onCheckSet}
             android_ripple={{ color: colors.success + '44' }}
           >

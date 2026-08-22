@@ -409,7 +409,7 @@ describe('Milestone 3 Challenger - Empirical Adversarial Test Suite', () => {
       // 2. Trigger SQLite write failure during transaction
       mockSqlite.failNextRun = true;
       const mutatingS1 = createMockSession('session-atomic', 2, 99);
-      
+
       await expect(repository.upsertSession(mutatingS1)).rejects.toThrow('Simulated SQLite disk write failure');
 
       // 3. Verify previous state was completely preserved by transaction rollback

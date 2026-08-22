@@ -98,7 +98,7 @@ export function formatElapsed(startTime: Date | string | number | null | undefin
   const h = Math.floor(totalSec / 3600);
   const min = Math.floor((totalSec % 3600) / 60);
   const sec = totalSec % 60;
-  
+
   const secStr = sec.toString().padStart(2, '0');
   if (h > 0) {
     const minStr = min.toString().padStart(2, '0');

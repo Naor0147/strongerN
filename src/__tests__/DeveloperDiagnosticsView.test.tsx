@@ -47,7 +47,7 @@ describe('DeveloperDiagnosticsView', () => {
 
     const root = tree.root;
     const texts = root.findAllByType('Text').map((t: any) => t.props.children);
-    
+
     // Check values are present in rendered text elements
     expect(texts).toContain(20);
     expect(texts).toContain(5);

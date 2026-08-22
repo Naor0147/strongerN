@@ -884,4 +884,3 @@ export function getMuscleDisplayName(englishName: string, lang: 'en' | 'he'): st
   return englishName;
 }
 
-

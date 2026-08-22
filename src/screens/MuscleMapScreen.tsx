@@ -90,7 +90,7 @@ function getMuscleStyle(
       opacity: 0.9,
     };
   }
-  
+
   const map: Record<string, string> = {
     Chest:      colors.muscle.chest,
     Back:       colors.muscle.back,
@@ -633,9 +633,8 @@ const timingSheet = (sharedVal: SharedValue<number>, toValue: number, baseDurati
 const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, sessions, exercisesList, exerciseNameLanguage = 'en', showHypertrophyGoal, setShowHypertrophyGoal }) => {
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
   const { top } = useSafeAreaInsets();
-  
 
-  
+
   // Snap points
   const T_EXPANDED = 0;
   const T_COLLAPSED = SCREEN_HEIGHT * 0.52;
@@ -647,7 +646,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
   const [view, setView] = useState<'front' | 'back'>('front');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
   const [sheetState, setSheetState] = useState<'closed' | 'collapsed' | 'expanded'>('closed');
-  
+
   const scaleAnim = useSharedValue(1);
   const translateXAnim = useSharedValue(0);
   const translateYAnim = useSharedValue(0);
@@ -695,7 +694,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
       } else {
         sheetTranslateY.value = nextVal;
       }
-      
+
       // Dynamic pinch-to-scale effect of top content
       if (sheetTranslateY.value > T_COLLAPSED) {
         const delta = Math.min(1.0, (sheetTranslateY.value - T_COLLAPSED) / (T_CLOSED - T_COLLAPSED));
@@ -732,7 +731,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     setSelectedMuscle(muscle);
     setSheetState('collapsed');
     const zoom = ZOOM_OFFSETS[muscle] ?? { scale: 1.0, x: 0, y: 0 };
-    
+
     scaleAnim.value = withSpring(zoom.scale, getSpringConfig());
     translateXAnim.value = withSpring(zoom.x, getSpringConfig());
     translateYAnim.value = withSpring(zoom.y, getSpringConfig());
@@ -801,7 +800,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
           if (group === 'Core') group = 'Abs';
           return group.toLowerCase() === selectedMuscle.toLowerCase();
         });
-        
+
         if (matchingExercises.length > 0) {
           matches.push({
             id: session.id,
@@ -819,9 +818,9 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     if (!selectedMuscle) return [];
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
+
     const breakdown: { name: string; equipment: string; setsList: { weight: number; reps: number }[] }[] = [];
-    
+
     sessions.forEach(session => {
       if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
@@ -843,7 +842,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                 setsList.push({ weight: ex.bestWeight || 0, reps: ex.bestReps || 0 });
               }
             }
-            
+
             const existing = breakdown.find(b => b.name === ex.name);
             if (existing) {
               existing.setsList.push(...setsList);
@@ -858,7 +857,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         });
       }
     });
-    
+
     return breakdown;
   }, [selectedMuscle, sessions, exercisesList]);
 
@@ -869,7 +868,7 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
     let totalTonnage = 0;
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
+
     sessions.forEach(session => {
       if (!session || !session.datetime) return;
       const sessionDate = new Date(session.datetime);
@@ -1000,24 +999,24 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
         </View>
 
         <View style={styles.bodyContainer}>
-          <Animated.View 
+          <Animated.View
             collapsable={false}
             style={[styles.svgCard, mapAnimatedStyle]}>
             {!isMapReady ? (
               <View style={{ width: 208, height: 380, backgroundColor: colors.surface, borderRadius: radius.md }} />
             ) : view === 'front' ? (
-              <FrontSvgMap 
-                muscleSets={weeklyMuscleSets} 
-                maxSets={maxSets} 
-                selectedMuscle={selectedMuscle} 
-                onMusclePress={handleMusclePress} 
+              <FrontSvgMap
+                muscleSets={weeklyMuscleSets}
+                maxSets={maxSets}
+                selectedMuscle={selectedMuscle}
+                onMusclePress={handleMusclePress}
               />
             ) : (
-              <BackSvgMap 
-                muscleSets={weeklyMuscleSets} 
-                maxSets={maxSets} 
-                selectedMuscle={selectedMuscle} 
-                onMusclePress={handleMusclePress} 
+              <BackSvgMap
+                muscleSets={weeklyMuscleSets}
+                maxSets={maxSets}
+                selectedMuscle={selectedMuscle}
+                onMusclePress={handleMusclePress}
               />
             )}
           </Animated.View>
@@ -1090,8 +1089,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
             </View>
             </View>
           </GestureDetector>
-          
-          <ScrollView 
+
+          <ScrollView
             style={styles.bottomSheetScroll}
             showsVerticalScrollIndicator={false}
             scrollEnabled={sheetState === 'expanded'}
@@ -1117,18 +1116,18 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                   <Text style={styles.goalValue}>{i18n.t('extras.setsGoalValue', { current: weeklyMuscleStats.sets })}</Text>
                 </View>
                 <View style={styles.goalBarBg}>
-                  <View 
+                  <View
                     style={[
-                      styles.goalBarFill, 
-                      { 
+                      styles.goalBarFill,
+                      {
                         width: `${Math.min(100, Math.round((weeklyMuscleStats.sets / 12) * 100))}%`,
                         backgroundColor: weeklyMuscleStats.sets >= 12 ? colors.success : colors.highlight
                       }
-                    ]} 
+                    ]}
                   />
                 </View>
                 <Text style={styles.goalDescription}>
-                  {weeklyMuscleStats.sets >= 12 
+                  {weeklyMuscleStats.sets >= 12
                     ? i18n.t('extras.hypertrophyTargetMet')
                     : i18n.t('extras.needMoreSets', { count: 12 - weeklyMuscleStats.sets })}
                 </Text>
@@ -1193,8 +1192,8 @@ const MuscleMapScreen: React.FC<MuscleMapScreenProps> = ({ weeklyMuscleSets, ses
                   <Text style={styles.sheetEmptyText}>{i18n.t('extras.noSuggestedExercises')}</Text>
                 ) : (
                   suggestedExercisesForMuscle.map((ex) => (
-                    <Pressable 
-                      key={ex.name} 
+                    <Pressable
+                      key={ex.name}
                       style={styles.suggestionChip}
                       onPress={() => {
                         Alert.alert(ex.name, i18n.t('muscleMap.exerciseInfo', { name: ex.name, equipment: ex.equipment?.toLowerCase() || i18n.t('muscleMap.otherEquipment'), muscle: ex.muscleGroup }));

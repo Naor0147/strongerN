@@ -70,10 +70,10 @@ const Caret = () => {
 const compareProps = (prevProps: SetInputCellProps, nextProps: SetInputCellProps) => {
   // If active state changes, we must re-render
   if (prevProps.isActive !== nextProps.isActive) return false;
-  
+
   // If completion state changes, we must re-render
   if (prevProps.isCompleted !== nextProps.isCompleted) return false;
-  
+
   // If testID, style, or placeholder changes, we must re-render
   if (prevProps.testID !== nextProps.testID) return false;
   if (prevProps.style !== nextProps.style) return false;

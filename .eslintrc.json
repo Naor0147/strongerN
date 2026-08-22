@@ -1,0 +1,31 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint", "react-hooks"],
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+  "env": {
+    "es2022": true,
+    "node": true,
+    "jest": true
+  },
+  "ignorePatterns": ["node_modules/", "apk/", ".expo/", "dist/", "web-build/", "coverage/"],
+  "rules": {
+    "no-trailing-spaces": "error",
+    "no-multiple-empty-lines": ["error", { "max": 2, "maxEOF": 1 }],
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "off",
+    "no-empty": "off",
+    "prefer-const": "off",
+    "@typescript-eslint/no-var-requires": "off",
+    "no-control-regex": "off",
+    "no-useless-escape": "off"
+  },
+  "overrides": [
+    {
+      "files": ["*.js"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    }
+  ]
+}

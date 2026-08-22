@@ -170,15 +170,15 @@ interface ProfileScreenProps {
   totalSessionsCount?:        number;
 }
 
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ 
+const ProfileScreen: React.FC<ProfileScreenProps> = ({
   isHydrating = false,
-  user, 
-  weeklyChartData, 
+  user,
+  weeklyChartData,
   sessions,
   onRefreshSessions,
   lifetimeStats,
   totalSessionsCount,
-  isAutoTimerEnabled, 
+  isAutoTimerEnabled,
   setIsAutoTimerEnabled,
   onMeasurePress,
   googleUser,
@@ -314,7 +314,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
 
-
   const handlePickCustomSound = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -349,7 +348,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       // Automatically select the newly imported sound for the active trigger
       handleSelectSound(newSound.id);
-      
+
       Alert.alert(i18n.t('common.success'), i18n.t('profile.customSoundAdded', { name: newSound.name }));
     } catch (error) {
       console.warn('Error picking custom sound:', error);
@@ -648,7 +647,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     let topReps = 0;
     let topExName = '';
     let topDate = '';
-    
+
     (sessions || []).forEach(session => {
       (session.exercises || []).forEach((ex: any) => {
         if (ex.bestWeight > topWeight) {
@@ -661,7 +660,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         }
       });
     });
-    
+
     if (topWeight === 0) return null;
     return { name: topExName, weight: topWeight, reps: topReps, date: topDate };
   }, [sessions]);
@@ -855,7 +854,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       Alert.alert(i18n.t('profile.authFailed'), err.message || String(err));
     }
   };
-
 
 
   // File-based export
@@ -1182,7 +1180,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             pressed && { opacity: 0.85 },
           ]}
         >
-          <View 
+          <View
             style={{ padding: spacing.lg, backgroundColor: 'transparent' }}
           >
             <View style={styles.quickStartHeader}>
@@ -1192,9 +1190,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </View>
 
             </View>
-            
+
             <Text style={styles.quickStartWorkoutName}>{nextWorkout.name}</Text>
-            
+
             {nextWorkout.exercises && nextWorkout.exercises.length > 0 && (
               <Text style={styles.quickStartExercises} numberOfLines={2}>
                 {nextWorkout.exercises.join('  ·  ')}
@@ -1283,7 +1281,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         )}
 
 
-
         {/* ── Measurements Section ────────────────────────────── */}
         <SectionLabel
           title={i18n.t('profile.measurements')}
@@ -1329,9 +1326,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}
               >
                 {topPrs.map((pr) => (
-                  <Card 
-                    key={`${pr.name}-${pr.date}`} 
-                    padding={spacing.md} 
+                  <Card
+                    key={`${pr.name}-${pr.date}`}
+                    padding={spacing.md}
                     style={{ width: 140, borderColor: colors.border, borderWidth: 1, backgroundColor: 'transparent' }}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
@@ -1460,7 +1457,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       </Modal>
 
 
-
       {/* Modal C: Manual Backup Import/Export Text Dashboard */}
       <Modal
         visible={isBackupPanelVisible}
@@ -1581,7 +1577,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <Ionicons name={settingsView === 'menu' ? 'chevron-down' : 'chevron-back'} size={24} color={colors.textPrimary} />
             </Pressable>
             <Text style={styles.settingsTitle}>
-              {settingsView === 'menu' ? i18n.t('profile.settingsTitle') : 
+              {settingsView === 'menu' ? i18n.t('profile.settingsTitle') :
                settingsView === 'account' ? i18n.t('profile.settingsMenuAccount') :
                settingsView === 'data' ? i18n.t('profile.settingsMenuData') :
                settingsView === 'workout' ? i18n.t('profile.settingsMenuWorkout') :
@@ -1696,22 +1692,22 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   {/* Account Status Info */}
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Ionicons 
+                      <Ionicons
                         name={
-                          authMode === 'google' 
-                            ? "logo-google" 
+                          authMode === 'google'
+                            ? "logo-google"
                             : authMode === 'local'
                             ? "person-circle-outline"
                             : "eye-off-outline"
-                        } 
-                        size={22} 
-                        color={authMode === 'google' ? colors.success : colors.accent} 
-                        style={{ marginRight: spacing.sm }} 
+                        }
+                        size={22}
+                        color={authMode === 'google' ? colors.success : colors.accent}
+                        style={{ marginRight: spacing.sm }}
                       />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.settingTitle}>
-                          {authMode === 'google' 
-                            ? i18n.t('profile.googleConnected') 
+                          {authMode === 'google'
+                            ? i18n.t('profile.googleConnected')
                             : authMode === 'local'
                             ? i18n.t('profile.localProfile')
                             : i18n.t('profile.guestSession')}
@@ -1725,7 +1721,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         </Text>
                       </View>
                     </View>
-                    
+
                     {authMode === 'guest' || authMode === 'local' ? (
                       <Pressable
                         style={styles.inlineLoginBtn}
@@ -2009,7 +2005,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
 
 
-
                   <View style={styles.settingDivider} />
 
                   {/* Workout Day Reminders */}
@@ -2114,11 +2109,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   </View>
 
 
-
                   {/* Features & Modules Toggles */}
                   <View style={{ marginTop: spacing.md }}>
                     <Text style={[styles.settingTitle, { fontSize: font.sizes.md, fontFamily: font.bold, marginBottom: spacing.xs, color: colors.textSecondary }]}>{i18n.t('profile.enabledModules')}</Text>
-                    
 
 
                     {/* Training Programs */}
@@ -2937,11 +2930,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         animationType="slide"
         onRequestClose={() => setIsSoundSelectorVisible(false)}
       >
-        <Pressable 
-          style={styles.bottomSheetBackdrop} 
+        <Pressable
+          style={styles.bottomSheetBackdrop}
           onPress={() => setIsSoundSelectorVisible(false)}
         >
-          <Pressable 
+          <Pressable
             style={styles.bottomSheetContainer}
             onPress={(e) => e.stopPropagation()}
           >
@@ -2996,10 +2989,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         styles.soundOptionIconCircle,
                         isSelected ? { backgroundColor: colors.accent + '22' } : { backgroundColor: colors.surfaceHigh }
                       ]}>
-                        <Ionicons 
-                          name={iconName} 
-                          size={18} 
-                          color={isSelected ? colors.accent : colors.textSecondary} 
+                        <Ionicons
+                          name={iconName}
+                          size={18}
+                          color={isSelected ? colors.accent : colors.textSecondary}
                         />
                       </View>
                       <Text style={[
@@ -3064,11 +3057,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         animationType="slide"
         onRequestClose={() => setIsTimerPickerVisible(false)}
       >
-        <Pressable 
-          style={styles.bottomSheetBackdrop} 
+        <Pressable
+          style={styles.bottomSheetBackdrop}
           onPress={() => setIsTimerPickerVisible(false)}
         >
-          <Pressable 
+          <Pressable
             style={styles.bottomSheetContainer}
             onPress={(e) => e.stopPropagation()}
           >
@@ -3104,10 +3097,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         styles.soundOptionIconCircle,
                         isSelected ? { backgroundColor: colors.accent + '22' } : { backgroundColor: colors.surfaceHigh }
                       ]}>
-                        <Ionicons 
-                          name="time-outline" 
-                          size={18} 
-                          color={isSelected ? colors.accent : colors.textSecondary} 
+                        <Ionicons
+                          name="time-outline"
+                          size={18}
+                          color={isSelected ? colors.accent : colors.textSecondary}
                         />
                       </View>
                       <Text style={[
@@ -3174,11 +3167,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         animationType="slide"
         onRequestClose={() => setIsReminderTimePickerVisible(false)}
       >
-        <Pressable 
-          style={styles.bottomSheetBackdrop} 
+        <Pressable
+          style={styles.bottomSheetBackdrop}
           onPress={() => setIsReminderTimePickerVisible(false)}
         >
-          <Pressable 
+          <Pressable
             style={styles.bottomSheetContainer}
             onPress={(e) => e.stopPropagation()}
           >
@@ -3216,10 +3209,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                         styles.soundOptionIconCircle,
                         isSelected ? { backgroundColor: colors.accent + '22' } : { backgroundColor: colors.surfaceHigh }
                       ]}>
-                        <Ionicons 
-                          name="time-outline" 
-                          size={18} 
-                          color={isSelected ? colors.accent : colors.textSecondary} 
+                        <Ionicons
+                          name="time-outline"
+                          size={18}
+                          color={isSelected ? colors.accent : colors.textSecondary}
                         />
                       </View>
                       <Text style={[

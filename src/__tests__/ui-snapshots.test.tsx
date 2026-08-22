@@ -124,7 +124,7 @@ describe('UI Primitives Snapshot Tests', () => {
         { label: 'Tue', value: 5 },
         { label: 'Wed', value: 2 },
       ];
-      
+
       let tree: any;
       renderer.act(() => {
         tree = renderer.create(
@@ -133,7 +133,7 @@ describe('UI Primitives Snapshot Tests', () => {
         jest.runAllTimers();
       });
       expect(tree.toJSON()).toMatchSnapshot();
-      
+
       renderer.act(() => {
         tree.unmount();
       });

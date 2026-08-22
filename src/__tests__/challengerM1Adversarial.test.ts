@@ -801,7 +801,7 @@ describe('Milestone 1 — Comprehensive Empirical Challenger Suite', () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       const mockBootstrapError = new Error('SQLite DB locked');
-      
+
       // Simulate App.tsx loadData error flow
       const simulateAppLoadData = async () => {
         let isDataLoaded = false;

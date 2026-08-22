@@ -63,13 +63,13 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
   const userBarIdx = Math.min(N - 1, Math.max(0, Math.floor(safePercentile * N)));
   const pct = Math.round(safePercentile * 100);
   const percentText = `${pct}%`;
-  
-  const subtitleText = safePercentile >= 0.5 
+
+  const subtitleText = safePercentile >= 0.5
     ? `Stronger than ${pct}% of lifters in this lift`
     : `Top ${Math.max(1, 100 - pct)}% of lifters in this lift`;
 
   const maxBarH = height - paddingTop - paddingBottom;
-  
+
   const getBarHeightInPixels = (idx: number, originalH: number = 20) => {
     const orig = typeof originalH === 'number' && !isNaN(originalH) ? originalH : 20;
     const baselineH = (orig / 100) * maxBarH;
@@ -86,7 +86,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
 
   const flagWidth = 56;
   const flagHeight = 22;
-  
+
   let flagX = targetX - flagWidth / 2;
   if (flagX < 6) {
     flagX = 6;
@@ -113,7 +113,7 @@ const DistributionChart: React.FC<DistributionChartProps> = ({
             <Stop offset="50%" stopColor="#44A6F7" />
             <Stop offset="100%" stopColor={colors.highlight} />
           </LinearGradient>
-          
+
           <LinearGradient id="gridGrad" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0%" stopColor={colors.border} stopOpacity={0.1} />
             <Stop offset="15%" stopColor={colors.border} stopOpacity={0.5} />

@@ -327,10 +327,10 @@ const ExerciseRow: React.FC<{
 
 const EMPTY_SESSIONS: any[] = [];
 
-const ExercisesScreen: React.FC<ExercisesScreenProps> = ({ 
-  exercises, 
-  onAddExercise, 
-  onDeleteExercise, 
+const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
+  exercises,
+  onAddExercise,
+  onDeleteExercise,
   onUpdateExerciseNotes,
   onUpdateExercise,
   onUpdateExerciseVariations,
@@ -492,7 +492,7 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
         else if (setsCount > 20) label = i18n.t('extras.highVolume');
         else if (setsCount > 5) label = i18n.t('extras.moderateVolume');
         else if (setsCount > 0) label = i18n.t('extras.lowVolume');
-        
+
         if (!map.has(label)) map.set(label, []);
         map.get(label)!.push(ex);
       }
@@ -521,9 +521,9 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
 
   const renderItem = useCallback(
     ({ item }: { item: Exercise }) => (
-      <ExerciseRow 
-        exercise={item} 
-        onPress={handleRowPress} 
+      <ExerciseRow
+        exercise={item}
+        onPress={handleRowPress}
         onMenuPress={handleMenuPress}
         exerciseNameLanguage={exerciseNameLanguage}
       />
@@ -1093,8 +1093,8 @@ const ExercisesScreen: React.FC<ExercisesScreenProps> = ({
           transparent
           onRequestClose={() => setIsContextMenuVisible(false)}
         >
-          <Pressable 
-            style={styles.modalBackdrop} 
+          <Pressable
+            style={styles.modalBackdrop}
             onPress={() => setIsContextMenuVisible(false)}
           >
             <Pressable style={[styles.modalCard, { paddingVertical: spacing.md }]} onPress={(e) => e.stopPropagation()}>

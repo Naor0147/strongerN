@@ -25,7 +25,7 @@ test.describe('Advanced Active Workout Edge Cases & Data Persistence', () => {
     const repsCell = page.locator('[data-testid="set-reps-0-0"]');
 
     await expect(weightCell).toBeVisible();
-    
+
     // If input cells are clickable or editable, click and type values
     if (await weightCell.isVisible()) {
       await weightCell.click();

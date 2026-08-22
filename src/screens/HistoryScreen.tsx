@@ -464,7 +464,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
     const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
     // Total days in navigated month
     const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-    
+
     // Map of days where user had workouts in the navigated month
     const workoutDays = new Set<number>();
     sessions.forEach(s => {
@@ -565,8 +565,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({
                 <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
               </Pressable>
               <Text style={styles.calendarTitle}>{monthName.toUpperCase()}</Text>
-              <Pressable 
-                onPress={handleNextMonth} 
+              <Pressable
+                onPress={handleNextMonth}
                 style={[styles.monthNavBtn, isCurrentMonth && styles.monthNavBtnDisabled]}
                 disabled={isCurrentMonth}
               >

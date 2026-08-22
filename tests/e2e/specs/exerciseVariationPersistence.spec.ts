@@ -30,7 +30,7 @@ test.describe('Active Workout Exercise Tag & Variation Persistence Edge Cases', 
     const dropdownBtn = page.locator('[data-testid="variation-dropdown-btn"]').first();
     if (await dropdownBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await dropdownBtn.click();
-      
+
       // Select base or variation option
       const baseOption = page.locator('[data-testid="variation-option-base"]');
       await expect(baseOption).toBeVisible();
