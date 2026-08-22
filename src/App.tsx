@@ -46,7 +46,7 @@ import {
   InstantProfileSummaries,
   LifetimeStatsSummary,
 } from './storage/instantCache';
-import { buildBackupData, exportBackupToFile, BackupData } from './utils/backupManager';
+import { buildBackupData, exportBackupToFile, saveBackupToDevice, exportCsvToFile, saveCsvToDevice, copyBackupJsonToClipboard, BackupData } from './utils/backupManager';
 import { getSessionsForExerciseVariation } from './utils/variationUtils';
 import i18n from './utils/i18n';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -1609,7 +1609,7 @@ function MainApp() {
   };
 
   // Export/Import backups
-  const handleExportBackup = async (): Promise<boolean> => {
+  const getFullBackupDataObject = async (): Promise<BackupData> => {
     let currentSessions = sessionsList;
     // Always source complete history from SQLite for exports
     if (historyRepositoryReadyRef.current) {
@@ -1654,7 +1654,7 @@ function MainApp() {
       appTheme,
       customAccentColor,
     };
-    const backupData = buildBackupData({
+    return buildBackupData({
       username: user.name,
       user: {
         ...user,
@@ -1671,7 +1671,31 @@ function MainApp() {
       programStartDate,
       lastSynced,
     });
+  };
+
+  const handleExportBackup = async (): Promise<boolean> => {
+    const backupData = await getFullBackupDataObject();
     return exportBackupToFile(backupData);
+  };
+
+  const handleSaveBackupToDevice = async (): Promise<{ success: boolean; cancelled?: boolean; filename: string }> => {
+    const backupData = await getFullBackupDataObject();
+    return saveBackupToDevice(backupData);
+  };
+
+  const handleCopyBackupJson = async (): Promise<boolean> => {
+    const backupData = await getFullBackupDataObject();
+    return copyBackupJsonToClipboard(backupData);
+  };
+
+  const handleExportCSVFile = async (): Promise<boolean> => {
+    const csv = handleExportCSV();
+    return exportCsvToFile(csv, user.name);
+  };
+
+  const handleSaveCSVToDevice = async (): Promise<{ success: boolean; cancelled?: boolean; filename: string }> => {
+    const csv = handleExportCSV();
+    return saveCsvToDevice(csv, user.name);
   };
 
   /** Build a legacy JSON string (for the CSV/text export path) */
@@ -3263,7 +3287,11 @@ function MainApp() {
                   onImportBackup={handleImportBackup}
                   onImportStrongCSV={handleImportStrongCSV}
                   onExportBackup={handleExportBackup}
+                  onSaveBackupToDevice={handleSaveBackupToDevice}
+                  onCopyBackupJson={handleCopyBackupJson}
                   onExportCSV={handleExportCSV}
+                  onExportCSVFile={handleExportCSVFile}
+                  onSaveCSVToDevice={handleSaveCSVToDevice}
                   animationSpeed={animationSpeed}
                   setAnimationSpeed={setAnimationSpeed}
                   onWipeAllData={handleWipeAllData}

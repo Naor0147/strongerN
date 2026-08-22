@@ -411,11 +411,7 @@ export async function exportCrashLogsToFile(): Promise<boolean> {
 
     try {
       if (await Sharing.isAvailableAsync()) {
-        let shareUri = filePath;
-        if (Platform.OS === 'android') {
-          try { shareUri = await FileSystem.getContentUriAsync(filePath); } catch {}
-        }
-        await Sharing.shareAsync(shareUri, {
+        await Sharing.shareAsync(filePath, {
           mimeType: 'application/json',
           dialogTitle: filename,
           UTI: 'public.json',

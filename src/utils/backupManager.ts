@@ -102,16 +102,11 @@ export async function copyBackupJsonToClipboard(backupData: BackupData): Promise
 }
 
 /**
- * Export a full backup to a file on the device.
+ * Export a full backup to a file on the device and open native share sheet.
  * On native: writes to FileSystem.documentDirectory and opens native share sheet via expo-sharing.
  * On web: triggers a browser download.
  *
- * Robust against:
- * - Missing expo-sharing (fallback to RN Share)
- * - Android content:// URI requirements
- * - User dismissing the share sheet (still counts as success because file is saved)
- *
- * @returns true if file was written (share sheet may have been dismissed), false on write failure
+ * @returns true if file was written/shared (user dismissing share sheet still counts as success), false on failure
  */
 export async function exportBackupToFile(backupData: BackupData): Promise<boolean> {
   let json: string;
@@ -160,7 +155,7 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
 
   const filePath = `${baseDir}${filename}`;
 
-  // Step 1: write file (critical)
+  // Step 1: write file to local app storage
   try {
     await FileSystem.writeAsStringAsync(filePath, json, {
       encoding: FileSystem.EncodingType.UTF8,
@@ -176,20 +171,14 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
     return false;
   }
 
-  // Step 2: try native share via expo-sharing (preferred on Android/iOS)
+  // Step 2: Open native share sheet via expo-sharing (passes raw file:// URI)
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      let shareUri = filePath;
-      // On Android, Sharing requires a content:// URI for app-private files
-      if (Platform.OS === 'android') {
-        try {
-          shareUri = await FileSystem.getContentUriAsync(filePath);
-        } catch {
-          shareUri = filePath;
-        }
-      }
-      await Sharing.shareAsync(shareUri, {
+      // NOTE: Do NOT use FileSystem.getContentUriAsync on Android here.
+      // expo-sharing's native module (SharingModule.kt) validates uri.scheme == 'file'
+      // and converts it internally via SharingFileProvider.
+      await Sharing.shareAsync(filePath, {
         mimeType: 'application/json',
         dialogTitle: `Share ${filename}`,
         UTI: 'public.json',
@@ -197,33 +186,190 @@ export async function exportBackupToFile(backupData: BackupData): Promise<boolea
       return true;
     }
   } catch (e: any) {
-    console.warn('[BackupManager] Sharing.shareAsync failed, falling back to Share.share', e);
+    // User dismissing or cancelling share sheet is considered a normal exit
     if (e?.message?.includes('cancel') || e?.message?.includes('dismiss')) {
       return true;
+    }
+    console.warn('[BackupManager] Sharing.shareAsync failed:', e);
+  }
+
+  // Fallback: Copy JSON payload to clipboard if share sheet was unavailable
+  try {
+    await Clipboard.setStringAsync(json);
+    Alert.alert(i18n.t('common.success'), i18n.t('backup.copiedToClipboardFallback') || 'Backup JSON copied to clipboard.');
+    return true;
+  } catch {}
+  return true;
+}
+
+/**
+ * Save backup file directly to a user-selected folder on the device (Android SAF, Web download, iOS Share sheet).
+ */
+export async function saveBackupToDevice(backupData: BackupData): Promise<{ success: boolean; cancelled?: boolean; filename: string }> {
+  let json: string;
+  try {
+    json = JSON.stringify(backupData, null, 2);
+  } catch (e: any) {
+    console.error('[BackupManager] JSON stringify failed:', e);
+    return { success: false, filename: '' };
+  }
+  const filename = buildBackupFilename(backupData.username);
+
+  // Web: direct download
+  if (Platform.OS === 'web') {
+    try {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return { success: true, filename };
+    } catch {
+      return { success: false, filename };
     }
   }
 
-  // Fallback: RN Share (works better on iOS)
+  // Android: StorageAccessFramework directory picker
+  if (Platform.OS === 'android' && (FileSystem as any).StorageAccessFramework) {
+    try {
+      const permissions = await (FileSystem as any).StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        return { success: false, cancelled: true, filename };
+      }
+      const rawName = filename.replace(/\.json$/i, '');
+      const createdUri = await (FileSystem as any).StorageAccessFramework.createFileAsync(
+        permissions.directoryUri,
+        rawName,
+        'application/json'
+      );
+      await FileSystem.writeAsStringAsync(createdUri, json, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      return { success: true, filename };
+    } catch (safErr) {
+      console.warn('[BackupManager] SAF direct save failed, falling back to exportBackupToFile', safErr);
+      const ok = await exportBackupToFile(backupData);
+      return { success: ok, filename };
+    }
+  }
+
+  // iOS & other native: export file and open share sheet (allows Save to Files)
+  const ok = await exportBackupToFile(backupData);
+  return { success: ok, filename };
+}
+
+/**
+ * Export CSV spreadsheet to a file and open native share sheet.
+ */
+export async function exportCsvToFile(csvText: string, username: string = 'User'): Promise<boolean> {
+  const now = new Date();
+  const date = now.toISOString().split('T')[0];
+  const time = now.toISOString().split('T')[1].slice(0, 8).replace(/:/g, '');
+  const safeName = sanitizeFilename(username || 'User');
+  const filename = `strongern_workouts_${safeName}_${date}_${time}.csv`;
+
+  if (Platform.OS === 'web') {
+    try {
+      const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+  if (!baseDir) return false;
+
+  const filePath = `${baseDir}${filename}`;
   try {
-    await Share.share(
-      Platform.OS === 'ios'
-        ? { url: filePath, title: filename, message: `strongerN backup — ${backupData.exportedAt}` } as any
-        : { title: filename, message: i18n.t('backup.shareFallbackMsg', { filename, path: filePath }) || `Backup saved to ${filePath}` } as any,
-      { dialogTitle: `Share ${filename}` } as any
-    );
-    return true;
-  } catch (e: any) {
-    console.warn('[BackupManager] Share.share fallback failed:', e);
-    if (e?.message?.includes('cancel') || e?.message?.includes('dismiss')) {
+    await FileSystem.writeAsStringAsync(filePath, csvText, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+  } catch (e) {
+    console.error('[BackupManager] CSV file write failed:', e);
+    return false;
+  }
+
+  try {
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'text/csv',
+        dialogTitle: `Share ${filename}`,
+        UTI: 'public.comma-separated-values-text',
+      });
       return true;
     }
-    try {
-      await Clipboard.setStringAsync(json);
-      Alert.alert(i18n.t('common.success'), i18n.t('backup.savedAndCopied', { path: filePath }) || `Backup saved to ${filePath} and copied to clipboard.`);
-      return true;
-    } catch {}
-    return true;
+  } catch (e: any) {
+    if (e?.message?.includes('cancel') || e?.message?.includes('dismiss')) return true;
   }
+  return true;
+}
+
+/**
+ * Save CSV spreadsheet directly to device storage.
+ */
+export async function saveCsvToDevice(csvText: string, username: string = 'User'): Promise<{ success: boolean; cancelled?: boolean; filename: string }> {
+  const now = new Date();
+  const date = now.toISOString().split('T')[0];
+  const time = now.toISOString().split('T')[1].slice(0, 8).replace(/:/g, '');
+  const safeName = sanitizeFilename(username || 'User');
+  const filename = `strongern_workouts_${safeName}_${date}_${time}.csv`;
+
+  if (Platform.OS === 'web') {
+    try {
+      const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return { success: true, filename };
+    } catch {
+      return { success: false, filename };
+    }
+  }
+
+  if (Platform.OS === 'android' && (FileSystem as any).StorageAccessFramework) {
+    try {
+      const permissions = await (FileSystem as any).StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        return { success: false, cancelled: true, filename };
+      }
+      const rawName = filename.replace(/\.csv$/i, '');
+      const createdUri = await (FileSystem as any).StorageAccessFramework.createFileAsync(
+        permissions.directoryUri,
+        rawName,
+        'text/csv'
+      );
+      await FileSystem.writeAsStringAsync(createdUri, csvText, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      return { success: true, filename };
+    } catch (safErr) {
+      console.warn('[BackupManager] SAF direct CSV save failed, falling back to exportCsvToFile', safErr);
+      const ok = await exportCsvToFile(csvText, username);
+      return { success: ok, filename };
+    }
+  }
+
+  const ok = await exportCsvToFile(csvText, username);
+  return { success: ok, filename };
 }
 
 /**

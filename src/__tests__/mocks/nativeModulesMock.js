@@ -217,6 +217,15 @@ jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn().mockResolvedValue({ exists: false }),
   getContentUriAsync: jest.fn().mockResolvedValue('content://mock/uri'),
   EncodingType: { UTF8: 'utf8' },
+  StorageAccessFramework: {
+    requestDirectoryPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, directoryUri: 'content://mock/tree/primary%3ADownload' }),
+    createFileAsync: jest.fn().mockResolvedValue('content://mock/document/primary%3ADownload%2Ffile'),
+    readDirectoryAsync: jest.fn().mockResolvedValue([]),
+    makeDirectoryAsync: jest.fn().mockResolvedValue('content://mock/dir'),
+    writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+    readAsStringAsync: jest.fn().mockResolvedValue('{}'),
+    deleteAsync: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // Mock expo-document-picker
@@ -268,6 +277,15 @@ jest.mock('expo-file-system', () => ({
   getInfoAsync: jest.fn().mockResolvedValue({ exists: false }),
   getContentUriAsync: jest.fn().mockResolvedValue('content://mock/uri'),
   EncodingType: { UTF8: 'utf8' },
+  StorageAccessFramework: {
+    requestDirectoryPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, directoryUri: 'content://mock/tree/primary%3ADownload' }),
+    createFileAsync: jest.fn().mockResolvedValue('content://mock/document/primary%3ADownload%2Ffile'),
+    readDirectoryAsync: jest.fn().mockResolvedValue([]),
+    makeDirectoryAsync: jest.fn().mockResolvedValue('content://mock/dir'),
+    writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+    readAsStringAsync: jest.fn().mockResolvedValue('{}'),
+    deleteAsync: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 

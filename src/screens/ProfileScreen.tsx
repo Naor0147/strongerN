@@ -115,7 +115,11 @@ interface ProfileScreenProps {
   onImportBackup?:       (backupStr: string, mode?: 'merge' | 'replace') => boolean;
   onImportStrongCSV?:    (csvText: string) => { importedCount: number; addedExercisesCount: number };
   onExportBackup?:       () => Promise<boolean>;
+  onSaveBackupToDevice?: () => Promise<{ success: boolean; cancelled?: boolean; filename: string }>;
+  onCopyBackupJson?:     () => Promise<boolean>;
   onExportCSV?:          () => string;
+  onExportCSVFile?:      () => Promise<boolean>;
+  onSaveCSVToDevice?:    () => Promise<{ success: boolean; cancelled?: boolean; filename: string }>;
   animationSpeed:        number;
   setAnimationSpeed:     (val: number) => void;
   onWipeAllData?:        () => void;
@@ -196,7 +200,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onImportBackup,
   onImportStrongCSV,
   onExportBackup,
+  onSaveBackupToDevice,
+  onCopyBackupJson,
   onExportCSV,
+  onExportCSVFile,
+  onSaveCSVToDevice,
   animationSpeed = 1,
   setAnimationSpeed,
   onWipeAllData,
@@ -860,6 +868,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   // File-based export
   const [isExporting, setIsExporting] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+
   const handleExportJson = async () => {
     if (!onExportBackup) return;
     if (isExporting) return;
@@ -868,19 +877,87 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       const ok = await onExportBackup();
       if (!ok) {
         Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
-      } else {
-        const countForMsg = (typeof totalSessionsCount === 'number' ? totalSessionsCount : sessions?.length || 0);
-        const prettyDate = new Date().toISOString().split('T')[0];
-        Alert.alert(
-          i18n.t('backup.exportSuccess') || i18n.t('common.success'),
-          i18n.t('backup.exportSuccessMsg', { filename: `strongern_backup_${prettyDate}.json`, count: countForMsg }) || `Backup file saved and share sheet opened (${countForMsg} workouts).`,
-          [
-            { text: i18n.t('common.ok'), style: 'default' },
-          ]
-        );
       }
     } catch (e: any) {
       Alert.alert(i18n.t('profile.exportError'), e?.message || 'An error occurred during export.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveBackupToDevice = async () => {
+    if (!onSaveBackupToDevice) {
+      return handleExportJson();
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const res = await onSaveBackupToDevice();
+      if (res.success) {
+        Alert.alert(
+          i18n.t('common.success'),
+          i18n.t('profile.backupSavedSuccess', { filename: res.filename }) || `Backup file saved successfully (${res.filename})`
+        );
+      } else if (!res.cancelled) {
+        Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
+      }
+    } catch (e: any) {
+      Alert.alert(i18n.t('profile.exportError'), e?.message || 'An error occurred during save.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleCopyJsonPayload = async () => {
+    if (!onCopyBackupJson) return;
+    try {
+      const ok = await onCopyBackupJson();
+      if (ok) {
+        Alert.alert(i18n.t('common.success'), i18n.t('profile.jsonCopiedSuccess'));
+      } else {
+        Alert.alert(i18n.t('common.error'), i18n.t('profile.exportFailedMsg'));
+      }
+    } catch (e: any) {
+      Alert.alert(i18n.t('profile.exportError'), e?.message || 'Failed to copy backup.');
+    }
+  };
+
+  const handleExportCsvFile = async () => {
+    if (!onExportCSVFile) {
+      return handleExportCsvPress();
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const ok = await onExportCSVFile();
+      if (!ok) {
+        Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
+      }
+    } catch (e: any) {
+      Alert.alert(i18n.t('profile.exportError'), e?.message || 'An error occurred during CSV export.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveCsvToDevice = async () => {
+    if (!onSaveCSVToDevice) {
+      return handleExportCsvFile();
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const res = await onSaveCSVToDevice();
+      if (res.success) {
+        Alert.alert(
+          i18n.t('common.success'),
+          i18n.t('profile.csvSavedSuccess', { filename: res.filename }) || `CSV file saved successfully (${res.filename})`
+        );
+      } else if (!res.cancelled) {
+        Alert.alert(i18n.t('profile.exportFailed'), i18n.t('profile.exportFailedMsg'));
+      }
+    } catch (e: any) {
+      Alert.alert(i18n.t('profile.exportError'), e?.message || 'An error occurred during save.');
     } finally {
       setIsExporting(false);
     }
@@ -896,16 +973,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleExportPress = () => {
     Alert.alert(
-      i18n.t('profile.exportBackup'),
-      i18n.t('profile.chooseExportFormat'),
+      i18n.t('profile.exportData'),
+      i18n.t('profile.exportOptions') || i18n.t('profile.chooseExportFormat'),
       [
         {
-          text: i18n.t('profile.backupFileJson'),
+          text: i18n.t('profile.shareBackupJson'),
           onPress: handleExportJson,
         },
         {
-          text: i18n.t('profile.csvSpreadsheet'),
-          onPress: handleExportCsvPress,
+          text: i18n.t('profile.saveBackupToFolder'),
+          onPress: handleSaveBackupToDevice,
+        },
+        {
+          text: i18n.t('profile.shareCsv'),
+          onPress: handleExportCsvFile,
+        },
+        {
+          text: i18n.t('profile.saveCsvToFolder'),
+          onPress: handleSaveCsvToDevice,
+        },
+        {
+          text: i18n.t('profile.copyJsonClipboard'),
+          onPress: handleCopyJsonPayload,
         },
         {
           text: i18n.t('common.cancel'),
