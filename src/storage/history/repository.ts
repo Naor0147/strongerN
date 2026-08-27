@@ -1144,6 +1144,11 @@ export async function getAllSessionIds(): Promise<Set<string>> {
 
 export function insertMissingSessionsOnly(sessions: WorkoutSessionV2[]): Promise<void> {
   return enqueueWrite(async () => {
+    for (let i = 0; i < sessions.length; i++) {
+      const v = validateWorkoutSessionV2(sessions[i]);
+      if (!v.success) throw new Error(`Invalid normalized session at index ${i}: ${v.error}`);
+    }
+
     const fallback = getFallbackSessions();
     const now = Date.now();
     for (const session of sessions) {
