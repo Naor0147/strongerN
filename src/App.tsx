@@ -665,13 +665,15 @@ function MainApp() {
           }
 
           let loadedSessionsMapped: any[] | null = null;
-          if (persistence.historyReady && persistence.sessions) {
+          if (persistence.historyReady && persistence.sessions && persistence.sessions.length > 0) {
             loadedSessionsMapped = persistence.sessions.map(sessionV2ToLegacy);
-          } else if (parsed?.sessionsList && Array.isArray(parsed.sessionsList)) {
+          } else if (parsed?.sessionsList && Array.isArray(parsed.sessionsList) && parsed.sessionsList.length > 0) {
             loadedSessionsMapped = parsed.sessionsList.map((s: any) => ({
               ...s,
-              datetime: new Date(s.datetime)
+              datetime: s && s.datetime ? new Date(s.datetime) : new Date(),
             }));
+          } else if (persistence.historyReady && persistence.sessions) {
+            loadedSessionsMapped = persistence.sessions.map(sessionV2ToLegacy);
           }
 
           // Hydrate Settings from MMKV Compact Settings (falling back to legacy payload on first run)
@@ -953,11 +955,15 @@ function MainApp() {
   ]);
 
   // Save core user app data (templates, custom exercises, metrics, profile, routines) to database & MMKV instant cache
-  // Note: sessionsList is decoupled into relational SQLite v2 (strongern_v2.db) and cached in MMKV
+  // Note: sessionsList is dual-persisted into STORAGE_KEY and SQLite v2 repository for complete zero-loss recovery
   React.useEffect(() => {
     if (!isDataLoaded) return;
     try {
       const googleUserToSave = googleUser ? { ...googleUser, accessToken: undefined } : null;
+      const currentSessions = (sessionsListRefStable.current && sessionsListRefStable.current.length > 0)
+        ? sessionsListRefStable.current
+        : (sessionsList && sessionsList.length > 0 ? sessionsList : []);
+
       const data = {
         user,
         templatesList,
@@ -969,6 +975,7 @@ function MainApp() {
         foldersList,
         activeProgramId,
         programStartDate,
+        sessionsList: currentSessions.slice(0, 500),
       };
       // Synchronous MMKV Instant Cache update (Frame 0 zero-delay startup)
       setCachedAppData(data);
@@ -2910,7 +2917,7 @@ function MainApp() {
       ? updatedSessions.find((session: any) => session.id === editingSessionIdRef.current)
       : updatedSessions[0];
     try {
-      if (durableSession && historyRepositoryReadyRef.current) {
+      if (durableSession) {
         await upsertSession(legacySessionToV2(durableSession));
       }
       endActiveWorkout();
@@ -2921,8 +2928,11 @@ function MainApp() {
       return;
     }
 
+    sessionsListRefStable.current = updatedSessions;
     setSessionsList(updatedSessions);
     setUser(nextUser);
+    setCachedRecentSessions(updatedSessions, nextUser.totalWorkouts);
+    setCachedTotalSessionsCount(nextUser.totalWorkouts);
 
     refreshLifetimeStats().catch(() => {});
     triggerCloudSync(false).catch(() => {});
@@ -2975,12 +2985,13 @@ function MainApp() {
   // While false (Frame 0 preview), keep the cached count.
   React.useEffect(() => {
     if (!isFullHistoryLoaded) return;
+    if (sessionsList.length === 0 && user.totalWorkouts > 0) return;
     setUser(prev => {
       if (prev.totalWorkouts === sessionsList.length) return prev;
       return { ...prev, totalWorkouts: sessionsList.length };
     });
     setCachedTotalSessionsCount(sessionsList.length);
-  }, [sessionsList, isFullHistoryLoaded]);
+  }, [sessionsList, isFullHistoryLoaded, user.totalWorkouts]);
 
   const activeWorkoutStateSavedRef = React.useRef(false);
 

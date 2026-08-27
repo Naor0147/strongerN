@@ -904,20 +904,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     exercisesForFinish.forEach(ex => {
       ex.sets.forEach(set => {
+        const leftW = parseFloat(set.leftWeight || set.weight || '') || 0;
+        const leftR = parseInt(set.leftReps || set.reps || '', 10) || 0;
+        const rightW = parseFloat(set.rightWeight || set.weight || '') || 0;
+        const rightR = parseInt(set.rightReps || set.reps || '', 10) || 0;
+        const w = parseFloat(set.weight) || 0;
+        const r = parseInt(set.reps, 10) || 0;
+
+        // Auto-complete set if weight or reps was entered but checkmark was not clicked
+        if (!set.completed && (w > 0 || r > 0 || leftW > 0 || leftR > 0 || rightW > 0 || rightR > 0)) {
+          set.completed = true;
+        }
+
         if (set.completed) {
           if (set.isUnilateral) {
-            // For unilateral sets, calculate volume from both sides
-            const leftW = parseFloat(set.leftWeight || set.weight) || 0;
-            const leftR = parseInt(set.leftReps || set.reps, 10) || 0;
-            const rightW = parseFloat(set.rightWeight || set.weight) || 0;
-            const rightR = parseInt(set.rightReps || set.reps, 10) || 0;
             totalVolume += (leftW * leftR) + (rightW * rightR);
           } else {
-            const w = parseFloat(set.weight) || 0;
-            const r = parseInt(set.reps, 10) || 0;
             totalVolume += w * r;
           }
-          totalSets   += 1;
+          totalSets += 1;
         }
       });
     });

@@ -36,4 +36,6 @@ export const STORAGE_KEYS = {
   LEGACY_SQLITE_DB: 'strongern.db',
   RELATIONAL_V2_DB: 'strongern_v2.db',
   LEGACY_TABLE_NAME: 'strongern_kv_store',
+  FALLBACK_SESSIONS_V2: 'strongern_v2_fallback_sessions',
+  FALLBACK_PERSISTENCE_META_V2: 'strongern_v2_fallback_meta',
 } as const;

@@ -59,8 +59,18 @@ interface SectionData {
   data:  WorkoutSession[];
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
+function parseSafeDate(d: any): Date {
+  if (d instanceof Date && !isNaN(d.getTime())) return d;
+  if (typeof d === 'string' || typeof d === 'number') {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function formatDate(date: Date | string | number): string {
+  const d = parseSafeDate(date);
+  return d.toLocaleDateString('en-US', {
     weekday: 'short',
     month:   'short',
     day:     'numeric',
@@ -69,8 +79,9 @@ function formatDate(date: Date): string {
   });
 }
 
-function formatMonthKey(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+function formatMonthKey(date: Date | string | number): string {
+  const d = parseSafeDate(date);
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
 function formatVolume(kg: number): string {
@@ -104,7 +115,7 @@ function computeSections(
   if (rangeStart !== null) {
     const endDay = rangeEnd !== null ? rangeEnd : rangeStart;
     result = result.filter(s => {
-      const d = new Date(s.datetime);
+      const d = parseSafeDate(s.datetime);
       const day = d.getDate();
       return (
         day >= rangeStart &&
@@ -116,7 +127,11 @@ function computeSections(
   }
 
   const map = new Map<string, WorkoutSession[]>();
-  const sorted = [...result].sort((a, b) => b.datetime.getTime() - a.datetime.getTime());
+  const sorted = [...result].sort((a, b) => {
+    const timeB = parseSafeDate(b.datetime).getTime();
+    const timeA = parseSafeDate(a.datetime).getTime();
+    return timeB - timeA;
+  });
   for (const s of sorted) {
     const key = formatMonthKey(s.datetime);
     if (!map.has(key)) map.set(key, []);
@@ -231,10 +246,10 @@ const SessionCard: React.FC<{
   const visibleExercises = useMemo(() => {
     return (session.exercises || []).filter(ex => {
       if (typeof ex.sets === 'number' && ex.sets > 0) return true;
-      if (ex.setsDetails && Array.isArray(ex.setsDetails)) {
-        return ex.setsDetails.some((s: any) => s && s.completed);
+      if (ex.setsDetails && Array.isArray(ex.setsDetails) && ex.setsDetails.length > 0) {
+        return ex.setsDetails.some((s: any) => s && (s.completed || (s.weight && parseFloat(s.weight) > 0) || (s.reps && parseInt(s.reps, 10) > 0)));
       }
-      return false;
+      return true;
     });
   }, [session.exercises]);
 

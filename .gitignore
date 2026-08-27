@@ -104,3 +104,4 @@ Desktop.ini
 test-results/
 playwright-report/
 expo-e2e.log
+.codex-remote-attachments/
