@@ -1,6 +1,4 @@
-# Original User Request
-
-## Initial Request — 2026-08-27T15:46:32Z
+## 2026-08-27T15:46:32Z
 
 You are teamwork_preview_swe, the dispatch-only orchestrator for SWE Light.
 
